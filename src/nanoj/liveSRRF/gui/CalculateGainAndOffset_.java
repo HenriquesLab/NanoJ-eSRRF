@@ -106,4 +106,110 @@ public class CalculateGainAndOffset_  implements PlugIn {
 
         return new ImageStack[] {imsMean, imsVar};
     }
+
+    private void calculateGain(ImageStack imsMean, ImageStack imsVar) {
+
+        int w = imsMean.getWidth();
+        int h = imsMean.getHeight();
+        int nPixels = w*h;
+        int nFrames = imsMean.getSize();
+
+        // first pass: read in data, compute xbar and ybar
+
+        double[] meanMean  = new double[nPixels];
+        double[] meanMean2 = new double[nPixels];
+        double[] meanVar   = new double[nPixels];
+
+        for (int s=1; s<=nFrames; s++) {
+            float[] pixelsMean = (float[]) imsMean.getProcessor(s).getPixels();
+            float[] pixelsVar  = (float[]) imsVar.getProcessor(s).getPixels();
+
+            for (int n=0; n<nPixels; n++) {
+                meanMean[n] += pixelsMean[n] / nFrames;
+                meanMean2[n] += pixelsMean[n] * pixelsMean[n] / nFrames;
+                meanVar[n] += pixelsVar[n] / nFrames;
+            }
+        }
+
+        // x is mean and y is var
+        double[] xxbar = new double[nPixels];
+        double[] yybar = new double[nPixels];
+        double[] xybar = new double[nPixels];
+
+        for (int s=1; s<=nFrames; s++) {
+            float[] pixelsMean = (float[]) imsMean.getProcessor(s).getPixels();
+            float[] pixelsVar  = (float[]) imsVar.getProcessor(s).getPixels();
+
+            for (int n=0; n<nPixels; n++) {
+                double deltaX = pixelsMean[n] - meanMean[n];
+                double deltaY = pixelsVar[n]  - meanVar[n];
+                xxbar[n] += deltaX * deltaX;
+                yybar[n] += deltaY * deltaY;
+                xybar[n] += deltaX * deltaY;
+            }
+        }
+
+        double[] gain = new double[nPixels];
+        double[] offset = new double[nPixels];
+
+        for (int n=0; n<nPixels; n++) {
+            gain[n] = xybar[n] / xxbar[n];
+            offset[n] = meanVar[n] - gain[n] * meanMean[n];
+        }
+
+//        int MAXN = 1000;
+//        int n = 0;
+//        double[] x = new double[MAXN];
+//        double[] y = new double[MAXN];
+//
+//        // first pass: read in data, compute xbar and ybar
+//        double sumx = 0.0, sumy = 0.0, sumx2 = 0.0;
+//        while(!StdIn.isEmpty()) {
+//            x[n] = StdIn.readDouble();
+//            y[n] = StdIn.readDouble();
+//            sumx  += x[n];
+//            sumx2 += x[n] * x[n];
+//            sumy  += y[n];
+//            n++;
+//        }
+//        double xbar = sumx / n;
+//        double ybar = sumy / n;
+//
+//        // second pass: compute summary statistics
+//        double xxbar = 0.0, yybar = 0.0, xybar = 0.0;
+//        for (int i = 0; i < n; i++) {
+//            xxbar += (x[i] - xbar) * (x[i] - xbar);
+//            yybar += (y[i] - ybar) * (y[i] - ybar);
+//            xybar += (x[i] - xbar) * (y[i] - ybar);
+//        }
+//        double beta1 = xybar / xxbar;
+//        double beta0 = ybar - beta1 * xbar;
+//
+//        // print results
+//        StdOut.println("y   = " + beta1 + " * x + " + beta0);
+//
+//        // analyze results
+//        int df = n - 2;
+//        double rss = 0.0;      // residual sum of squares
+//        double ssr = 0.0;      // regression sum of squares
+//        for (int i = 0; i < n; i++) {
+//            double fit = beta1*x[i] + beta0;
+//            rss += (fit - y[i]) * (fit - y[i]);
+//            ssr += (fit - ybar) * (fit - ybar);
+//        }
+//        double R2    = ssr / yybar;
+//        double svar  = rss / df;
+//        double svar1 = svar / xxbar;
+//        double svar0 = svar/n + xbar*xbar*svar1;
+//        StdOut.println("R^2                 = " + R2);
+//        StdOut.println("std error of beta_1 = " + Math.sqrt(svar1));
+//        StdOut.println("std error of beta_0 = " + Math.sqrt(svar0));
+//        svar0 = svar * sumx2 / (n * xxbar);
+//        StdOut.println("std error of beta_0 = " + Math.sqrt(svar0));
+//
+//        StdOut.println("SSTO = " + yybar);
+//        StdOut.println("SSE  = " + rss);
+//        StdOut.println("SSR  = " + ssr);
+
+    }
 }
