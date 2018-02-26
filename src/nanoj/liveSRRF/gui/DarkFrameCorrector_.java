@@ -172,7 +172,7 @@ public class DarkFrameCorrector_ implements PlugIn {
 
             RadialityCL rCL = new RadialityCL(wDark, hDark, magnification, ringRadius, sensitivity);
 
-            IJ.showStatus("Peforming dark frame radiality calculations...");
+            IJ.showStatus("Performing dark frame radiality calculations...");
 
             for (int n=1; n<=nSlicesDark; n++) {
                 IJ.showProgress(n, nSlicesDark);
@@ -255,7 +255,7 @@ public class DarkFrameCorrector_ implements PlugIn {
 
                 RadialityCL rCL = new RadialityCL(wData, hData, magnification, ringRadius, sensitivity);
 
-                IJ.showStatus("Peforming data frame radiality calculations for dark projection " + (i + 1) + "/" + nDarkProjections + "...");
+                IJ.showStatus("Performing data frame radiality calculations for dark projection " + (i + 1) + "/" + nDarkProjections + "...");
 
                 ImageStack imsDataRadiality = new ImageStack(wDark * magnification, hDark * magnification);
                 ImageStack imsDataInterpolated = new ImageStack(wDark * magnification, hDark * magnification);
@@ -511,7 +511,7 @@ public class DarkFrameCorrector_ implements PlugIn {
             for(int i=0; i<w*h; i++){
                 imsPixels[i] -= fpPixels[i];
             }
-            
+
             ims.setProcessor(new FloatProcessor(w,h,imsPixels), n);
         }
     }
