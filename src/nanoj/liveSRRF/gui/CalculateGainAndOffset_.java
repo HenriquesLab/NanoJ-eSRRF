@@ -120,6 +120,7 @@ public class CalculateGainAndOffset_  implements PlugIn {
         double[] meanMean2 = new double[nPixels];
         double[] meanVar   = new double[nPixels];
 
+        // first pass
         for (int s=1; s<=nFrames; s++) {
             float[] pixelsMean = (float[]) imsMean.getProcessor(s).getPixels();
             float[] pixelsVar  = (float[]) imsVar.getProcessor(s).getPixels();
@@ -136,6 +137,7 @@ public class CalculateGainAndOffset_  implements PlugIn {
         double[] yybar = new double[nPixels];
         double[] xybar = new double[nPixels];
 
+        // second pass
         for (int s=1; s<=nFrames; s++) {
             float[] pixelsMean = (float[]) imsMean.getProcessor(s).getPixels();
             float[] pixelsVar  = (float[]) imsVar.getProcessor(s).getPixels();
