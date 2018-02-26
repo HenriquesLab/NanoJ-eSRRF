@@ -24,7 +24,7 @@ public class CalculateGainAndOffset_  implements PlugIn {
         for (String fileName: filesToProcess) {
 
             ImagePlus imp = IJ.openImage(fileName);
-            
+
         }
     }
 
