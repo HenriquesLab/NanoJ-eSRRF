@@ -1,15 +1,15 @@
 package nanoj.liveSRRF.gui;
 
-import ij.IJ;
-import ij.ImagePlus;
-import ij.ImageStack;
-import ij.WindowManager;
+import ij.*;
 import ij.gui.NonBlockingGenericDialog;
 import ij.plugin.PlugIn;
 import ij.process.FloatProcessor;
 import nanoj.liveSRRF.RadialityCL;
 
 public class SimpleRadiality_ implements PlugIn {
+
+    public String prefsHeader = this.getClass().getName();
+    protected Prefs prefs = new Prefs();
 
     @Override
     public void run(String arg) {
@@ -19,15 +19,20 @@ public class SimpleRadiality_ implements PlugIn {
         imp.show();
 
         NonBlockingGenericDialog gd = new NonBlockingGenericDialog("Simple Radiality");
-        gd.addNumericField("Magnification", 4, 0);
-        gd.addNumericField("Ring-Radius", 1, 1);
-        gd.addNumericField("Radiality-Sensitivity", 10, 1);
+        gd.addNumericField("Magnification", getPrefs("magnification", 4), 0);
+        gd.addNumericField("Ring-Radius", getPrefs("ringRadius", 1), 1);
+        gd.addNumericField("Radiality-Sensitivity", getPrefs("sensitivity", 10), 1);
         gd.showDialog();
         if (gd.wasCanceled()) return;
 
         int magnification = (int) gd.getNextNumber();
         double ringRadius = gd.getNextNumber();
         double radialitySensitivity = gd.getNextNumber();
+
+        setPrefs("magnification", (float) magnification);
+        setPrefs("ringRadius", (float) ringRadius);
+        setPrefs("sensitivity", (float) radialitySensitivity);
+        prefs.savePreferences();
 
         ImageStack ims = imp.getImageStack();
         int nSlices = ims.getSize();
@@ -59,4 +64,13 @@ public class SimpleRadiality_ implements PlugIn {
         //rCL.showPlatforms();
         rCL.release();
     }
+
+    public float getPrefs(String key, float defaultValue) {
+        return (float) prefs.get(prefsHeader+"."+key, defaultValue);
+    }
+
+    public void setPrefs(String key, float defaultValue) {
+        prefs.set(prefsHeader+"."+key, defaultValue);
+    }
+
 }
