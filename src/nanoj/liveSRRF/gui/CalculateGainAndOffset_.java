@@ -6,11 +6,6 @@ import ij.ImageStack;
 import ij.gui.NonBlockingGenericDialog;
 import ij.plugin.PlugIn;
 import ij.process.FloatProcessor;
-import ij.process.ImageProcessor;
-
-import java.io.File;
-import java.util.ArrayList;
-import java.util.Arrays;
 
 import static java.lang.Math.pow;
 
@@ -41,10 +36,6 @@ public class CalculateGainAndOffset_  implements PlugIn {
         ImageStack imsMean = imsCalculated[0];
         ImageStack imsVar  = imsCalculated[1];
 
-<<<<<<< HEAD
-            ImagePlus imp = IJ.openImage(fileName);
-
-=======
         // mean subtract and var subtract
         float[] mean0 = ((float[]) imsMean.getProcessor(1).getPixels()).clone();
         float[] var0  = ((float[]) imsVar.getProcessor(1).getPixels()).clone();
@@ -60,7 +51,6 @@ public class CalculateGainAndOffset_  implements PlugIn {
                 mean1[n] -= mean0[n];
                 var1[n]  -= var0[n];
             }
->>>>>>> ad46e023ec0e40644b42f494717c0e3afe9176eb
         }
 
         new ImagePlus("Mean", imsMean).show();
