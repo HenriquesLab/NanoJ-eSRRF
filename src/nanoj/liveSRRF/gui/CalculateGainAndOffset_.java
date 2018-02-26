@@ -22,93 +22,88 @@ public class CalculateGainAndOffset_  implements PlugIn {
         String dirPath = IJ.getDirectory("Choose directory to open...");
         if (dirPath == null) return;
 
-        // need to add extension question here
+        NonBlockingGenericDialog gd = new NonBlockingGenericDialog("Simple Radiality");
+        gd.addNumericField("Frames per calculation", 500, 0);
 
-        ArrayList<String> filesToProcess = this.getFilesToProcess(dirPath, ".tif");
+        gd.showDialog();
+        if (gd.wasCanceled()) return;
 
-        ImageStack imsMean = null;
-        ImageStack imsVar = null;
+        int nFrames = (int) gd.getNextNumber();
 
-        for (String fileName: filesToProcess) {
+        //IJ.run("Image Sequence...", "open=["+dirPath+"] sort use");
+        IJ.run("Image Sequence...", "open=["+dirPath+"] sort");
+        ImagePlus imp = IJ.getImage();
+        ImageStack ims = imp.getImageStack();
 
-            IJ.log(fileName);
-            IJ.run("Bio-Formats Windowless Importer", "open=["+fileName+"]");
-            ImagePlus imp = IJ.getImage();
-//            ImagePlus imp = IJ.openImage(fileName);
+        assert(ims.getSize() % nFrames == 0);
 
-            ImageStack ims = imp.getImageStack();
+        ImageStack[] imsCalculated = this.calculateMeanAndVarianceProjection(ims, nFrames);
+        ImageStack imsMean = imsCalculated[0];
+        ImageStack imsVar  = imsCalculated[1];
 
-            int w = ims.getWidth();
-            int h = ims.getHeight();
+        // mean subtract and var subtract
+        float[] mean0 = ((float[]) imsMean.getProcessor(1).getPixels()).clone();
+        float[] var0  = ((float[]) imsVar.getProcessor(1).getPixels()).clone();
 
-            if (imsMean == null) {
-                imsMean = new ImageStack(w, h);
-                imsVar = new ImageStack(w, h);
+        for (int f=1; f<=imsMean.getSize(); f++) {
+            IJ.showProgress(f, ims.getSize());
+            IJ.showStatus("Mean and Var subtracting frame: "+f+"/"+ims.getSize());
+
+            float[] mean1 = (float[]) imsMean.getProcessor(f).getPixels();
+            float[] var1  = (float[]) imsVar.getProcessor(f).getPixels();
+
+            for (int n=0; n<mean1.length; n++) {
+                mean1[n] -= mean0[n];
+                var1[n]  -= var0[n];
             }
-            else {
-                assert (imsMean.getWidth() == w);
-                assert (imsMean.getHeight() == h);
-            }
-
-            FloatProcessor[] fps = this.calculateMeanAndVarianceProjection(ims);
-            imsMean.addSlice(fps[0]);
-            imsVar.addSlice(fps[1]);
         }
 
         new ImagePlus("Mean", imsMean).show();
         new ImagePlus("Var", imsVar).show();
     }
 
-    private ArrayList<String> getFilesToProcess(String dirPath, String extension) {
-
-        File directory = new File(dirPath);
-        if(!directory.exists()){
-            return null;
-        }
-
-        ArrayList<String> filesToProcess = new ArrayList<String>();
-
-        File[] listOfFilesInFolder = directory.listFiles();
-        Arrays.sort(listOfFilesInFolder);
-
-        for (int i=0;i<listOfFilesInFolder.length;i++){
-            IJ.showProgress(i+1, listOfFilesInFolder.length);
-
-            if (IJ.escapePressed()) {
-                IJ.resetEscape();
-                return null;
-            }
-
-            if(listOfFilesInFolder[i].isFile() && listOfFilesInFolder[i].toString().endsWith(extension)) {
-                String fPath = listOfFilesInFolder[i].getPath();
-
-                filesToProcess.add(fPath);
-            }
-        }
-
-        return filesToProcess;
-    }
-
-    private FloatProcessor[] calculateMeanAndVarianceProjection(ImageStack ims) {
+    private ImageStack[] calculateMeanAndVarianceProjection(ImageStack ims, int nFrames) {
         int w = ims.getWidth();
         int h = ims.getHeight();
+
+        ImageStack imsMean = new ImageStack(w, h);
+        ImageStack imsVar = new ImageStack(w, h);
 
         float[] mean = new float[w*h];
         float[] var  = new float[w*h];
 
+        int counter = 1;
+
         for (int s=1; s<=ims.getSize(); s++) {
+            IJ.showProgress(s, ims.getSize());
+            IJ.showStatus("Processing frame: "+s+"/"+ims.getSize());
+
             FloatProcessor frame = ims.getProcessor(s).convertToFloatProcessor();
             float[] pixels = (float[]) frame.getPixels();
 
             for (int n=0; n<pixels.length; n++) {
-                mean[n] += (pixels[n]-mean[n]) / s;
-                var[n] += pow(pixels[n]-mean[n], 2) / s; // check on this
+                mean[n] += (pixels[n]-mean[n]) / counter;
+                var[n] += pow(pixels[n]-mean[n], 2) / counter; // check on this
+            }
+
+            //counter ++;
+
+            if (counter == nFrames) {
+                FloatProcessor fpMean = new FloatProcessor(w, h, mean);
+                FloatProcessor fpVar = new FloatProcessor(w, h, var);
+
+                imsMean.addSlice(fpMean);
+                imsVar.addSlice(fpVar);
+
+                mean = new float[w*h];
+                var  = new float[w*h];
+                counter = 1;
+            }
+            else {
+                counter++;
             }
         }
 
-        FloatProcessor fpMean = new FloatProcessor(w, h, mean);
-        FloatProcessor fpVar = new FloatProcessor(w, h, var);
-
-        return new FloatProcessor[] {fpMean, fpVar};
+        return new ImageStack[] {imsMean, imsVar};
     }
 }
