@@ -146,18 +146,22 @@ public class DarkFrameCorrector_ implements PlugIn {
 
             if(averageDark){
                 fp = projector.do2DProjection(imsDark, Projections2D.AVERAGE);
+                imsDarkProjections.setSliceLabel("DARK-AVERAGE", n);
                 imsDarkProjections.setProcessor(fp, n++);
             }
             if(maximumDark){
                 fp = projector.do2DProjection(imsDark, Projections2D.MAX);
+                imsDarkProjections.setSliceLabel("DARK-MAX", n);
                 imsDarkProjections.setProcessor(fp, n++);
             }
             if(minimumDark){
                 fp = projector.do2DProjection(imsDark, Projections2D.MIN);
+                imsDarkProjections.setSliceLabel("DARK-MIN", n);
                 imsDarkProjections.setProcessor(fp, n++);
             }
             if(stdDark){
                 fp = projector.do2DProjection(imsDark, Projections2D.STDDEV);
+                imsDarkProjections.setSliceLabel("DARK-STDEV", n);
                 imsDarkProjections.setProcessor(fp, n++);
             }
         }
@@ -193,36 +197,44 @@ public class DarkFrameCorrector_ implements PlugIn {
                 ImageStack imsDarkRadiality_IW = calculateIntensityWeighting(imsDarkRadiality, imsDarkInterpolated);
                 if(averageDark){
                     fp = projector.do2DProjection(imsDarkRadiality_IW, Projections2D.AVERAGE);
+                    imsDarkProjections.setSliceLabel("DARK-IW-AVERAGE", n);
                     imsDarkProjections.setProcessor(fp, n++);
                 }
                 if(maximumDark){
                     fp = projector.do2DProjection(imsDarkRadiality_IW, Projections2D.MAX);
+                    imsDarkProjections.setSliceLabel("DARK-IW-MAX", n);
                     imsDarkProjections.setProcessor(fp, n++);
                 }
                 if(minimumDark){
                     fp = projector.do2DProjection(imsDarkRadiality_IW, Projections2D.MIN);
+                    imsDarkProjections.setSliceLabel("DARK-IW-MIN", n);
                     imsDarkProjections.setProcessor(fp, n++);
                 }
                 if(stdDark){
                     fp = projector.do2DProjection(imsDarkRadiality_IW, Projections2D.STDDEV);
+                    imsDarkProjections.setSliceLabel("DARK-IW-STDEV", n);
                     imsDarkProjections.setProcessor(fp, n++);
                 }
             }
             else{
                 if(averageDark){
                     fp = projector.do2DProjection(imsDarkRadiality, Projections2D.AVERAGE);
+                    imsDarkProjections.setSliceLabel("DARK-AVERAGE", n);
                     imsDarkProjections.setProcessor(fp, n++);
                 }
                 if(maximumDark){
                     fp = projector.do2DProjection(imsDarkRadiality, Projections2D.MAX);
+                    imsDarkProjections.setSliceLabel("DARK-MAX", n);
                     imsDarkProjections.setProcessor(fp, n++);
                 }
                 if(minimumDark){
                     fp = projector.do2DProjection(imsDarkRadiality, Projections2D.MIN);
+                    imsDarkProjections.setSliceLabel("DARK-MIN", n);
                     imsDarkProjections.setProcessor(fp, n++);
                 }
                 if(stdDark){
                     fp = projector.do2DProjection(imsDarkRadiality, Projections2D.STDDEV);
+                    imsDarkProjections.setSliceLabel("DARK-STDEV", n);
                     imsDarkProjections.setProcessor(fp, n++);
                 }
             }
@@ -236,8 +248,10 @@ public class DarkFrameCorrector_ implements PlugIn {
         if(testMode==choices[0]) {
 
             for (int i = 0; i < nDarkProjections; i++) {
+
                 ImageStack imsSubtracted = imsData.duplicate();
                 subtract(imsSubtracted, (FloatProcessor) imsDarkProjections.getProcessor(i + 1));
+                String darkSliceLabel = imsDarkProjections.getSliceLabel(i+1);
 
                 RadialityCL rCL = new RadialityCL(wData, hData, magnification, ringRadius, sensitivity);
 
@@ -268,35 +282,43 @@ public class DarkFrameCorrector_ implements PlugIn {
                     ImageStack imsDataRadiality_IW = calculateIntensityWeighting(imsDataRadiality, imsDataInterpolated);
                     if (averageRadiality) {
                         fp = projector.do2DProjection(imsDataRadiality_IW, Projections2D.AVERAGE);
+                        imsRadialityProjections.setSliceLabel(darkSliceLabel+"_RADIALITY-IW-AVERAGE", n);
                         imsRadialityProjections.setProcessor(fp, n++);
                     }
                     if (maximumRadiality) {
                         fp = projector.do2DProjection(imsDataRadiality_IW, Projections2D.MAX);
+                        imsRadialityProjections.setSliceLabel(darkSliceLabel+"_RADIALITY-IW-MAX", n);
                         imsRadialityProjections.setProcessor(fp, n++);
                     }
                     if (minimumRadiality) {
                         fp = projector.do2DProjection(imsDataRadiality_IW, Projections2D.MIN);
+                        imsRadialityProjections.setSliceLabel(darkSliceLabel+"_RADIALITY-IW-MIN", n);
                         imsRadialityProjections.setProcessor(fp, n++);
                     }
                     if (stdRadiality) {
                         fp = projector.do2DProjection(imsDataRadiality_IW, Projections2D.STDDEV);
+                        imsRadialityProjections.setSliceLabel(darkSliceLabel+"_RADIALITY-IW-STDEV", n);
                         imsRadialityProjections.setProcessor(fp, n++);
                     }
                 } else {
                     if (averageRadiality) {
                         fp = projector.do2DProjection(imsDataRadiality, Projections2D.AVERAGE);
+                        imsRadialityProjections.setSliceLabel(darkSliceLabel+"_RADIALITY-AVERAGE", n);
                         imsRadialityProjections.setProcessor(fp, n++);
                     }
                     if (maximumRadiality) {
                         fp = projector.do2DProjection(imsDataRadiality, Projections2D.MAX);
+                        imsRadialityProjections.setSliceLabel(darkSliceLabel+"_RADIALITY-MAX", n);
                         imsRadialityProjections.setProcessor(fp, n++);
                     }
                     if (minimumRadiality) {
                         fp = projector.do2DProjection(imsDataRadiality, Projections2D.MIN);
+                        imsRadialityProjections.setSliceLabel(darkSliceLabel+"_RADIALITY-MIN", n);
                         imsRadialityProjections.setProcessor(fp, n++);
                     }
                     if (stdRadiality) {
                         fp = projector.do2DProjection(imsDataRadiality, Projections2D.STDDEV);
+                        imsRadialityProjections.setSliceLabel(darkSliceLabel+"_RADIALITY-STDEV", n);
                         imsRadialityProjections.setProcessor(fp, n++);
                     }
                 }
@@ -330,29 +352,38 @@ public class DarkFrameCorrector_ implements PlugIn {
 
             for (int i = 0; i < nDarkProjections; i++) {
 
-                if(doIW_data) imsSubtracted = calculateIntensityWeighting(imsDataRadiality, imsDataInterpolated);
+                String darkSliceLabel = imsDarkProjections.getSliceLabel(i+1);
+                String IWLabel = "";
+
+                if(doIW_data){
+                    imsSubtracted = calculateIntensityWeighting(imsDataRadiality, imsDataInterpolated);
+                    IWLabel = "IW-";
+                }
                 else imsSubtracted = imsData.duplicate();
 
                 subtract(imsSubtracted, (FloatProcessor) imsDarkProjections.getProcessor(i + 1));
 
-                imsRadialityProjections = new ImageStack(wData * magnification, hData * magnification, nRadialityProjections);
                 FloatProcessor fp;
                 int n = i * nRadialityProjections + 1;
 
                 if (averageRadiality) {
                     fp = projector.do2DProjection(imsSubtracted, Projections2D.AVERAGE);
+                    imsRadialityProjections.setSliceLabel(darkSliceLabel+"_RADIALITY-"+IWLabel+"AVERAGE", n);
                     imsRadialityProjections.setProcessor(fp, n++);
                 }
                 if (maximumRadiality) {
                     fp = projector.do2DProjection(imsSubtracted, Projections2D.MAX);
+                    imsRadialityProjections.setSliceLabel(darkSliceLabel+"_RADIALITY-"+IWLabel+"MAX", n);
                     imsRadialityProjections.setProcessor(fp, n++);
                 }
                 if (minimumRadiality) {
                     fp = projector.do2DProjection(imsSubtracted, Projections2D.MIN);
+                    imsRadialityProjections.setSliceLabel(darkSliceLabel+"_RADIALITY-"+IWLabel+"MIN", n);
                     imsRadialityProjections.setProcessor(fp, n++);
                 }
                 if (stdRadiality) {
                     fp = projector.do2DProjection(imsSubtracted, Projections2D.STDDEV);
+                    imsRadialityProjections.setSliceLabel(darkSliceLabel+"_RADIALITY-"+IWLabel+"STDEV", n);
                     imsRadialityProjections.setProcessor(fp, n++);
                 }
 
@@ -385,7 +416,14 @@ public class DarkFrameCorrector_ implements PlugIn {
             ImageStack imsSubtracted = null;
 
             for(int i=0; i<nDarkProjections; i++){
-                if(doIW_data) imsSubtracted = calculateIntensityWeighting(imsDataRadiality, imsDataInterpolated);
+
+                String darkSliceLabel = imsDarkProjections.getSliceLabel(i+1);
+                String IWLabel = "";
+
+                if(doIW_data){
+                    imsSubtracted = calculateIntensityWeighting(imsDataRadiality, imsDataInterpolated);
+                    IWLabel = "IW-";
+                }
                 else imsSubtracted = imsData.duplicate();
 
                 FloatProcessor fp;
@@ -393,21 +431,25 @@ public class DarkFrameCorrector_ implements PlugIn {
 
                 if (averageRadiality) {
                     fp = projector.do2DProjection(imsSubtracted, Projections2D.AVERAGE);
+                    imsRadialityProjections.setSliceLabel(darkSliceLabel+"_RADIALITY-"+IWLabel+"AVERAGE", n);
                     subtract(fp, (FloatProcessor) imsDarkProjections.getProcessor(i + 1));
                     imsRadialityProjections.setProcessor(fp, n++);
                 }
                 if (maximumRadiality) {
                     fp = projector.do2DProjection(imsSubtracted, Projections2D.MAX);
+                    imsRadialityProjections.setSliceLabel(darkSliceLabel+"_RADIALITY-"+IWLabel+"MAX", n);
                     subtract(fp, (FloatProcessor) imsDarkProjections.getProcessor(i + 1));
                     imsRadialityProjections.setProcessor(fp, n++);
                 }
                 if (minimumRadiality) {
                     fp = projector.do2DProjection(imsSubtracted, Projections2D.MIN);
+                    imsRadialityProjections.setSliceLabel(darkSliceLabel+"_RADIALITY-"+IWLabel+"MIN", n);
                     subtract(fp, (FloatProcessor) imsDarkProjections.getProcessor(i + 1));
                     imsRadialityProjections.setProcessor(fp, n++);
                 }
                 if (stdRadiality) {
                     fp = projector.do2DProjection(imsSubtracted, Projections2D.STDDEV);
+                    imsRadialityProjections.setSliceLabel(darkSliceLabel+"_RADIALITY-"+IWLabel+"STDEV", n);
                     subtract(fp, (FloatProcessor) imsDarkProjections.getProcessor(i + 1));
                     imsRadialityProjections.setProcessor(fp, n++);
                 }
@@ -461,14 +503,15 @@ public class DarkFrameCorrector_ implements PlugIn {
         int w = ims.getWidth();
         int h = ims.getHeight();
 
-        ImageStack imsSubtracted = new ImageStack(w, h, nSlices);
+        float[] fpPixels = (float[]) fp.getPixels();
 
         for(int n=1; n<=nSlices; n++){
             float[] imsPixels = (float[]) ims.getProcessor(n).convertToFloatProcessor().getPixels();
-            float[] fpPixels = (float[]) fp.getPixels();
+
             for(int i=0; i<w*h; i++){
                 imsPixels[i] -= fpPixels[i];
             }
+            
             ims.setProcessor(new FloatProcessor(w,h,imsPixels), n);
         }
     }
