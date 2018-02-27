@@ -53,48 +53,49 @@ __kernel void calculateRadiality(
     int const heightM
     )
 {
-    int x = get_global_id(0);
-    int y = get_global_id(1);
-    int offset = y * widthM + x;
+    int xM = get_global_id(0);
+    int yM = get_global_id(1);
+    int offset = yM * widthM + xM;
 
-    float xc = x + 0.5 + shiftX * magnification;
-    float yc = y + 0.5 + shiftY * magnification;
+    float xc = (xM + 0.5) / magnification + shiftX;
+    float yc = (yM + 0.5) / magnification + shiftY;
 
     float CGH = 0; // CGH stands for Radiality original name - Culley-Gustafsson-Henriques transform
     float distanceWeightSum = 0;
 
     float vx, vy, Gx, Gy;
-    //float maxDistance = 1.4142135623730951;
-    //float maxDistance = 2;
 
-    for (int j=-1; j<=1; j++) {
-        for (int i=-1; i<=1; i++) {
-            vx = (int) (xc / magnification) + i + 0.5;
-            vy = (int) (yc / magnification) + j + 0.5;
+    for (int j=-2; j<=2; j++) {
+        for (int i=-2; i<=2; i++) {
+            vx = (int) xc  + i + 0.5;
+            vy = (int) yc  + j + 0.5;
+            float maxDistance = fmax(sqrt(pow(vx - xc, 2)+pow(vy - yc, 2)),1);
 
             Gx = getVBoundaryCheck(GxArray, width, height, vx, vy);
             Gy = getVBoundaryCheck(GyArray, width, height, vx, vy);
             float GMag = sqrt(Gx * Gx + Gy * Gy);
-            //float distanceWeight = 1 - sqrt(pow(vx * magnification - xc, 2)+pow(vy * magnification - yc, 2)) / maxDistance;
-            //float distanceWeight = 1/sqrt(pow(vx * magnification - xc, 2)+pow(vy * magnification - yc, 2));
-            float distanceWeight = 1;
+
+            float distanceWeight = 1/maxDistance;
 
             // Calculate perpendicular distance from (xc,yc) to gradient line through (vx,vy)
-            float absoluteDistance = fabs(Gy * (xc - vx * magnification) - Gx * (yc - vy * magnification)) / GMag;
-            if (isnan(absoluteDistance)) absoluteDistance = spatialRadius;
+            float absoluteDistance = fabs(Gy * (xc - vx) - Gx * (yc - vy)) / GMag;
+            if (isnan(absoluteDistance)) absoluteDistance = maxDistance;
 
-            float Dk = 1 - absoluteDistance / spatialRadius; // Dk is now between 0 to 1, 1 if vector points precisely to (xc, yx)
-            Dk = pow(Dk, radialitySensitivity) * distanceWeight;
+            float Dk = 1 - absoluteDistance / maxDistance; // Dk is now between 0 to 1, 1 if vector points precisely to (xc, yx)
+            Dk *= distanceWeight;
             distanceWeightSum += distanceWeight;
 
             // Accumulate Variables
-            float GdotR = (Gx * i * magnification + Gy * j * magnification) / (GMag * spatialRadius); // tells you if vector was pointing inward or outward
-            if (GdotR > 0 || GdotR != GdotR) CGH -= Dk; // vector was pointing outward
-            else CGH += Dk; // vector was pointing inward
+            float GdotR = (Gx * i * magnification + Gy * j * magnification); // tells you if vector was pointing inward or outward
+            if (GdotR <= 0) CGH += Dk; // vector was pointing inwards
+            else CGH -= Dk; // vector was pointing outwards
         }
     }
+    CGH /= distanceWeightSum;
+    if (CGH >= 0) CGH = fabs(pow(CGH, radialitySensitivity));
+    else CGH = 0;
 
-    interpolatedIntensity[offset] = getInterpolatedValue(pixels, width, height, ((float) x)/magnification + shiftX, ((float) y)/magnification + shiftY);
-    radiality[offset] = CGH / distanceWeightSum;
+    interpolatedIntensity[offset] = getInterpolatedValue(pixels, width, height, ((float) xM)/magnification + shiftX, ((float) yM)/magnification + shiftY);
+    radiality[offset] = CGH;
 }
 
