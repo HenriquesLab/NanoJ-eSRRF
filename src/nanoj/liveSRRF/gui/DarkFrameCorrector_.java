@@ -137,32 +137,14 @@ public class DarkFrameCorrector_ implements PlugIn {
         }
 
         ImageStack imsDarkProjections;
+        String[] darkLabels = new String[nDarkProjections];
 
         // Sort out dark frames
         if(testMode==choices[0]){
             imsDarkProjections = new ImageStack(wDark, hDark, nDarkProjections);
-            FloatProcessor fp;
-            int n=1;
-
-            if(averageDark){
-                fp = projector.do2DProjection(imsDark, Projections2D.AVERAGE);
-                imsDarkProjections.setSliceLabel("DARK-AVERAGE", n);
-                imsDarkProjections.setProcessor(fp, n++);
-            }
-            if(maximumDark){
-                fp = projector.do2DProjection(imsDark, Projections2D.MAX);
-                imsDarkProjections.setSliceLabel("DARK-MAX", n);
-                imsDarkProjections.setProcessor(fp, n++);
-            }
-            if(minimumDark){
-                fp = projector.do2DProjection(imsDark, Projections2D.MIN);
-                imsDarkProjections.setSliceLabel("DARK-MIN", n);
-                imsDarkProjections.setProcessor(fp, n++);
-            }
-            if(stdDark){
-                fp = projector.do2DProjection(imsDark, Projections2D.STDDEV);
-                imsDarkProjections.setSliceLabel("DARK-STDEV", n);
-                imsDarkProjections.setProcessor(fp, n++);
+            doZProjections(imsDarkProjections, imsDark, 1, false, new String[0]);
+            for(int n=0; n<nDarkProjections; n++){
+                darkLabels[n] = imsDarkProjections.getSliceLabel(n+1);
             }
         }
         else{
@@ -170,73 +152,21 @@ public class DarkFrameCorrector_ implements PlugIn {
             ImageStack imsDarkRadiality = new ImageStack(wDark*magnification, hDark*magnification);
             ImageStack imsDarkInterpolated = new ImageStack(wDark*magnification, hDark*magnification);
 
-            RadialityCL rCL = new RadialityCL(wDark, hDark, magnification, ringRadius, sensitivity);
-
             IJ.showStatus("Performing dark frame radiality calculations...");
-
-            for (int n=1; n<=nSlicesDark; n++) {
-                IJ.showProgress(n, nSlicesDark);
-                FloatProcessor[] fps = rCL.calculateRadiality(imsDark.getProcessor(n), 0, 0);
-                FloatProcessor fpRad = fps[0];
-                FloatProcessor fpInterpolated = fps[1];
-
-                imsDarkRadiality.addSlice(fpRad);
-                imsDarkInterpolated.addSlice(fpInterpolated);
-
-                if (IJ.escapePressed()) {
-                    IJ.resetEscape();
-                    return;
-                }
-             }
+            runRadiality(imsDark, imsDarkRadiality, imsDarkInterpolated);
 
             imsDarkProjections = new ImageStack(wDark*magnification, hDark*magnification, nDarkProjections);
-            FloatProcessor fp;
-            int n=1;
 
             if(doIW_dark){
                 ImageStack imsDarkRadiality_IW = calculateIntensityWeighting(imsDarkRadiality, imsDarkInterpolated);
-                if(averageDark){
-                    fp = projector.do2DProjection(imsDarkRadiality_IW, Projections2D.AVERAGE);
-                    imsDarkProjections.setSliceLabel("DARK-IW-AVERAGE", n);
-                    imsDarkProjections.setProcessor(fp, n++);
-                }
-                if(maximumDark){
-                    fp = projector.do2DProjection(imsDarkRadiality_IW, Projections2D.MAX);
-                    imsDarkProjections.setSliceLabel("DARK-IW-MAX", n);
-                    imsDarkProjections.setProcessor(fp, n++);
-                }
-                if(minimumDark){
-                    fp = projector.do2DProjection(imsDarkRadiality_IW, Projections2D.MIN);
-                    imsDarkProjections.setSliceLabel("DARK-IW-MIN", n);
-                    imsDarkProjections.setProcessor(fp, n++);
-                }
-                if(stdDark){
-                    fp = projector.do2DProjection(imsDarkRadiality_IW, Projections2D.STDDEV);
-                    imsDarkProjections.setSliceLabel("DARK-IW-STDEV", n);
-                    imsDarkProjections.setProcessor(fp, n++);
-                }
+                doZProjections(imsDarkProjections, imsDarkRadiality_IW, 1, false, new String[0]);
             }
             else{
-                if(averageDark){
-                    fp = projector.do2DProjection(imsDarkRadiality, Projections2D.AVERAGE);
-                    imsDarkProjections.setSliceLabel("DARK-AVERAGE", n);
-                    imsDarkProjections.setProcessor(fp, n++);
-                }
-                if(maximumDark){
-                    fp = projector.do2DProjection(imsDarkRadiality, Projections2D.MAX);
-                    imsDarkProjections.setSliceLabel("DARK-MAX", n);
-                    imsDarkProjections.setProcessor(fp, n++);
-                }
-                if(minimumDark){
-                    fp = projector.do2DProjection(imsDarkRadiality, Projections2D.MIN);
-                    imsDarkProjections.setSliceLabel("DARK-MIN", n);
-                    imsDarkProjections.setProcessor(fp, n++);
-                }
-                if(stdDark){
-                    fp = projector.do2DProjection(imsDarkRadiality, Projections2D.STDDEV);
-                    imsDarkProjections.setSliceLabel("DARK-STDEV", n);
-                    imsDarkProjections.setProcessor(fp, n++);
-                }
+                doZProjections(imsDarkProjections, imsDarkRadiality, 1, false, new String[0]);
+            }
+
+            for(int n=0; n<nDarkProjections; n++){
+                darkLabels[n] = imsDarkProjections.getSliceLabel(n+1);
             }
 
         }
@@ -251,76 +181,22 @@ public class DarkFrameCorrector_ implements PlugIn {
 
                 ImageStack imsSubtracted = imsData.duplicate();
                 subtract(imsSubtracted, (FloatProcessor) imsDarkProjections.getProcessor(i + 1));
-                String darkSliceLabel = imsDarkProjections.getSliceLabel(i+1);
-
-                RadialityCL rCL = new RadialityCL(wData, hData, magnification, ringRadius, sensitivity);
-
-                IJ.showStatus("Performing data frame radiality calculations for dark projection " + (i + 1) + "/" + nDarkProjections + "...");
 
                 ImageStack imsDataRadiality = new ImageStack(wDark * magnification, hDark * magnification);
                 ImageStack imsDataInterpolated = new ImageStack(wDark * magnification, hDark * magnification);
 
-                for (int n = 1; n <= nSlicesData; n++) {
-                    IJ.showProgress(n, nSlicesData);
-                    FloatProcessor[] fps = rCL.calculateRadiality(imsSubtracted.getProcessor(n), 0, 0);
-                    FloatProcessor fpRad = fps[0];
-                    FloatProcessor fpInterpolated = fps[1];
+                runRadiality(imsSubtracted, imsDataRadiality, imsDataInterpolated);
 
-                    imsDataRadiality.addSlice(fpRad);
-                    imsDataInterpolated.addSlice(fpInterpolated);
+                IJ.showStatus("Performing data frame radiality calculations for dark projection " + (i + 1) + "/" + nDarkProjections + "...");
 
-                    if (IJ.escapePressed()) {
-                        IJ.resetEscape();
-                        return;
-                    }
-                }
-
-                FloatProcessor fp;
                 int n = i * nRadialityProjections + 1;
 
                 if (doIW_data) {
                     ImageStack imsDataRadiality_IW = calculateIntensityWeighting(imsDataRadiality, imsDataInterpolated);
-                    if (averageRadiality) {
-                        fp = projector.do2DProjection(imsDataRadiality_IW, Projections2D.AVERAGE);
-                        imsRadialityProjections.setSliceLabel(darkSliceLabel+"_RADIALITY-IW-AVERAGE", n);
-                        imsRadialityProjections.setProcessor(fp, n++);
-                    }
-                    if (maximumRadiality) {
-                        fp = projector.do2DProjection(imsDataRadiality_IW, Projections2D.MAX);
-                        imsRadialityProjections.setSliceLabel(darkSliceLabel+"_RADIALITY-IW-MAX", n);
-                        imsRadialityProjections.setProcessor(fp, n++);
-                    }
-                    if (minimumRadiality) {
-                        fp = projector.do2DProjection(imsDataRadiality_IW, Projections2D.MIN);
-                        imsRadialityProjections.setSliceLabel(darkSliceLabel+"_RADIALITY-IW-MIN", n);
-                        imsRadialityProjections.setProcessor(fp, n++);
-                    }
-                    if (stdRadiality) {
-                        fp = projector.do2DProjection(imsDataRadiality_IW, Projections2D.STDDEV);
-                        imsRadialityProjections.setSliceLabel(darkSliceLabel+"_RADIALITY-IW-STDEV", n);
-                        imsRadialityProjections.setProcessor(fp, n++);
-                    }
-                } else {
-                    if (averageRadiality) {
-                        fp = projector.do2DProjection(imsDataRadiality, Projections2D.AVERAGE);
-                        imsRadialityProjections.setSliceLabel(darkSliceLabel+"_RADIALITY-AVERAGE", n);
-                        imsRadialityProjections.setProcessor(fp, n++);
-                    }
-                    if (maximumRadiality) {
-                        fp = projector.do2DProjection(imsDataRadiality, Projections2D.MAX);
-                        imsRadialityProjections.setSliceLabel(darkSliceLabel+"_RADIALITY-MAX", n);
-                        imsRadialityProjections.setProcessor(fp, n++);
-                    }
-                    if (minimumRadiality) {
-                        fp = projector.do2DProjection(imsDataRadiality, Projections2D.MIN);
-                        imsRadialityProjections.setSliceLabel(darkSliceLabel+"_RADIALITY-MIN", n);
-                        imsRadialityProjections.setProcessor(fp, n++);
-                    }
-                    if (stdRadiality) {
-                        fp = projector.do2DProjection(imsDataRadiality, Projections2D.STDDEV);
-                        imsRadialityProjections.setSliceLabel(darkSliceLabel+"_RADIALITY-STDEV", n);
-                        imsRadialityProjections.setProcessor(fp, n++);
-                    }
+                    doZProjections(imsRadialityProjections, imsDataRadiality_IW, n, true, darkLabels);
+                }
+                else {
+                    doZProjections(imsRadialityProjections, imsDataRadiality, n, true, darkLabels);
                 }
 
             }
@@ -328,64 +204,24 @@ public class DarkFrameCorrector_ implements PlugIn {
 
         else if(testMode==choices[1]){
 
-            RadialityCL rCL = new RadialityCL(wData, hData, magnification, ringRadius, sensitivity);
-
             ImageStack imsDataRadiality = new ImageStack(wDark * magnification, hDark * magnification);
             ImageStack imsDataInterpolated = new ImageStack(wDark * magnification, hDark * magnification);
 
-            for (int n = 1; n <= nSlicesData; n++) {
-                IJ.showProgress(n, nSlicesData);
-                FloatProcessor[] fps = rCL.calculateRadiality(imsData.getProcessor(n), 0, 0);
-                FloatProcessor fpRad = fps[0];
-                FloatProcessor fpInterpolated = fps[1];
+            runRadiality(imsData, imsDataRadiality, imsDataInterpolated);
 
-                imsDataRadiality.addSlice(fpRad);
-                imsDataInterpolated.addSlice(fpInterpolated);
-
-                if (IJ.escapePressed()) {
-                    IJ.resetEscape();
-                    return;
-                }
-            }
-
-            ImageStack imsSubtracted = null;
+            ImageStack imsSubtracted;
 
             for (int i = 0; i < nDarkProjections; i++) {
 
-                String darkSliceLabel = imsDarkProjections.getSliceLabel(i+1);
-                String IWLabel = "";
-
                 if(doIW_data){
                     imsSubtracted = calculateIntensityWeighting(imsDataRadiality, imsDataInterpolated);
-                    IWLabel = "IW-";
                 }
                 else imsSubtracted = imsData.duplicate();
 
                 subtract(imsSubtracted, (FloatProcessor) imsDarkProjections.getProcessor(i + 1));
 
-                FloatProcessor fp;
                 int n = i * nRadialityProjections + 1;
-
-                if (averageRadiality) {
-                    fp = projector.do2DProjection(imsSubtracted, Projections2D.AVERAGE);
-                    imsRadialityProjections.setSliceLabel(darkSliceLabel+"_RADIALITY-"+IWLabel+"AVERAGE", n);
-                    imsRadialityProjections.setProcessor(fp, n++);
-                }
-                if (maximumRadiality) {
-                    fp = projector.do2DProjection(imsSubtracted, Projections2D.MAX);
-                    imsRadialityProjections.setSliceLabel(darkSliceLabel+"_RADIALITY-"+IWLabel+"MAX", n);
-                    imsRadialityProjections.setProcessor(fp, n++);
-                }
-                if (minimumRadiality) {
-                    fp = projector.do2DProjection(imsSubtracted, Projections2D.MIN);
-                    imsRadialityProjections.setSliceLabel(darkSliceLabel+"_RADIALITY-"+IWLabel+"MIN", n);
-                    imsRadialityProjections.setProcessor(fp, n++);
-                }
-                if (stdRadiality) {
-                    fp = projector.do2DProjection(imsSubtracted, Projections2D.STDDEV);
-                    imsRadialityProjections.setSliceLabel(darkSliceLabel+"_RADIALITY-"+IWLabel+"STDEV", n);
-                    imsRadialityProjections.setProcessor(fp, n++);
-                }
+                doZProjections(imsRadialityProjections, imsSubtracted, n, true, darkLabels);
 
             }
 
@@ -393,27 +229,12 @@ public class DarkFrameCorrector_ implements PlugIn {
 
         else if(testMode==choices[2]){
 
-            RadialityCL rCL = new RadialityCL(wData, hData, magnification, ringRadius, sensitivity);
-
             ImageStack imsDataRadiality = new ImageStack(wDark * magnification, hDark * magnification);
             ImageStack imsDataInterpolated = new ImageStack(wDark * magnification, hDark * magnification);
 
-            for (int n = 1; n <= nSlicesData; n++) {
-                IJ.showProgress(n, nSlicesData);
-                FloatProcessor[] fps = rCL.calculateRadiality(imsData.getProcessor(n), 0, 0);
-                FloatProcessor fpRad = fps[0];
-                FloatProcessor fpInterpolated = fps[1];
+            runRadiality(imsData, imsDataRadiality, imsDataInterpolated);
 
-                imsDataRadiality.addSlice(fpRad);
-                imsDataInterpolated.addSlice(fpInterpolated);
-
-                if (IJ.escapePressed()) {
-                    IJ.resetEscape();
-                    return;
-                }
-            }
-
-            ImageStack imsSubtracted = null;
+            ImageStack imsSubtracted;
 
             for(int i=0; i<nDarkProjections; i++){
 
@@ -463,6 +284,8 @@ public class DarkFrameCorrector_ implements PlugIn {
     }
 
 
+    //helper functions for prefs handling
+
     public float getPrefs(String key, float defaultValue) {
         return (float) prefs.get(prefsHeader+"."+key, defaultValue);
     }
@@ -478,6 +301,8 @@ public class DarkFrameCorrector_ implements PlugIn {
     public void setPrefs(String key, boolean defaultValue) {
         prefs.set(prefsHeader+"."+key, defaultValue);
     }
+
+    // helper functions for image maths
 
     public ImageStack calculateIntensityWeighting(ImageStack imsRadiality, ImageStack imsInterpolated){
         int nSlices = imsRadiality.getSize();
@@ -524,6 +349,130 @@ public class DarkFrameCorrector_ implements PlugIn {
         float[] fp2Pixels = (float[]) fp2.getPixels();
         for(int i=0; i<w*h; i++){
             fp1Pixels[i] -= fp2Pixels[i];
+        }
+    }
+
+    // helper functions for z-projecting
+
+    public void doZProjections(ImageStack imsProjections, ImageStack imsRaw, int startIndex, boolean doingRadiality,
+                               String[] darkLabels){
+
+        int n=startIndex;
+        FloatProcessor fp;
+        boolean doAverage, doMaximum, doMinimum, doStd;
+        String label;
+
+        if(doingRadiality){
+            doAverage = averageRadiality;
+            doMaximum = maximumRadiality;
+            doMinimum = minimumRadiality;
+            doStd = stdRadiality;
+        }
+        else{
+            doAverage = averageDark;
+            doMaximum = maximumDark;
+            doMinimum = minimumDark;
+            doStd = stdDark;
+        }
+
+        int labelIndex = 0;
+
+        if (doAverage) {
+            fp = projector.do2DProjection(imsRaw, Projections2D.AVERAGE);
+            if(doingRadiality){
+                label = makeRadialitySliceLabel(Projections2D.AVERAGE, darkLabels[labelIndex++]);
+            }
+            else{
+                label = makeDarkSliceLabel(Projections2D.AVERAGE);
+            }
+            imsProjections.setSliceLabel(label, n);
+            imsProjections.setProcessor(fp, n++);
+        }
+        if (doMaximum) {
+            fp = projector.do2DProjection(imsRaw, Projections2D.MAX);
+            if(doingRadiality){
+                label = makeRadialitySliceLabel(Projections2D.MAX, darkLabels[labelIndex++]);
+            }
+            else{
+                label = makeDarkSliceLabel(Projections2D.MAX);
+            }
+            imsProjections.setSliceLabel(label, n);
+            imsProjections.setProcessor(fp, n++);
+        }
+        if (doMinimum) {
+            fp = projector.do2DProjection(imsRaw, Projections2D.MIN);
+            if(doingRadiality){
+                label = makeRadialitySliceLabel(Projections2D.MIN, darkLabels[labelIndex++]);
+            }
+            else{
+                label = makeDarkSliceLabel(Projections2D.MIN);
+            }
+            imsProjections.setSliceLabel(label, n);
+            imsProjections.setProcessor(fp, n++);
+        }
+        if (doStd) {
+            fp = projector.do2DProjection(imsRaw, Projections2D.STDDEV);
+            if(doingRadiality){
+                label = makeRadialitySliceLabel(Projections2D.STDDEV, darkLabels[labelIndex++]);
+            }
+            else{
+                label = makeDarkSliceLabel(Projections2D.STDDEV);
+            }
+            imsProjections.setSliceLabel(label, n);
+            imsProjections.setProcessor(fp, n++);
+        }
+
+    }
+
+    public String makeDarkSliceLabel(int projectionType){
+        String projectionString, IWString = "";
+
+        if(projectionType==Projections2D.AVERAGE) projectionString = "AVG";
+        else if (projectionType==Projections2D.MAX) projectionString = "MAX";
+        else if (projectionType==Projections2D.MIN) projectionString = "MIN";
+        else projectionString = "STD";
+
+        if(doIW_dark) IWString = "IW-";
+
+        return "Dark-"+IWString+projectionString;
+    }
+
+    public String makeRadialitySliceLabel(int projectionType, String darkLabel){
+        String projectionString, IWString = "";
+
+        if(projectionType==Projections2D.AVERAGE) projectionString = "AVG";
+        else if (projectionType==Projections2D.MAX) projectionString = "MAX";
+        else if (projectionType==Projections2D.MIN) projectionString = "MIN";
+        else projectionString = "STD";
+
+        if(doIW_data) IWString = "IW-";
+
+        return darkLabel+"_Radiality-"+IWString+projectionString;
+    }
+
+    // helper function for radiality calculation
+
+    public void runRadiality(ImageStack imsRaw, ImageStack imsRadiality, ImageStack imsInterpolated){
+
+        int w = imsRaw.getWidth();
+        int h = imsRaw.getHeight();
+        int nSlices = imsRaw.getSize();
+
+        RadialityCL rCL = new RadialityCL(w, h, magnification, ringRadius, sensitivity);
+
+        for (int n = 1; n <= nSlices; n++) {
+            IJ.showProgress(n, nSlices);
+            FloatProcessor[] fps = rCL.calculateRadiality(imsRaw.getProcessor(n), 0, 0);
+            FloatProcessor fpRad = fps[0];
+            FloatProcessor fpInterpolated = fps[1];
+
+            imsRadiality.addSlice(fpRad);
+            imsInterpolated.addSlice(fpInterpolated);
+
+            if (IJ.escapePressed()) {
+                IJ.resetEscape();
+                return;
+            }
         }
     }
 
