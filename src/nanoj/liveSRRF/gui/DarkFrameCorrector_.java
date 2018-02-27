@@ -97,27 +97,27 @@ public class DarkFrameCorrector_ implements PlugIn {
         }
 
         // perform radiality transform on dark frames
-        ImageStack imsDarkRadiality = new ImageStack(wDark*magnification, hDark*magnification, nSlicesDark);
+        ImageStack imsDarkRadiality = new ImageStack(wDark*magnification, hDark*magnification);
         runRadiality(imsDark, imsDarkRadiality);
 
-        new ImagePlus("radiality", imsDarkRadiality).show();
+        IJ.log("Dark radiality done!");
 
         // perform dark raw data subtraction
-        FloatProcessor fpDarkAverage = projector.do2DProjection(imsDark, Projections2D.AVERAGE);
+        FloatProcessor fpDarkAverage = averageProjection(imsDark);
         ImageStack imsSubtracted = imsData.duplicate();
         subtract(imsSubtracted, fpDarkAverage);
 
         // average project dark radiality and interpolated intensity
-        FloatProcessor fpDarkRadiality = projector.do2DProjection(imsDarkRadiality, Projections2D.AVERAGE);
-        new ImagePlus("average dark radiality", fpDarkRadiality).show();
+        FloatProcessor fpDarkRadiality = averageProjection(imsDarkRadiality);
 
         // perform radiality on data frames
-        ImageStack imsDataRadiality = new ImageStack(wData*magnification, hData*magnification, nSlicesData);
-        ImageStack imsDataInterpolated = new ImageStack(wData*magnification, hData*magnification, nSlicesData);
+        ImageStack imsDataRadiality = new ImageStack(wData*magnification, hData*magnification);
+        ImageStack imsDataInterpolated = new ImageStack(wData*magnification, hData*magnification);
         runRadiality(imsSubtracted, imsDataRadiality, imsDataInterpolated);
+        IJ.log("Data radiality done!");
 
         // generate reference uncorrected images
-        ImageStack imsProjectionsUncorrected = new ImageStack(wData*magnification, hData*magnification, nSlicesData);
+        ImageStack imsProjectionsUncorrected = new ImageStack(wData*magnification, hData*magnification, nProjections);
         doZProjections(imsProjectionsUncorrected, imsDataRadiality);
         ImagePlus impUncorrected = new ImagePlus("Uncorrected SRRF projections", imsProjectionsUncorrected);
 
@@ -211,24 +211,84 @@ public class DarkFrameCorrector_ implements PlugIn {
 
     // helper functions for z-projecting
 
+    public FloatProcessor averageProjection(ImageStack ims){
+        int w = ims.getWidth();
+        int h = ims.getHeight();
+        int nSlices = ims.getSize();
+
+        float[] average = new float[w*h];
+
+        for(int n=1; n<=nSlices; n++){
+            FloatProcessor fp = ims.getProcessor(n).convertToFloatProcessor();
+            float[] pixels = (float[]) fp.getPixels();
+            for(int i=0; i<w*h; i++){
+                average[i]+= pixels[i]/nSlices;
+            }
+        }
+        return new FloatProcessor(w, h, average);
+    }
+
+    public FloatProcessor maxProjection(ImageStack ims){
+        int w = ims.getWidth();
+        int h = ims.getHeight();
+        int nSlices = ims.getSize();
+
+        float[] maxIntensity = new float[w*h];
+
+        for(int n=1; n<=nSlices; n++){
+            FloatProcessor fp = ims.getProcessor(n).convertToFloatProcessor();
+            float[] pixels = (float[]) fp.getPixels();
+            for(int i=0; i<w*h; i++){
+                maxIntensity[i] = Math.max(maxIntensity[i], pixels[i]);
+            }
+        }
+        return new FloatProcessor(w, h, maxIntensity);
+
+    }
+
+    public FloatProcessor stdProjection(ImageStack ims){
+
+        FloatProcessor fpAverage = averageProjection(ims);
+        float[] average = (float[]) fpAverage.getPixels();
+
+        int w = ims.getWidth();
+        int h = ims.getHeight();
+        int nSlices = ims.getSize();
+
+        float[] std = new float[w*h];
+
+        for(int n=1; n<=nSlices; n++){
+            FloatProcessor fp = ims.getProcessor(n).convertToFloatProcessor();
+            float[] pixels = (float[]) fp.getPixels();
+            for(int i=0; i<w*h; i++){
+                float diff = pixels[i] - average[i];
+                std[i]+= (diff*diff)/nSlices;
+            }
+        }
+
+        for(int i=0; i<w*h; i++) std[i] = (float) Math.sqrt(std[i]);
+
+        return new FloatProcessor(w, h, std);
+
+    }
+
     public void doZProjections(ImageStack imsProjections, ImageStack imsRaw){
 
         FloatProcessor fp;
         int n=1;
 
         if (doAverage) {
-            fp = projector.do2DProjection(imsRaw, Projections2D.AVERAGE);
+            fp = averageProjection(imsRaw);
             imsProjections.setSliceLabel("Average", n);
             imsProjections.setProcessor(fp, n++);
         }
         if (doMaximum) {
-            fp = projector.do2DProjection(imsRaw, Projections2D.MAX);
-
+            fp = maxProjection(imsRaw);
             imsProjections.setSliceLabel("Maximum", n);
             imsProjections.setProcessor(fp, n++);
         }
         if (doStd) {
-            fp = projector.do2DProjection(imsRaw, Projections2D.STDDEV);
+            fp = stdProjection(imsRaw);
             imsProjections.setSliceLabel("Stdev", n);
             imsProjections.setProcessor(fp, n++);
         }
