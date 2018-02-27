@@ -4,17 +4,18 @@ import ij.IJ;
 import ij.ImagePlus;
 import ij.ImageStack;
 import ij.gui.NonBlockingGenericDialog;
+import ij.gui.Plot;
 import ij.plugin.PlugIn;
 import ij.process.FloatProcessor;
-import ij.process.ImageProcessor;
 
-import java.io.File;
-import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.Random;
 
+import static java.lang.Math.floor;
 import static java.lang.Math.pow;
 
 public class CalculateGainAndOffset_  implements PlugIn {
+
+    public static boolean DEBUG = true;
 
     @Override
     public void run(String s) {
@@ -41,7 +42,6 @@ public class CalculateGainAndOffset_  implements PlugIn {
         ImageStack imsMean = imsCalculated[0];
         ImageStack imsVar  = imsCalculated[1];
 
-
         // mean subtract and var subtract
         float[] mean0 = ((float[]) imsMean.getProcessor(1).getPixels()).clone();
         float[] var0  = ((float[]) imsVar.getProcessor(1).getPixels()).clone();
@@ -62,12 +62,13 @@ public class CalculateGainAndOffset_  implements PlugIn {
         new ImagePlus("Mean", imsMean).show();
         new ImagePlus("Var", imsVar).show();
 
-        //ImageStack[] imsGainAndOffset = this.calculateGain(imsMean, imsVar);
-        //ImageStack GainIm = imsGainAndOffset[0];
-        //ImageStack OffsetIm  = imsGainAndOffset[1];
+        ImageStack imsGainAndOffset = this.calculateGain(imsMean, imsVar);
 
-        //new ImagePlus("Gain", GainIm).show();
-        //new ImagePlus("Offset", OffsetIm).show();
+        new ImagePlus("Gain & Offset", imsGainAndOffset).show();
+
+        if (DEBUG) {
+            showGainOffsetFit(imsMean, imsVar, imsGainAndOffset, 10);
+        }
 
     }
 
@@ -77,49 +78,61 @@ public class CalculateGainAndOffset_  implements PlugIn {
         int h = ims.getHeight();
 
         ImageStack imsMean = new ImageStack(w, h);
-        ImageStack imsVar = new ImageStack(w, h);
-
-        float[] mean = new float[w*h];
-        float[] var  = new float[w*h];
 
         int counter = 1;
-
+        float[] mean = new float[w*h];
         for (int s=1; s<=ims.getSize(); s++) {
             IJ.showProgress(s, ims.getSize());
-            IJ.showStatus("Processing frame: "+s+"/"+ims.getSize());
+            IJ.showStatus("Calculating mean for frame: "+s+"/"+ims.getSize());
 
             FloatProcessor frame = ims.getProcessor(s).convertToFloatProcessor();
             float[] pixels = (float[]) frame.getPixels();
 
             for (int n=0; n<pixels.length; n++) {
-                mean[n] += (pixels[n]-mean[n]) / counter;
-                var[n] += pow(pixels[n]-mean[n], 2) / counter; // check on this
+                mean[n] += pixels[n] / nFrames;
             }
 
-            //counter ++;
-
-            if (counter == nFrames) {
+            if (counter < nFrames) counter++;
+            else {
                 FloatProcessor fpMean = new FloatProcessor(w, h, mean);
-                FloatProcessor fpVar  = new FloatProcessor(w, h, var);
-
                 imsMean.addSlice(fpMean);
-                imsVar.addSlice(fpVar);
-
                 mean = new float[w*h];
-                var  = new float[w*h];
                 counter = 1;
             }
+        }
+        IJ.log("Mean frames="+imsMean.getSize());
+
+        ImageStack imsVar = new ImageStack(w, h);
+
+        counter = 1;
+        float[] var  = new float[w*h];
+        for (int s=1; s<=ims.getSize(); s++) {
+            IJ.showProgress(s, ims.getSize());
+            IJ.showStatus("Calculating var for frame: "+s+"/"+ims.getSize());
+
+            FloatProcessor frame = ims.getProcessor(s).convertToFloatProcessor();
+            FloatProcessor fpMean = (FloatProcessor) imsMean.getProcessor(imsVar.getSize()+1); // TODO: CHECK THIS IS CORRECT
+            float[] pixels = (float[]) frame.getPixels();
+            float[] pixelsMean = (float[]) fpMean.getPixels();
+
+            for (int n=0; n<pixels.length; n++) {
+                var[n] += pow(pixels[n] - pixelsMean[n], 2) / (nFrames - 1); // TODO: NEED TO CHECK BIAS VS UNBIAS
+            }
+
+            if (counter < nFrames) counter++;
             else {
-                counter++;
+                FloatProcessor fpVar = new FloatProcessor(w, h, var);
+                imsVar.addSlice(fpVar);
+                var = new float[w*h];
+                counter = 1;
             }
         }
 
         return new ImageStack[] {imsMean, imsVar};
     }
 
-
     // -----------------------------------------------------------------------------------------------------------------
-    private ImageStack[] calculateGain(ImageStack imsMean, ImageStack imsVar) {
+    private ImageStack calculateGain(ImageStack imsMean, ImageStack imsVar) {
 
         int w = imsMean.getWidth();
         int h = imsMean.getHeight();
@@ -127,9 +140,9 @@ public class CalculateGainAndOffset_  implements PlugIn {
         int nFrames = imsMean.getSize();
 
         // first pass: compute means
-        double[] meanMean  = new double[nPixels];
-        double[] meanMean2 = new double[nPixels];
-        double[] meanVar   = new double[nPixels];
+        float[] meanMean  = new float[nPixels];
+        float[] meanMean2 = new float[nPixels];
+        float[] meanVar   = new float[nPixels];
 
         // first pass
         for (int s=1; s<=nFrames; s++) {
@@ -144,9 +157,9 @@ public class CalculateGainAndOffset_  implements PlugIn {
         }
 
         // x is mean and y is var
-        double[] xxbar = new double[nPixels];
-        double[] yybar = new double[nPixels];
-        double[] xybar = new double[nPixels];
+        float[] xxbar = new float[nPixels];
+        float[] yybar = new float[nPixels];
+        float[] xybar = new float[nPixels];
 
         // second pass
         for (int s=1; s<=nFrames; s++) {
@@ -166,18 +179,15 @@ public class CalculateGainAndOffset_  implements PlugIn {
         float[] offset = new float[nPixels];
 
         for (int n=0; n<nPixels; n++) {
-            gain[n] = (float)xybar[n] / (float)xxbar[n];
-            offset[n] = (float)meanVar[n] - gain[n] * (float)meanMean[n];
+            gain[n] = xybar[n] / xxbar[n];
+            offset[n] = meanVar[n] - gain[n] * meanMean[n];
         }
 
-        ImageStack GainIm = new ImageStack(w, h, 1);
-        ImageStack OffsetIm = new ImageStack(w, h, 1);
+        ImageStack imsGainOffset = new ImageStack(w, h);
+        imsGainOffset.addSlice(new FloatProcessor(w, h, gain));
+        imsGainOffset.addSlice(new FloatProcessor(w, h, offset));
 
-        GainIm.setProcessor(new FloatProcessor(w, h, gain), 1);
-        OffsetIm.setProcessor(new FloatProcessor(w, h, offset), 1);
-
-        return new ImageStack[] {GainIm, OffsetIm};
-
+        return imsGainOffset;
 
 //        int MAXN = 1000;
 //        int n = 0;
@@ -233,5 +243,31 @@ public class CalculateGainAndOffset_  implements PlugIn {
 //        StdOut.println("SSE  = " + rss);
 //        StdOut.println("SSR  = " + ssr);
 
+    }
+
+    private void showGainOffsetFit(ImageStack imsMean, ImageStack imsVar, ImageStack imsGainAndOffset, int nPlots) {
+        int w = imsMean.getWidth();
+        int h = imsMean.getHeight();
+        int ns = imsMean.getSize();
+
+        Random r = new Random();
+
+        for (int i=0; i<nPlots; i++) {
+            int x = r.nextInt(w);
+            int y = r.nextInt(h);
+
+            float[] xs = new float[ns];
+            float[] ys0 = new float[ns];
+            float[] ys1 = new float[ns];
+
+            for (int n=0; n<ns; n++) {
+                xs[n] = (float) imsMean.getVoxel(x, y, n);
+                ys0[n] = (float) imsVar.getVoxel(x, y, n);
+                ys1[n] = (float) imsGainAndOffset.getVoxel(x,y,0)*xs[n] + (float) imsGainAndOffset.getVoxel(x,y,1);
+            }
+            Plot p = new Plot("Var vs Mean X="+x+" Y="+y, "Mean", "Var", xs, ys1);
+            p.addPoints(xs, ys0, Plot.CROSS);
+            p.show();
+        }
     }
 }
