@@ -87,13 +87,14 @@ __kernel void calculateRadiality(
                 if (isnan(Dk)) Dk = distance;
 
                 Dk = 1 - Dk / distance; // Dk is now between 0 to 1, 1 if vector points precisely to (xc, yx)
+                Dk = fmax(Dk - 0.5f, 0)*2;
                 Dk *= distanceWeight;
                 distanceWeightSum += distanceWeight;
 
                 // Accumulate Variables
                 float GdotR = (Gx * i * magnification + Gy * j * magnification); // tells you if vector was pointing inward or outward
                 if (GdotR <= 0) CGLH += Dk; // vector was pointing inwards
-                else CGLH -= Dk; // vector was pointing outwards
+                //else CGLH -= Dk; // vector was pointing outwards
             }
         }
     }
