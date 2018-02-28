@@ -34,15 +34,11 @@ float getVBoundaryCheck(__global float* array, int const width, int const height
 }
 
 __kernel void calculateRadiality(
-    __global float* xRingCoordinates,
-    __global float* yRingCoordinates,
     __global float* pixels,
     __global float* GxArray,
     __global float* GyArray,
     __global float* radiality,
-    __global float* interpolatedIntensity,
     int const magnification,
-    float const spatialRadius,
     float const radialitySensitivity,
     float const shiftX,
     float const shiftY,
@@ -60,42 +56,53 @@ __kernel void calculateRadiality(
     float xc = (xM + 0.5) / magnification + shiftX;
     float yc = (yM + 0.5) / magnification + shiftY;
 
-    float CGH = 0; // CGH stands for Radiality original name - Culley-Gustafsson-Henriques transform
+    float CGLH = 0; // CGLH stands for Radiality original name - Culley-Gustafsson-Laine-Henriques transform
     float distanceWeightSum = 0;
 
     float vx, vy, Gx, Gy;
-
-    for (int j=-2; j<=2; j++) {
-        for (int i=-2; i<=2; i++) {
+    int radius = 2;
+    float sigma = 1.5; //need to ask user
+    //float maxDistance = sqrt(2*pow(radius, 2));
+//
+    for (int j=-radius; j<=radius; j++) {
+        for (int i=-radius; i<=radius; i++) {
             vx = (int) xc  + i + 0.5;
             vy = (int) yc  + j + 0.5;
-            float maxDistance = fmax(sqrt(pow(vx - xc, 2)+pow(vy - yc, 2)),1);
 
-            Gx = getVBoundaryCheck(GxArray, width, height, vx, vy);
-            Gy = getVBoundaryCheck(GyArray, width, height, vx, vy);
-            float GMag = sqrt(Gx * Gx + Gy * Gy);
+            float distance = sqrt(pow(vx - xc, 2)+pow(vy - yc, 2));
+            //float distance = fmax(sqrt(pow(vx - xc, 2)+pow(vy - yc, 2)),1.0);
 
-            float distanceWeight = 1/maxDistance;
+            if (distance != 0) {
+                Gx = getVBoundaryCheck(GxArray, width, height, vx, vy);
+                Gy = getVBoundaryCheck(GyArray, width, height, vx, vy);
 
-            // Calculate perpendicular distance from (xc,yc) to gradient line through (vx,vy)
-            float absoluteDistance = fabs(Gy * (xc - vx) - Gx * (yc - vy)) / GMag;
-            if (isnan(absoluteDistance)) absoluteDistance = maxDistance;
+                float GMag = sqrt(Gx * Gx + Gy * Gy);
 
-            float Dk = 1 - absoluteDistance / maxDistance; // Dk is now between 0 to 1, 1 if vector points precisely to (xc, yx)
-            Dk *= distanceWeight;
-            distanceWeightSum += distanceWeight;
+                //float distanceWeight = 1/distance;
+                float distanceWeight = (distance/(sigma*sigma*sigma))*exp(-(distance*distance)/(2*sigma*sigma));
+                distanceWeight = distanceWeight * distanceWeight;
 
-            // Accumulate Variables
-            float GdotR = (Gx * i * magnification + Gy * j * magnification); // tells you if vector was pointing inward or outward
-            if (GdotR <= 0) CGH += Dk; // vector was pointing inwards
-            else CGH -= Dk; // vector was pointing outwards
+                // Calculate perpendicular distance from (xc,yc) to gradient line through (vx,vy)
+                float Dk = fabs(Gy * (xc - vx) - Gx * (yc - vy)) / GMag;
+                if (isnan(Dk)) Dk = distance;
+
+                Dk = 1 - Dk / distance; // Dk is now between 0 to 1, 1 if vector points precisely to (xc, yx)
+                Dk *= distanceWeight;
+                distanceWeightSum += distanceWeight;
+
+                // Accumulate Variables
+                float GdotR = (Gx * i * magnification + Gy * j * magnification); // tells you if vector was pointing inward or outward
+                if (GdotR <= 0) CGLH += Dk; // vector was pointing inwards
+                else CGLH -= Dk; // vector was pointing outwards
+            }
         }
     }
-    CGH /= distanceWeightSum;
-    if (CGH >= 0) CGH = fabs(pow(CGH, radialitySensitivity));
-    else CGH = 0;
+    CGLH /= distanceWeightSum;
+//    if (CGLH >= 0) CGLH = pow(CGLH, radialitySensitivity);
+//    else CGLH = 0;
 
-    interpolatedIntensity[offset] = getInterpolatedValue(pixels, width, height, ((float) xM)/magnification + shiftX, ((float) yM)/magnification + shiftY);
-    radiality[offset] = CGH;
+//    interpolatedIntensity[offset] = getInterpolatedValue(pixels, width, height, ((float) xM)/magnification + shiftX, ((float) yM)/magnification + shiftY);
+    radiality[offset] = CGLH;
 }
+
 
