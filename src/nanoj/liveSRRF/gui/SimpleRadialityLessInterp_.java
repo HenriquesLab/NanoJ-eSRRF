@@ -62,6 +62,11 @@ public class SimpleRadialityLessInterp_ implements PlugIn {
         new ImagePlus(imp.getTitle()+" - Radiality", imsRadiality).show();
         new ImagePlus(imp.getTitle()+" - Interpolated", imsInterpolated).show();
 
+        IJ.selectWindow("AllSequence.tif - Radiality");
+        IJ.run("Z Project...", "projection=[Average Intensity]");
+        IJ.selectWindow("AllSequence.tif - Radiality");
+        IJ.run("Z Project...", "projection=[Standard Deviation]");
+
         //rCL.showPlatforms();
         rCL.release();
     }

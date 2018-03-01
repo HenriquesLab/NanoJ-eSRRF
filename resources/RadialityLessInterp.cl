@@ -38,6 +38,7 @@ __kernel void calculateRadiality(
     __global float* GxArray,
     __global float* GyArray,
     __global float* radiality,
+    //__global float* interpolatedIntensity,
     int const magnification,
     float const radialitySensitivity,
     float const shiftX,
@@ -60,8 +61,9 @@ __kernel void calculateRadiality(
     float distanceWeightSum = 0;
 
     float vx, vy, Gx, Gy;
-    int radius = 2;
-    float sigma = 1.5; //need to ask user
+    float sigma = 1.3; // need to ask user Sigma = 0.21 * lambda/NA in theory
+    int radius = 3;    // radius can be set to something sensible like 3*Sigma
+
     //float maxDistance = sqrt(2*pow(radius, 2));
 //
     for (int j=-radius; j<=radius; j++) {
@@ -69,7 +71,7 @@ __kernel void calculateRadiality(
             vx = (int) xc  + i + 0.5;
             vy = (int) yc  + j + 0.5;
 
-            float distance = sqrt(pow(vx - xc, 2)+pow(vy - yc, 2));
+            float distance = sqrt(pow(vx - xc, 2)+pow(vy - yc, 2));    // Distance D
             //float distance = fmax(sqrt(pow(vx - xc, 2)+pow(vy - yc, 2)),1.0);
 
             if (distance != 0) {
@@ -79,15 +81,18 @@ __kernel void calculateRadiality(
                 float GMag = sqrt(Gx * Gx + Gy * Gy);
 
                 //float distanceWeight = 1/distance;
-                float distanceWeight = (distance/(sigma*sigma*sigma))*exp(-(distance*distance)/(2*sigma*sigma));
+                float distanceWeight = (distance/(sigma*sigma*sigma))*exp(-(distance*distance)/(2*sigma*sigma));  // can use Taylor expansion there
                 distanceWeight = distanceWeight * distanceWeight;
 
                 // Calculate perpendicular distance from (xc,yc) to gradient line through (vx,vy)
-                float Dk = fabs(Gy * (xc - vx) - Gx * (yc - vy)) / GMag;
-                if (isnan(Dk)) Dk = distance;
+                float Dk = fabs(Gy * (xc - vx) - Gx * (yc - vy)) / GMag;    // Dk = D*sin(theta)
+                if (isnan(Dk)) Dk = distance; // this makes Dk = 0 in the next line
 
-                Dk = 1 - Dk / distance; // Dk is now between 0 to 1, 1 if vector points precisely to (xc, yx)
+                Dk = 1 - Dk / distance; // Dk is now between 0 to 1, 1 if vector points precisely to (xc, yx), Dk = 1-sin(theta)
                 Dk = fmax(Dk - 0.5f, 0)*2;
+                //Dk = Dk*Dk*Dk*Dk;   // i think it's better to apply non-linear functions at the CGH level
+//                if (Dk >= 0.75) Dk = 1;
+//                else Dk = 0;
                 Dk *= distanceWeight;
                 distanceWeightSum += distanceWeight;
 
@@ -102,7 +107,7 @@ __kernel void calculateRadiality(
 //    if (CGLH >= 0) CGLH = pow(CGLH, radialitySensitivity);
 //    else CGLH = 0;
 
-//    interpolatedIntensity[offset] = getInterpolatedValue(pixels, width, height, ((float) xM)/magnification + shiftX, ((float) yM)/magnification + shiftY);
+    //interpolatedIntensity[offset] = getInterpolatedValue(pixels, width, height, ((float) xM)/magnification + shiftX, ((float) yM)/magnification + shiftY);
     radiality[offset] = CGLH;
 }
 
