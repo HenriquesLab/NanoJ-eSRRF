@@ -65,7 +65,7 @@ public class RadialityCL {
         } catch (IOException e) {
             e.printStackTrace();
         }
-        kernelCalculateRadiality = program.createCLKernel("calculateRadiality");
+        kernelCalculateRadiality = program.createCLKernel("calculateRGC");
 
         clBufferXRingCoordinates = context.createFloatBuffer(nVectors, READ_ONLY);
         clBufferYRingCoordinates = context.createFloatBuffer(nVectors, READ_ONLY);
@@ -124,7 +124,7 @@ public class RadialityCL {
         fillBuffer(clBufferGx, fpGx);
         fillBuffer(clBufferGy, fpGy);
 
-        // make kernelCalculateRadiality assignment
+        // make kernelCalculateRGC assignment
         int n = 0;
         kernelCalculateRadiality.setArg( n++, clBufferXRingCoordinates ); // make sure type is the same !!
         kernelCalculateRadiality.setArg( n++, clBufferYRingCoordinates ); // make sure type is the same !!
