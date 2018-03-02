@@ -141,36 +141,8 @@ public class LiveSRRF_ implements PlugIn {
 
             if (s == 1 || counter == 1) {
                 pixelsSRRF_max = pixelsRGC.clone();
-                pixelsSRRF_avg = pixelsRGC.clone();;
-                pixelsSRRF_std = new float[pixelsRGC.length];
-                counter++;
-            }
-            else if (counter == nFrames || s == nSlices) {
-                for (int p=0; p<nPixelsM; p++) pixelsSRRF_std[p] = (float) sqrt(pixelsSRRF_std[p]); // convert from variance to stddev
-                imsSRRF_std.addSlice(new FloatProcessor(wM, hM, pixelsSRRF_std));
-                imsSRRF_avg.addSlice(new FloatProcessor(wM, hM, pixelsSRRF_avg));
-                imsSRRF_max.addSlice(new FloatProcessor(wM, hM, pixelsSRRF_max));
-                pixelsSRRF_max = pixelsRGC.clone();
                 pixelsSRRF_avg = pixelsRGC.clone();
                 pixelsSRRF_std = new float[pixelsRGC.length];
-                counter = 1;
-
-                // render the image
-                if (showAVG) {
-                    impSRRF_avg.setStack(imsSRRF_avg);
-                    impSRRF_avg.show();
-                    impSRRF_avg.setSlice(imsSRRF_avg.getSize());
-                }
-                if (showSTD) {
-                    impSRRF_std.setStack(imsSRRF_std);
-                    impSRRF_std.show();
-                    impSRRF_std.setSlice(imsSRRF_std.getSize());
-                }
-                if (showMAX) {
-                    impSRRF_max.setStack(imsSRRF_max);
-                    impSRRF_max.show();
-                    impSRRF_max.setSlice(imsSRRF_max.getSize());
-                }
             }
             else {
                 for (int p=0; p<nPixelsM; p++) {
@@ -178,8 +150,37 @@ public class LiveSRRF_ implements PlugIn {
                     pixelsSRRF_avg[p] += (pixelsRGC[p] - pixelsSRRF_avg[p]) / counter;
                     pixelsSRRF_std[p] += pow(pixelsRGC[p] - pixelsSRRF_avg[p], 2) / (counter-1);
                 }
-                counter++;
             }
+
+            // reset counter and append frames
+            if (counter == nFrames || s == nSlices) {
+                for (int p=0; p<nPixelsM; p++) pixelsSRRF_std[p] = (float) sqrt(pixelsSRRF_std[p]); // convert from variance to stddev
+                imsSRRF_std.addSlice(new FloatProcessor(wM, hM, pixelsSRRF_std));
+                imsSRRF_avg.addSlice(new FloatProcessor(wM, hM, pixelsSRRF_avg));
+                imsSRRF_max.addSlice(new FloatProcessor(wM, hM, pixelsSRRF_max));
+                counter = 1;
+
+                // render the image
+                if (showAVG) {
+                    impSRRF_avg.setStack(imsSRRF_avg);
+                    impSRRF_avg.show();
+                    impSRRF_avg.setSlice(imsSRRF_avg.getSize());
+                    impSRRF_avg.setTitle(imp.getTitle()+" - SRRF AVG");
+                }
+                if (showSTD) {
+                    impSRRF_std.setStack(imsSRRF_std);
+                    impSRRF_std.show();
+                    impSRRF_std.setSlice(imsSRRF_std.getSize());
+                    impSRRF_std.setTitle(imp.getTitle()+" - SRRF STD");
+                }
+                if (showMAX) {
+                    impSRRF_max.setStack(imsSRRF_max);
+                    impSRRF_max.show();
+                    impSRRF_max.setSlice(imsSRRF_max.getSize());
+                    impSRRF_max.setTitle(imp.getTitle()+" - SRRF MAX");
+                }
+            }
+            else counter++;
         }
         rCL.release();
 

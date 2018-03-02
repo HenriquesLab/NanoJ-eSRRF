@@ -89,7 +89,6 @@ __kernel void calculateRadialGradientConvergence(
             vy = (int) yc  + j + 0.5;
 
             float distance = sqrt(pow(vx - xc, 2)+pow(vy - yc, 2));    // Distance D
-            //float distance = fmax(sqrt(pow(vx - xc, 2)+pow(vy - yc, 2)),1.0);
 
             if (distance != 0) {
                 Gx = getVBoundaryCheck(GxArray, w, h, vx, vy);
@@ -97,7 +96,6 @@ __kernel void calculateRadialGradientConvergence(
 
                 float GMag = sqrt(Gx * Gx + Gy * Gy);
 
-                //float distanceWeight = 1/distance;
                 float distanceWeight = (distance/(sigma*sigma*sigma))*exp(-(distance*distance)/(2*sigma*sigma));  // can use Taylor expansion there
                 distanceWeight = distanceWeight * distanceWeight;
 
@@ -124,7 +122,8 @@ __kernel void calculateRadialGradientConvergence(
 //    if (CGLH >= 0) CGLH = pow(CGLH, radialitySensitivity);
 //    else CGLH = 0;
 
-    RGCArray[offset] = CGLH;
+    float v = getInterpolatedValue(pixels, w, h, ((float) xM)/magnification + shiftX, ((float) yM)/magnification + shiftY);
+    RGCArray[offset] = v * CGLH;
 }
 
 
