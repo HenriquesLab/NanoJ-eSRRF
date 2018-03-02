@@ -10,6 +10,7 @@ import ij.plugin.PlugIn;
 import ij.process.FloatProcessor;
 import ij.process.ImageProcessor;
 import nanoj.core2.NanoJPrefs;
+import nanoj.core2.NanoJProfiler;
 import nanoj.liveSRRF.RadialGradientConvergenceCL;
 
 import static java.lang.Math.*;
@@ -18,6 +19,10 @@ import static nanoj.core2.NanoJCrossCorrelation.calculateCrossCorrelationMap;
 public class LiveSRRF_ implements PlugIn {
 
     private NanoJPrefs prefs = new NanoJPrefs(this.getClass().getName());
+    private NanoJProfiler prof = new NanoJProfiler();
+    private ImageStack imsSRRF_max, imsSRRF_avg, imsSRRF_std;
+    private ImagePlus impCCM = null;
+    private boolean showAVG, showMAX, showSTD;
 
     @Override
     public void run(String arg) {
@@ -46,9 +51,9 @@ public class LiveSRRF_ implements PlugIn {
         boolean correctVibration = gd.getNextBoolean();
         boolean correctSCMOS = gd.getNextBoolean();
 
-        boolean showAVG = gd.getNextBoolean();
-        boolean showSTD = gd.getNextBoolean();
-        boolean showMAX = gd.getNextBoolean();
+        showAVG = gd.getNextBoolean();
+        showSTD = gd.getNextBoolean();
+        showMAX = gd.getNextBoolean();
 
         prefs.set("magnification", (float) magnification);
         prefs.set("fwhm", fwhm);
@@ -71,24 +76,19 @@ public class LiveSRRF_ implements PlugIn {
         int hM = ims.getHeight() * magnification;
         int nPixelsM = wM * hM;
 
-        RadialGradientConvergenceCL rCL = new RadialGradientConvergenceCL(w, h, magnification, fwhm);
-
-        ImageStack imsSRRF_max = new ImageStack(w * magnification, h * magnification);
-        ImageStack imsSRRF_avg = new ImageStack(w * magnification, h * magnification);
-        ImageStack imsSRRF_std = new ImageStack(w * magnification, h * magnification);
-        ImageStack imsCCM     = new ImageStack(11, 11);
-        ImagePlus impSRRF_max = new ImagePlus(imp.getTitle()+" - SRRF AVG");
-        ImagePlus impSRRF_avg = new ImagePlus(imp.getTitle()+" - SRRF MAX");
-        ImagePlus impSRRF_std = new ImagePlus(imp.getTitle()+" - SRRF STD");
-        ImagePlus impCCM      = new ImagePlus(imp.getTitle()+" - CCM");
+        imsSRRF_max = new ImageStack(wM, hM);
+        imsSRRF_avg = new ImageStack(wM, hM);
+        imsSRRF_std = new ImageStack(wM, hM);
 
         ImageProcessor ipRef = null; // reference slide for Cross-Correlation and vibration correction
+        float[][] pixelsGRCBuffer = null; // buffer containing time-points for reconstructions
 
-        float[] pixelsSRRF_avg = null, pixelsSRRF_std = null, pixelsSRRF_max = null;
+        RadialGradientConvergenceCL rCL = new RadialGradientConvergenceCL(w, h, magnification, fwhm);
+        ThreadedCalculateReconstructions t = null; // calculates reconstructions in parallel
 
         float shiftX = 0;
         float shiftY = 0;
-        int counter = 1;
+        int counter = 0;
 
         for (int s=1; s<=nSlices; s++) {
             // Check if user is cancelling calculation
@@ -100,95 +100,157 @@ public class LiveSRRF_ implements PlugIn {
             }
 
             // Grab the new frame from the list
-            ImageProcessor ip = ims.getProcessor(s);
+            imp.setSlice(s);
+            ImageProcessor ip = imp.getProcessor();
 
             // Estimate vibrations
             if (correctVibration) {
-                if (counter == 1) ipRef = ip;
-
-                FloatProcessor fpCCM = (FloatProcessor) calculateCrossCorrelationMap(ipRef, ip, false);
-                // lets assume no more than 5 pixels shift
-                int xStart = fpCCM.getWidth() / 2 - 5;
-                int yStart = fpCCM.getHeight() / 2 - 5;
-                fpCCM.setRoi(xStart, yStart, 11, 11);
-                fpCCM = (FloatProcessor) fpCCM.crop();
-                double vMax = -Double.MAX_VALUE;
-                double vMin = Double.MAX_VALUE;
-                for (double y = 1; y<10; y+=0.1){
-                    for (double x = 1; x<10; x+=0.1) {
-                        double v = fpCCM.getBicubicInterpolatedPixel(x, y, fpCCM);
-                        if (v > vMax) {
-                            vMax = v;
-                            shiftX = (float) x - 5;
-                            shiftY = (float) y - 5;
-                        }
-                        vMin = min(v, vMin);
-                    }
+                System.out.println("New reference..."+counter);
+                int id = prof.startTimer();
+                if (counter == 0) {
+                    ipRef = ip.duplicate();
+                    shiftX = 0;
+                    shiftY = 0;
+                }
+                else {
+                    float[] shift = calculateShift(ipRef, ip, 5);
+                    shiftX = shift[0];
+                    shiftY = shift[1];
                 }
                 System.out.println("Frame="+s+" shiftX="+shiftX+" shiftY="+shiftY);
-                PointRoi r = new PointRoi(shiftX+5.5, shiftX+5.5);
-                imsCCM.addSlice(fpCCM);
-                impCCM.setStack(imsCCM);
-                impCCM.show();
-                impCCM.setSlice(imsCCM.getSize());
-                impCCM.setRoi(r);
-                impCCM.setDisplayRange(vMin, vMax);
+                prof.recordTime("Drift Estimation", prof.endTimer(id));
             }
 
             // Calculate actual Radial-Gradient-Convergence
             FloatProcessor fpRGC = rCL.calculateRGC(ip, shiftX, shiftY);
             float[] pixelsRGC = (float[]) fpRGC.getPixels();
 
-            if (s == 1 || counter == 1) {
-                pixelsSRRF_max = pixelsRGC.clone();
-                pixelsSRRF_avg = pixelsRGC.clone();
-                pixelsSRRF_std = new float[pixelsRGC.length];
-            }
-            else {
-                for (int p=0; p<nPixelsM; p++) {
-                    pixelsSRRF_max[p] = max(pixelsRGC[p], pixelsSRRF_max[p]);
-                    pixelsSRRF_avg[p] += (pixelsRGC[p] - pixelsSRRF_avg[p]) / counter;
-                    pixelsSRRF_std[p] += pow(pixelsRGC[p] - pixelsSRRF_avg[p], 2) / (counter-1);
-                }
-            }
+            // Update buffer
+            if (s == 1 || counter == 0) pixelsGRCBuffer = new float[min(nFrames, nSlices-s+1)][];
+            pixelsGRCBuffer[counter] = pixelsRGC;
 
-            // reset counter and append frames
-            if (counter == nFrames || s == nSlices) {
-                for (int p=0; p<nPixelsM; p++) pixelsSRRF_std[p] = (float) sqrt(pixelsSRRF_std[p]); // convert from variance to stddev
-                imsSRRF_std.addSlice(new FloatProcessor(wM, hM, pixelsSRRF_std));
-                imsSRRF_avg.addSlice(new FloatProcessor(wM, hM, pixelsSRRF_avg));
-                imsSRRF_max.addSlice(new FloatProcessor(wM, hM, pixelsSRRF_max));
-                counter = 1;
-
-                // render the image
-                if (showAVG) {
-                    impSRRF_avg.setStack(imsSRRF_avg);
-                    impSRRF_avg.show();
-                    impSRRF_avg.setSlice(imsSRRF_avg.getSize());
-                    impSRRF_avg.setTitle(imp.getTitle()+" - SRRF AVG");
-                }
-                if (showSTD) {
-                    impSRRF_std.setStack(imsSRRF_std);
-                    impSRRF_std.show();
-                    impSRRF_std.setSlice(imsSRRF_std.getSize());
-                    impSRRF_std.setTitle(imp.getTitle()+" - SRRF STD");
-                }
-                if (showMAX) {
-                    impSRRF_max.setStack(imsSRRF_max);
-                    impSRRF_max.show();
-                    impSRRF_max.setSlice(imsSRRF_max.getSize());
-                    impSRRF_max.setTitle(imp.getTitle()+" - SRRF MAX");
-                }
+            if (counter == nFrames-1 || s == nSlices) {
+                // process buffer
+                if (t != null) t.finalise();
+                t = new ThreadedCalculateReconstructions(pixelsGRCBuffer);
+                t.start();
+                counter = 0;
             }
             else counter++;
         }
-        rCL.release();
 
-//        IJ.run(impSRRF, "Stack to Hyperstack...", "order=xyczt(default) channels=3 slices=1 frames="+(imsSRRF.getSize()/3)+" display=Composite");
-//        for (int s=1; s<=3; s++) {
-//            impSRRF.setSlice(s);
-//            IJ.run(impSRRF, "Enhance Contrast", "saturated=0.35"); // this does not appear to work
-//        }
-//        impSRRF.setSlice(1);
+        t.finalise();
+        if (showMAX) new ImagePlus(imp.getTitle()+" - SRRF AVG", imsSRRF_max).show();
+        if (showAVG) new ImagePlus(imp.getTitle()+" - SRRF MAX", imsSRRF_avg).show();
+        if (showSTD) new ImagePlus(imp.getTitle()+" - SRRF STD", imsSRRF_std).show();
+
+        rCL.release();
+        IJ.log(prof.report());
+    }
+
+    private float[] calculateShift(ImageProcessor ipRef, ImageProcessor ip, int radius) {
+
+        FloatProcessor fpCCM = (FloatProcessor) calculateCrossCorrelationMap(ipRef, ip, false);
+
+        int windowSize = radius * 2 + 1;
+        int xStart = fpCCM.getWidth() / 2 - radius;
+        int yStart = fpCCM.getHeight() / 2 - radius;
+        fpCCM.setRoi(xStart, yStart, windowSize, windowSize);
+        fpCCM = (FloatProcessor) fpCCM.crop();
+
+        double vMax = -Double.MAX_VALUE;
+        double vMin = Double.MAX_VALUE;
+        double xMax = 0;
+        double yMax = 0;
+
+        // first do coarse search for max
+        for (int y = 1; y<windowSize-1; y++){
+            for (int x = 1; x<windowSize-1; x++) {
+                double v = fpCCM.getf(x,y);
+                if (v > vMax) {
+                    vMax = v;
+                    xMax = x;
+                    yMax = y;
+                }
+                vMin = min(v, vMin);
+            }
+        }
+        //System.out.println("xMax="+xMax+" yMax="+yMax);
+
+        //vMax = -Double.MAX_VALUE;
+        // do fine search for max
+        for (double y = yMax; y<yMax+1; y+=0.01){
+            for (double x = xMax; x<xMax+1; x+=0.01) {
+                double v = fpCCM.getBicubicInterpolatedPixel(x, y, fpCCM);
+                if (v > vMax) {
+                    vMax = v;
+                    xMax = x;
+                    yMax = y;
+                }
+            }
+        }
+
+        // recenter pixels
+        float shiftX = (float) xMax - radius;
+        float shiftY = (float) yMax - radius;
+
+        if (impCCM == null) {
+            impCCM = new ImagePlus("CCM Vibration Stabilisation", fpCCM);
+            impCCM.show();
+        }
+        impCCM.setProcessor(fpCCM);
+        impCCM.setRoi(new PointRoi(xMax+.5, yMax+.5));
+        impCCM.setDisplayRange(vMin, vMax);
+
+        return new float[] {shiftX, shiftY};
+    }
+
+    class ThreadedCalculateReconstructions extends Thread {
+
+        private float[][] pixelsRGCBuffer;
+
+        public ThreadedCalculateReconstructions(float[][] pixelsRGCBuffer) {
+            this.pixelsRGCBuffer = pixelsRGCBuffer;
+        }
+
+        public void run() {
+            int nSlices = pixelsRGCBuffer.length;
+            int nPixels = pixelsRGCBuffer[0].length;
+            float[] pixelsMax = new float[nPixels];
+            float[] pixelsAvg = new float[nPixels];
+            float[] pixelsStd = new float[nPixels];
+
+            for (int s=0; s<nSlices; s++) {
+                for (int p=0; p<nPixels; p++) {
+                    pixelsMax[p] = max(pixelsRGCBuffer[s][p], pixelsMax[p]);
+                    pixelsAvg[p] += pixelsRGCBuffer[s][p] / nPixels;
+                }
+            }
+
+            if (showSTD) {
+                for (int s = 1; s < nSlices; s++) {
+                    for (int p = 0; p < nPixels; p++) {
+                        pixelsStd[p] += pow(pixelsRGCBuffer[s][p] - pixelsAvg[p], 2) / nPixels;
+                    }
+                }
+                for (int p = 0; p < nPixels; p++) pixelsStd[p] = (float) sqrt(pixelsStd[p]);
+            }
+
+            int w = imsSRRF_max.getWidth();
+            int h = imsSRRF_max.getHeight();
+            if (showMAX) imsSRRF_max.addSlice(new FloatProcessor(w, h, pixelsMax));
+            if (showAVG) imsSRRF_avg.addSlice(new FloatProcessor(w, h, pixelsAvg));
+            if (showSTD) imsSRRF_std.addSlice(new FloatProcessor(w, h, pixelsStd));
+        }
+
+        public void finalise() {
+            try {
+                this.join();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
     }
 }
+
+

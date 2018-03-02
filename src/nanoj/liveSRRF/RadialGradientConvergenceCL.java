@@ -3,6 +3,7 @@ package nanoj.liveSRRF;
 import com.jogamp.opencl.*;
 import ij.process.FloatProcessor;
 import ij.process.ImageProcessor;
+import nanoj.core2.NanoJProfiler;
 
 import java.io.IOException;
 import java.nio.FloatBuffer;
@@ -17,6 +18,7 @@ import static nanoj.core2.NanoJCL.grabBuffer;
 public class RadialGradientConvergenceCL {
 
     public boolean DEBUG = false;
+    public NanoJProfiler prof = new NanoJProfiler();
 
     static CLContext context;
     static CLProgram program;
@@ -108,13 +110,13 @@ public class RadialGradientConvergenceCL {
 
         // asynchronous write of data to GPU device,
         // followed by blocking read to get the computed results back.
-        long time = nanoTime();
+        int id = prof.startTimer();
         queue.putWriteBuffer( clBufferPx, false );
         queue.put2DRangeKernel(kernelCalculateGradient, 0, 0, width, height, 0, 0);
         queue.put2DRangeKernel(kernelCalculateRGC, 0, 0, widthM, heightM, 0, 0);
         queue.finish();
         queue.putReadBuffer(clBufferRGC, true);
-        time = nanoTime() - time;
+        prof.recordTime("RadialGradientConvergence.cl", prof.endTimer(id));
 
         //clBufferRGC.getBuffer().get((float[]) fpRadiality.getPixels());
         grabBuffer(clBufferRGC, fpRGC);
