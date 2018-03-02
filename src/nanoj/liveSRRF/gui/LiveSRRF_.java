@@ -69,6 +69,7 @@ public class LiveSRRF_ implements PlugIn {
         int counter = 1;
 
         for (int s=1; s<=nSlices; s++) {
+            //IJ.log("S="+s+" - C="+counter);
             IJ.showProgress(s, nSlices);
             if (IJ.escapePressed()) {
                 IJ.resetEscape();
@@ -80,7 +81,7 @@ public class LiveSRRF_ implements PlugIn {
             FloatProcessor fpRGC = rCL.calculateRGC(ip, 0, 0);
             float[] pixelsRGC = (float[]) fpRGC.getPixels();
 
-            if (s == 1) {
+            if (s == 1 || counter == 1) {
                 pixelsSRRF_max = pixelsRGC.clone();
                 pixelsSRRF_avg = pixelsRGC.clone();;
                 pixelsSRRF_std = new float[pixelsRGC.length];
@@ -94,7 +95,8 @@ public class LiveSRRF_ implements PlugIn {
                 pixelsSRRF_max = pixelsRGC.clone();
                 pixelsSRRF_avg = pixelsRGC.clone();
                 pixelsSRRF_std = new float[pixelsRGC.length];
-                counter = 2;
+//                counter = 2;
+                counter = 1;
 
                 // render the image
                 impSRRF.setStack(imsSRRF);
