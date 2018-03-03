@@ -37,13 +37,20 @@ public class RadialGradientConvergence_ implements PlugIn {
         int w = ims.getWidth();
         int h = ims.getHeight();
 
+        FloatProcessor fpWeightMask = new FloatProcessor(w, h);
+        fpWeightMask.add(1);
+
+        ImageStack imsPxM = new ImageStack(w * magnification, h * magnification);
         ImageStack imsRGC = new ImageStack(w * magnification, h * magnification);
-        RadialGradientConvergenceCL rCL = new RadialGradientConvergenceCL(w, h, magnification, fwhm);
+        RadialGradientConvergenceCL rCL = new RadialGradientConvergenceCL(fpWeightMask, magnification, fwhm);
 
         for (int n=1; n<=nSlices; n++) {
             IJ.showProgress(n, nSlices);
-            FloatProcessor fpRGC = rCL.calculateRGC(ims.getProcessor(n), 0, 0);
+            FloatProcessor[] fpPxMAndRGC = rCL.calculateRGC(ims.getProcessor(n), 0, 0);
+            FloatProcessor fpPxM = fpPxMAndRGC[0];
+            FloatProcessor fpRGC = fpPxMAndRGC[1];
 
+            imsPxM.addSlice(fpPxM);
             imsRGC.addSlice(fpRGC);
 
             if (IJ.escapePressed()) {
@@ -52,6 +59,7 @@ public class RadialGradientConvergence_ implements PlugIn {
             }
         }
 
+        new ImagePlus(imp.getTitle()+" - Interpolated", imsPxM).show();
         new ImagePlus(imp.getTitle()+" - Radial-Gradient-Convergence", imsRGC).show();
 
         //rCL.showPlatforms();

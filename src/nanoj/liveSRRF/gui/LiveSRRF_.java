@@ -20,9 +20,14 @@ public class LiveSRRF_ implements PlugIn {
 
     private NanoJPrefs prefs = new NanoJPrefs(this.getClass().getName());
     private NanoJProfiler prof = new NanoJProfiler();
-    private ImageStack imsSRRF_max, imsSRRF_avg, imsSRRF_std;
+    private ImageStack imsPxMAvg, imsRGCMax, imsRGCAvg, imsRGCStd;
     private ImagePlus impCCM = null;
     private boolean showAVG, showMAX, showSTD;
+    private boolean correctVibration, correctSCMOS;
+
+    private int nSlices, nPixels, nFrames, nPixelsM, w, h, wM, hM;
+    private float[] pixelsPxMAvg, pixelsRGCAvg, pixelsRGCMax, pixelsRGCStd;
+    private float[][] pixelsRGCBuffer;
 
     @Override
     public void run(String arg) {
@@ -47,9 +52,9 @@ public class LiveSRRF_ implements PlugIn {
 
         int magnification = (int) gd.getNextNumber();
         float fwhm = (float) gd.getNextNumber();
-        int nFrames = (int) gd.getNextNumber();
-        boolean correctVibration = gd.getNextBoolean();
-        boolean correctSCMOS = gd.getNextBoolean();
+        nFrames = (int) gd.getNextNumber();
+        correctVibration = gd.getNextBoolean();
+        correctSCMOS = gd.getNextBoolean();
 
         showAVG = gd.getNextBoolean();
         showSTD = gd.getNextBoolean();
@@ -67,29 +72,50 @@ public class LiveSRRF_ implements PlugIn {
         prefs.save();
 
         if (nFrames == 0) nFrames = imp.getImageStack().getSize();
+        else nFrames = max(nFrames, imp.getImageStack().getSize());
 
         ImageStack ims = imp.getImageStack();
-        int nSlices = ims.getSize();
-        int w = ims.getWidth();
-        int h = ims.getHeight();
-        int wM = ims.getWidth() * magnification;
-        int hM = ims.getHeight() * magnification;
-        int nPixelsM = wM * hM;
+        nSlices = ims.getSize();
+        w = ims.getWidth();
+        h = ims.getHeight();
+        wM = ims.getWidth() * magnification;
+        hM = ims.getHeight() * magnification;
+        nPixels = w * h;
+        nPixelsM = wM * hM;
 
-        imsSRRF_max = new ImageStack(wM, hM);
-        imsSRRF_avg = new ImageStack(wM, hM);
-        imsSRRF_std = new ImageStack(wM, hM);
+        imsPxMAvg = new ImageStack(wM, hM);
+        imsRGCMax = new ImageStack(wM, hM);
+        imsRGCAvg = new ImageStack(wM, hM);
+        imsRGCStd = new ImageStack(wM, hM);
 
-        ImageProcessor ipRef = null; // reference slide for Cross-Correlation and vibration correction
-        float[][] pixelsGRCBuffer = null; // buffer containing time-points for reconstructions
+        resetArrayBuffer(); // initialised pixelsPxMAvg, pixelsRGCAvg, pixelsRGCMax, pixelsRGCStd
+        float[] pixelsDarkAverage = new float[nPixelsM];
+        float[] pixelsDarkStdDev  = new float[nPixelsM];
+        if (correctSCMOS) {
+            IJ.showStatus("Select Dark-Frames Average");
+            ImagePlus impDarkAverage = IJ.openImage();
+            if (impDarkAverage == null) return;
+            pixelsDarkAverage = (float[]) impDarkAverage.getProcessor().convertToFloatProcessor().getPixels();
+            assert (pixelsDarkAverage.length == nPixelsM);
 
-        RadialGradientConvergenceCL rCL = new RadialGradientConvergenceCL(w, h, magnification, fwhm);
-        ThreadedCalculateReconstructions t = null; // calculates reconstructions in parallel
+            IJ.showStatus("Select Dark-Frames StdDev");
+            ImagePlus impDarkStdDev = IJ.openImage();
+            if (impDarkStdDev == null) return;
+            pixelsDarkStdDev = (float[]) impDarkStdDev.getProcessor().convertToFloatProcessor().getPixels();
+            assert (pixelsDarkStdDev.length == nPixelsM);
+        }
+        else { // if we don't have a Dark StdDev, just fill the array with 1
+            for (int n=0; n<nPixels; n++) pixelsDarkStdDev[n] = 1;
+        }
 
+        FloatProcessor fpWeightMask = new FloatProcessor(w, h, pixelsDarkStdDev);
+        RadialGradientConvergenceCL rCL = new RadialGradientConvergenceCL(fpWeightMask, magnification, fwhm);
+
+        ImageProcessor fpRef = null; // reference slide for Cross-Correlation and vibration correction
         float shiftX = 0;
         float shiftY = 0;
-        int counter = 0;
 
+        int counter = 1;
         for (int s=1; s<=nSlices; s++) {
             // Check if user is cancelling calculation
             IJ.showProgress(s, nSlices);
@@ -101,51 +127,94 @@ public class LiveSRRF_ implements PlugIn {
 
             // Grab the new frame from the list
             imp.setSlice(s);
-            ImageProcessor ip = imp.getProcessor();
+            FloatProcessor fpFrame = imp.getProcessor().convertToFloatProcessor();
+            if (correctSCMOS) {
+                float[] pixels = (float[]) fpFrame.getPixels();
+                for (int n=0; n<nPixels; n++) pixels[n] -= pixelsDarkAverage[n];
+                fpFrame.blurGaussian(0.5);
+            }
 
             // Estimate vibrations
             if (correctVibration) {
-                System.out.println("New reference..."+counter);
                 int id = prof.startTimer();
                 if (counter == 0) {
-                    ipRef = ip.duplicate();
+                    fpRef = fpFrame.duplicate();
                     shiftX = 0;
                     shiftY = 0;
                 }
                 else {
-                    float[] shift = calculateShift(ipRef, ip, 5);
+                    float[] shift = calculateShift(fpRef, fpFrame, 5);
                     shiftX = shift[0];
                     shiftY = shift[1];
                 }
-                System.out.println("Frame="+s+" shiftX="+shiftX+" shiftY="+shiftY);
+                //System.out.println("Frame="+s+" shiftX="+shiftX+" shiftY="+shiftY);
                 prof.recordTime("Drift Estimation", prof.endTimer(id));
             }
 
             // Calculate actual Radial-Gradient-Convergence
-            FloatProcessor fpRGC = rCL.calculateRGC(ip, shiftX, shiftY);
-            float[] pixelsRGC = (float[]) fpRGC.getPixels();
+            FloatProcessor[] fpPxMAndRGC = rCL.calculateRGC(fpFrame, shiftX, shiftY);
+            float[] pixelsPxM = (float[]) fpPxMAndRGC[0].getPixels();
+            float[] pixelsRGC = (float[]) fpPxMAndRGC[1].getPixels();
 
-            // Update buffer
-            if (s == 1 || counter == 0) pixelsGRCBuffer = new float[min(nFrames, nSlices-s+1)][];
-            pixelsGRCBuffer[counter] = pixelsRGC;
+            // TODO: subtract offset at this point !!!
 
-            if (counter == nFrames-1 || s == nSlices) {
-                // process buffer
-                if (t != null) t.finalise();
-                t = new ThreadedCalculateReconstructions(pixelsGRCBuffer);
-                t.start();
-                counter = 0;
+            for (int p=0; p<nPixelsM; p++) {
+                //pixelsRGC[p] = (pixelsRGC[p] - pixelsDarkStdDev[p]) * pixelsPxM[p]; // remove offset (calculated from dark frames) from RGC
+                pixelsRGC[p] = pixelsRGC[p];// * pixelsPxM[p]; // remove offset (calculated from dark frames) from RGC
+                pixelsPxMAvg[p] += (pixelsPxM[p] - pixelsPxMAvg[p]) / counter;
+                pixelsRGCAvg[p] += (pixelsRGC[p] - pixelsRGCAvg[p]) / counter;
+                pixelsRGCMax[p] = max(pixelsRGC[p], pixelsRGCMax[p]);
+            }
+
+            if (counter == nFrames || s == nSlices) {
+                // Re-Normalise Intensity
+                float maxPxMAvg = - Float.MAX_VALUE;
+                float minPxMAvg =   Float.MAX_VALUE;
+                float maxRGCAvg = - Float.MAX_VALUE;
+                float minRGCAvg =   Float.MAX_VALUE;
+                float maxRGCMax = - Float.MAX_VALUE;
+                float minRGCMax =   Float.MAX_VALUE;
+
+                for (int p=0; p<nPixelsM; p++) {
+                    maxPxMAvg = max(pixelsPxMAvg[p], maxPxMAvg);
+                    minPxMAvg = min(pixelsPxMAvg[p], minPxMAvg);
+                    maxRGCAvg = max(pixelsRGCAvg[p], maxRGCAvg);
+                    minRGCAvg = min(pixelsRGCAvg[p], minRGCAvg);
+                    maxRGCMax = max(pixelsRGCMax[p], maxRGCMax);
+                    minRGCMax = min(pixelsRGCMax[p], minRGCMax);
+                }
+
+                for (int p=0; p<nPixelsM; p++) {
+                    pixelsRGCAvg[p] = (pixelsRGCAvg[p] - minRGCAvg) * (maxPxMAvg - minPxMAvg) / (maxRGCAvg - minRGCAvg);
+                    pixelsRGCMax[p] = (pixelsRGCMax[p] - minRGCMax) * (maxPxMAvg - minPxMAvg) / (maxRGCMax - minRGCMax);
+                }
+
+                imsPxMAvg.addSlice(new FloatProcessor(wM, hM, pixelsPxMAvg));
+                imsRGCAvg.addSlice(new FloatProcessor(wM, hM, pixelsRGCAvg));
+                imsRGCMax.addSlice(new FloatProcessor(wM, hM, pixelsRGCMax));
+
+                resetArrayBuffer();
             }
             else counter++;
         }
 
-        t.finalise();
-        if (showMAX) new ImagePlus(imp.getTitle()+" - SRRF AVG", imsSRRF_max).show();
-        if (showAVG) new ImagePlus(imp.getTitle()+" - SRRF MAX", imsSRRF_avg).show();
-        if (showSTD) new ImagePlus(imp.getTitle()+" - SRRF STD", imsSRRF_std).show();
+        new ImagePlus(imp.getTitle()+" - Interpolated AVG", imsPxMAvg).show();
+        if (showMAX) new ImagePlus(imp.getTitle()+" - SRRF MAX", imsRGCMax).show();
+        if (showAVG) new ImagePlus(imp.getTitle()+" - SRRF AVG", imsRGCAvg).show();
+        if (showSTD) new ImagePlus(imp.getTitle()+" - SRRF STD", imsRGCStd).show();
 
         rCL.release();
         IJ.log(prof.report());
+    }
+
+    private void resetArrayBuffer() {
+        pixelsPxMAvg    = new float[nPixelsM];
+        pixelsRGCMax    = new float[nPixelsM];
+        pixelsRGCAvg    = new float[nPixelsM];
+        if (showSTD) {
+            pixelsRGCStd = new float[nPixelsM];
+            pixelsRGCBuffer = new float[nFrames][nPixels];
+        }
     }
 
     private float[] calculateShift(ImageProcessor ipRef, ImageProcessor ip, int radius) {
@@ -177,7 +246,6 @@ public class LiveSRRF_ implements PlugIn {
         }
         //System.out.println("xMax="+xMax+" yMax="+yMax);
 
-        //vMax = -Double.MAX_VALUE;
         // do fine search for max
         for (double y = yMax; y<yMax+1; y+=0.01){
             for (double x = xMax; x<xMax+1; x+=0.01) {
@@ -226,7 +294,6 @@ public class LiveSRRF_ implements PlugIn {
                     pixelsAvg[p] += pixelsRGCBuffer[s][p] / nPixels;
                 }
             }
-
             if (showSTD) {
                 for (int s = 1; s < nSlices; s++) {
                     for (int p = 0; p < nPixels; p++) {
@@ -236,11 +303,11 @@ public class LiveSRRF_ implements PlugIn {
                 for (int p = 0; p < nPixels; p++) pixelsStd[p] = (float) sqrt(pixelsStd[p]);
             }
 
-            int w = imsSRRF_max.getWidth();
-            int h = imsSRRF_max.getHeight();
-            if (showMAX) imsSRRF_max.addSlice(new FloatProcessor(w, h, pixelsMax));
-            if (showAVG) imsSRRF_avg.addSlice(new FloatProcessor(w, h, pixelsAvg));
-            if (showSTD) imsSRRF_std.addSlice(new FloatProcessor(w, h, pixelsStd));
+            int w = imsRGCMax.getWidth();
+            int h = imsRGCMax.getHeight();
+            if (showMAX) imsRGCMax.addSlice(new FloatProcessor(w, h, pixelsMax));
+            if (showAVG) imsRGCAvg.addSlice(new FloatProcessor(w, h, pixelsAvg));
+            if (showSTD) imsRGCStd.addSlice(new FloatProcessor(w, h, pixelsStd));
         }
 
         public void finalise() {

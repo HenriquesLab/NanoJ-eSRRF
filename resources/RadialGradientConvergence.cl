@@ -36,7 +36,9 @@ static float getVBoundaryCheck(__global float* array, int const width, int const
 __kernel void calculateGradient(
     __global float* pixels,
     __global float* GxArray,
-    __global float* GyArray
+    __global float* GyArray,
+    __global float* WM0Array,
+    __global float* WM1Array
     ) {
     int x = get_global_id(0);
     int y = get_global_id(1);
@@ -48,16 +50,23 @@ __kernel void calculateGradient(
     int x1 = min(x+1, w-1);
     int y0 = max(y-1, 0);
     int y1 = min(y+1, h-1);
+    int x0y = y * w + x0;
+    int x1y = y * w + x1;
+    int y0x = y0 * w + x;
+    int y1x = y1 * w + x;
 
-    GxArray[offset] = - pixels[y * w + x0] + pixels[y * w + x1];
-    GyArray[offset] = - pixels[y0 * w + x] + pixels[y1 * w + x];
+    GxArray[offset] = - pixels[x0y] + pixels[x1y];
+    GyArray[offset] = - pixels[y0x] + pixels[y1x];
+    WM1Array[offset] = WM0Array[x0y] * WM0Array[x1y] * WM0Array[y0x] * WM0Array[y1x];
 }
 
 __kernel void calculateRadialGradientConvergence(
     __global float* pixels,
     __global float* GxArray,
     __global float* GyArray,
+    __global float* WM1Array,
     __global float* RGCArray,
+    __global float* PxMArray,
     int const magnification,
     float const fwhm,
     float const shiftX,
@@ -76,9 +85,10 @@ __kernel void calculateRadialGradientConvergence(
     float yc = (yM + 0.5) / magnification + shiftY;
 
     float CGLH = 0; // CGLH stands for Radiality original name - Culley-Gustafsson-Laine-Henriques transform
-    float distanceWeightSum = 0;
+    float weight = 0;
+    float weightSum = 0;
 
-    float vx, vy, Gx, Gy;
+    float vx, vy, Gx, Gy, maskWeight;
     float sigma = fwhm / 2.354f; // need to ask user Sigma = 0.21 * lambda/NA in theory
     float fradius = sigma * 2;
     int radius = (int) fradius + 1;    // radius can be set to something sensible like 3*Sigma
@@ -93,11 +103,14 @@ __kernel void calculateRadialGradientConvergence(
             if (distance != 0) {
                 Gx = getVBoundaryCheck(GxArray, w, h, vx, vy);
                 Gy = getVBoundaryCheck(GyArray, w, h, vx, vy);
+                maskWeight = getVBoundaryCheck(WM1Array, w, h, vx, vy);
 
                 float GMag = sqrt(Gx * Gx + Gy * Gy);
 
                 float distanceWeight = (distance/(sigma*sigma*sigma))*exp(-(distance*distance)/(2*sigma*sigma));  // can use Taylor expansion there
                 distanceWeight = distanceWeight * distanceWeight;
+
+                weight = distanceWeight * maskWeight;
 
                 // Calculate perpendicular distance from (xc,yc) to gradient line through (vx,vy)
                 float Dk = fabs(Gy * (xc - vx) - Gx * (yc - vy)) / GMag;    // Dk = D*sin(theta)
@@ -108,8 +121,8 @@ __kernel void calculateRadialGradientConvergence(
                 //Dk = Dk*Dk*Dk*Dk;   // i think it's better to apply non-linear functions at the CGH level
 //                if (Dk >= 0.75) Dk = 1;
 //                else Dk = 0;
-                Dk *= distanceWeight;
-                distanceWeightSum += distanceWeight;
+                Dk *= weight;
+                weightSum += weight;
 
                 // Accumulate Variables
                 float GdotR = (Gx * i * magnification + Gy * j * magnification); // tells you if vector was pointing inward or outward
@@ -118,12 +131,12 @@ __kernel void calculateRadialGradientConvergence(
             }
         }
     }
-    CGLH /= distanceWeightSum;
+    CGLH /= weightSum;
 //    if (CGLH >= 0) CGLH = pow(CGLH, radialitySensitivity);
 //    else CGLH = 0;
 
-    float v = getInterpolatedValue(pixels, w, h, ((float) xM)/magnification + shiftX, ((float) yM)/magnification + shiftY);
-    RGCArray[offset] = v * CGLH;
+    PxMArray[offset] = getInterpolatedValue(pixels, w, h, ((float) xM)/magnification + shiftX, ((float) yM)/magnification + shiftY);
+    RGCArray[offset] = CGLH;
 }
 
 
