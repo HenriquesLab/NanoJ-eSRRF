@@ -18,15 +18,27 @@ public class RadialGradientConvergence_ implements PlugIn {
         if (imp == null) imp = IJ.openImage();
         imp.show();
 
+        // initilizaing string for gradient estimation choice
+        String[] GradMethods = new String[3];
+        GradMethods[0] = "3-point gradient (classic)";
+        GradMethods[1] = "Robert's cross local gradient";
+        GradMethods[2] = "2-point local + interpolation";
+
+
         NonBlockingGenericDialog gd = new NonBlockingGenericDialog("Radial Gradient Convergence");
         gd.addNumericField("Magnification", prefs.get("magnification", 4), 0);
         gd.addNumericField("FWHM (pixels)", prefs.get("fwhm", 3), 2);
+        gd.addChoice("Gradient estimation method", GradMethods, GradMethods[0]);
+
 
         gd.showDialog();
         if (gd.wasCanceled()) return;
 
         int magnification = (int) gd.getNextNumber();
         float fwhm = (float) gd.getNextNumber();
+        String GradChosenMethod = gd.getNextChoice();
+
+        IJ.log("Gradient method chosen: "+GradChosenMethod);
 
         prefs.set("magnification", (float) magnification);
         prefs.set("fwhm", (float) fwhm);
@@ -37,8 +49,9 @@ public class RadialGradientConvergence_ implements PlugIn {
         int w = ims.getWidth();
         int h = ims.getHeight();
 
+
         ImageStack imsRGC = new ImageStack(w * magnification, h * magnification);
-        RadialGradientConvergenceCL rCL = new RadialGradientConvergenceCL(w, h, magnification, fwhm);
+        RadialGradientConvergenceCL rCL = new RadialGradientConvergenceCL(w, h, magnification, fwhm, GradChosenMethod);
 
         for (int n=1; n<=nSlices; n++) {
             IJ.showProgress(n, nSlices);

@@ -83,7 +83,10 @@ public class LiveSRRF_ implements PlugIn {
         ImageProcessor ipRef = null; // reference slide for Cross-Correlation and vibration correction
         float[][] pixelsGRCBuffer = null; // buffer containing time-points for reconstructions
 
-        RadialGradientConvergenceCL rCL = new RadialGradientConvergenceCL(w, h, magnification, fwhm);
+        // For now LiveSRRF uses only the standard Gradient estimation
+        String GradMethod = "3-point gradient (classic)";
+
+        RadialGradientConvergenceCL rCL = new RadialGradientConvergenceCL(w, h, magnification, fwhm, GradMethod);
         ThreadedCalculateReconstructions t = null; // calculates reconstructions in parallel
 
         float shiftX = 0;

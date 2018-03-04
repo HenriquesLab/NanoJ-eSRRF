@@ -27,6 +27,8 @@ public class RadialGradientConvergenceCL {
 
     private final int width, height, widthM, heightM, magnification;
     private final float fwhm;
+    private float vxy_offset;
+//    private String GradMethod;
 
     public int nVectors = 12;
 
@@ -35,13 +37,14 @@ public class RadialGradientConvergenceCL {
             clBufferGx, clBufferGy,
             clBufferRGC;
 
-    public RadialGradientConvergenceCL(int width, int height, int magnification, float fwhm) {
+    public RadialGradientConvergenceCL(int width, int height, int magnification, float fwhm, String GradMethod) {
         this.width = width;
         this.height = height;
         this.widthM = width * magnification;
         this.heightM = height * magnification;
         this.magnification = magnification;
         this.fwhm = fwhm;
+//        this.GradMethod = GradMethod;
 
         //Create a context from GPU
         //context = CLContext.create( CLDevice.Type.GPU );
@@ -61,7 +64,22 @@ public class RadialGradientConvergenceCL {
         } catch (IOException e) {
             e.printStackTrace();
         }
-        kernelCalculateGradient = program.createCLKernel("calculateGradient");
+
+        // Choose gradient kernel
+        if      (GradMethod.equals("3-point gradient (classic)")){
+            kernelCalculateGradient = program.createCLKernel("calculateGradient");
+            // in this method the gradient is calculated in the centre of the designated pixel
+            this.vxy_offset = 0.0f;}
+        else if (GradMethod.equals("Robert's cross local gradient")){
+            kernelCalculateGradient = program.createCLKernel("calculateGradientRobX");
+            // in this method the gradient is estimated at the crossing of the pixels, therefore at an offset of 0.5 with respect to the pixel centre
+            this.vxy_offset = 0.5f;}
+
+// // Not implemeted yet
+//        elseif (GradMethod.equals("2-point local + interpolation")){
+//                kernelCalculateGradient = program.createCLKernel("calculateGradient"); }
+
+
         kernelCalculateRGC = program.createCLKernel("calculateRadialGradientConvergence");
 
 
@@ -107,6 +125,7 @@ public class RadialGradientConvergenceCL {
         kernelCalculateRGC.setArg( argn++, fwhm ); // make sure type is the same !!
         kernelCalculateRGC.setArg( argn++, shiftX ); // make sure type is the same !!
         kernelCalculateRGC.setArg( argn++, shiftY ); // make sure type is the same !!
+        kernelCalculateRGC.setArg( argn++, vxy_offset ); // make sure type is the same !!
 
         // asynchronous write of data to GPU device,
         // followed by blocking read to get the computed results back.

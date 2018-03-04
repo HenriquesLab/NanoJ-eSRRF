@@ -33,6 +33,8 @@ static float getVBoundaryCheck(__global float* array, int const width, int const
     return array[_y*width+_x];
 }
 
+
+// First kernel: evaluating gradient from image --------------------------------------------------------------
 __kernel void calculateGradient(
     __global float* pixels,
     __global float* GxArray,
@@ -53,6 +55,29 @@ __kernel void calculateGradient(
     GyArray[offset] = - pixels[y0 * w + x] + pixels[y1 * w + x];
 }
 
+
+// First kernel: evaluating gradient from image using Robert's cross ------------------------------------------
+__kernel void calculateGradientRobX(
+    __global float* pixels,
+    __global float* GxArray,
+    __global float* GyArray
+    ) {
+    int x0 = get_global_id(0);
+    int y0 = get_global_id(1);
+    int w = get_global_size(0);
+    int h = get_global_size(1);
+    int offset = y0 * w + x0;
+
+    int x1 = min(x0+1, w-1);
+    int y1 = min(y0+1, h-1);
+
+    // This calculates Robert's cross gradient and apply the rotation matrix 45 degrees to realign Gx and Gy to the image grid
+    GxArray[offset] = pixels[y0 * w + x1] - pixels[y1 * w + x0] - pixels[y1 * w + x1] + pixels[y0 * w + x0];
+    GyArray[offset] = pixels[y0 * w + x1] - pixels[y1 * w + x0] + pixels[y1 * w + x1] - pixels[y0 * w + x0];
+}
+
+
+// Second kernel: evaluating RGC from gradient -----------------------------------------------------------------
 __kernel void calculateRadialGradientConvergence(
     __global float* pixels,
     __global float* GxArray,
@@ -61,7 +86,8 @@ __kernel void calculateRadialGradientConvergence(
     int const magnification,
     float const fwhm,
     float const shiftX,
-    float const shiftY
+    float const shiftY,
+    float const vxy_offset
     ) {
 
     int xM = get_global_id(0);
@@ -79,20 +105,20 @@ __kernel void calculateRadialGradientConvergence(
     float distanceWeightSum = 0;
 
     float vx, vy, Gx, Gy;
-    float sigma = fwhm / 2.354f; // need to ask user Sigma = 0.21 * lambda/NA in theory
+    float sigma = fwhm / 2.354f; // Sigma = 0.21 * lambda/NA in theory
     float fradius = sigma * 2;
     int radius = (int) fradius + 1;    // radius can be set to something sensible like 3*Sigma
 
     for (int j=-radius; j<=radius; j++) {
         for (int i=-radius; i<=radius; i++) {
-            vx = (int) xc  + i + 0.5;
-            vy = (int) yc  + j + 0.5;
+            vx = (int) xc + i + 0.5 + vxy_offset;
+            vy = (int) yc + j + 0.5 + vxy_offset;
 
             float distance = sqrt(pow(vx - xc, 2)+pow(vy - yc, 2));    // Distance D
 
             if (distance != 0) {
-                Gx = getVBoundaryCheck(GxArray, w, h, vx, vy);
-                Gy = getVBoundaryCheck(GyArray, w, h, vx, vy);
+                Gx = getVBoundaryCheck(GxArray, w, h, vx-vxy_offset, vy-vxy_offset);
+                Gy = getVBoundaryCheck(GyArray, w, h, vx-vxy_offset, vy-vxy_offset);
 
                 float GMag = sqrt(Gx * Gx + Gy * Gy);
 
