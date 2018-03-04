@@ -72,8 +72,9 @@ __kernel void calculateGradientRobX(
     int y1 = min(y0+1, h-1);
 
     // This calculates Robert's cross gradient and apply the rotation matrix 45 degrees to realign Gx and Gy to the image grid
-    GxArray[offset] = pixels[y0 * w + x1] - pixels[y1 * w + x0] - pixels[y1 * w + x1] + pixels[y0 * w + x0];
-    GyArray[offset] = pixels[y0 * w + x1] - pixels[y1 * w + x0] + pixels[y1 * w + x1] - pixels[y0 * w + x0];
+    GxArray[offset] = pixels[y0 * w + x1] - pixels[y1 * w + x0] + pixels[y1 * w + x1] - pixels[y0 * w + x0];
+    GyArray[offset] = pixels[y0 * w + x1] - pixels[y1 * w + x0] - pixels[y1 * w + x1] + pixels[y0 * w + x0];
+
 }
 
 

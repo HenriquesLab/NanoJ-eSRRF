@@ -15,9 +15,8 @@ import static java.lang.System.nanoTime;
 import static nanoj.core2.NanoJCL.fillBuffer;
 import static nanoj.core2.NanoJCL.grabBuffer;
 
-public class RadialGradientConvergenceCL {
+public class CompareGradientEstimationCL {
 
-    public boolean DEBUG = false;
     public NanoJProfiler prof = new NanoJProfiler();
 
     static CLContext context;
@@ -25,26 +24,18 @@ public class RadialGradientConvergenceCL {
     static CLKernel kernelCalculateRGC, kernelCalculateGradient;
     static CLCommandQueue queue;
 
-    private final int width, height, widthM, heightM, magnification;
-    private final float fwhm;
+    private final int width, height;
     private float vxy_offset;
-//    private String GradMethod;
-
-    public int nVectors = 12;
 
     private CLBuffer<FloatBuffer>
             clBufferPx,
-            clBufferGx, clBufferGy,
-            clBufferRGC;
+            clBufferGx, clBufferGy;
 
 
-    public RadialGradientConvergenceCL(int width, int height, int magnification, float fwhm, String GradMethod) {
+    public CompareGradientEstimationCL(int width, int height, String GradMethod) {
         this.width = width;
         this.height = height;
-        this.widthM = width * magnification;
-        this.heightM = height * magnification;
-        this.magnification = magnification;
-        this.fwhm = fwhm;
+
 //        this.GradMethod = GradMethod;
 
         //Create a context from GPU
@@ -61,7 +52,7 @@ public class RadialGradientConvergenceCL {
 
         // create the program
         try {
-            program = context.createProgram(RadialGradientConvergenceCL.class.getResourceAsStream("/RadialGradientConvergence.cl")).build();
+            program = context.createProgram(CompareGradientEstimationCL.class.getResourceAsStream("/RadialGradientConvergence.cl")).build();
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -81,29 +72,24 @@ public class RadialGradientConvergenceCL {
 //                kernelCalculateGradient = program.createCLKernel("calculateGradient"); }
 
 
-        kernelCalculateRGC = program.createCLKernel("calculateRadialGradientConvergence");
-
-
         clBufferPx = context.createFloatBuffer(width * height, READ_ONLY);
         clBufferGx = context.createFloatBuffer(width * height, READ_WRITE);
         clBufferGy = context.createFloatBuffer(width * height, READ_WRITE);
-        clBufferRGC = context.createFloatBuffer(widthM * heightM, WRITE_ONLY);
 
         System.out.println("used device memory: " + (
-                        clBufferPx.getCLSize() +
+                clBufferPx.getCLSize() +
                         clBufferGx.getCLSize() +
-                        clBufferGy.getCLSize() +
-                        clBufferRGC.getCLSize())
+                        clBufferGy.getCLSize())
                 / 1000000d + "MB");
     }
 
-    public synchronized FloatProcessor calculateRGC(ImageProcessor ip, float shiftX, float shiftY) {
+    public synchronized FloatProcessor[] calculateGxGy(ImageProcessor ip, float shiftX, float shiftY) {
         assert (ip.getWidth() == width && ip.getHeight() == height);
 
         FloatProcessor fpPx = ip.convertToFloatProcessor();
 
-        FloatProcessor fpRGC = new FloatProcessor(widthM, heightM);
-        FloatProcessor fpInterpolated = new FloatProcessor(widthM, heightM);
+        FloatProcessor fpGx = new FloatProcessor(width, height);
+        FloatProcessor fpGy = new FloatProcessor(width, height);
 
         // prepare CL buffers
         fillBuffer(clBufferPx, fpPx);
@@ -116,32 +102,28 @@ public class RadialGradientConvergenceCL {
         kernelCalculateGradient.setArg( argn++, clBufferGx ); // make sure type is the same !!
         kernelCalculateGradient.setArg( argn++, clBufferGy ); // make sure type is the same !!
 
-        // make kernelCalculateRGC assignment
-        argn = 0;
-        kernelCalculateRGC.setArg( argn++, clBufferPx ); // make sure type is the same !!
-        kernelCalculateRGC.setArg( argn++, clBufferGx ); // make sure type is the same !!
-        kernelCalculateRGC.setArg( argn++, clBufferGy ); // make sure type is the same !!
-        kernelCalculateRGC.setArg( argn++, clBufferRGC); // make sure type is the same !!
-        kernelCalculateRGC.setArg( argn++, magnification ); // make sure type is the same !!
-        kernelCalculateRGC.setArg( argn++, fwhm ); // make sure type is the same !!
-        kernelCalculateRGC.setArg( argn++, shiftX ); // make sure type is the same !!
-        kernelCalculateRGC.setArg( argn++, shiftY ); // make sure type is the same !!
-        kernelCalculateRGC.setArg( argn++, vxy_offset ); // make sure type is the same !!
 
         // asynchronous write of data to GPU device,
         // followed by blocking read to get the computed results back.
         int id = prof.startTimer();
         queue.putWriteBuffer( clBufferPx, false );
         queue.put2DRangeKernel(kernelCalculateGradient, 0, 0, width, height, 0, 0);
-        queue.put2DRangeKernel(kernelCalculateRGC, 0, 0, widthM, heightM, 0, 0);
         queue.finish();
-        queue.putReadBuffer(clBufferRGC, true);
+
+        queue.putReadBuffer(clBufferGx, true);
+        queue.putReadBuffer(clBufferGy, true);
+
         prof.recordTime("RadialGradientConvergence.cl", prof.endTimer(id));
 
         //clBufferRGC.getBuffer().get((float[]) fpRadiality.getPixels());
-        grabBuffer(clBufferRGC, fpRGC);
+        grabBuffer(clBufferGx, fpGx);
+        grabBuffer(clBufferGy, fpGy);
 
-        return fpRGC;
+        FloatProcessor[] fpGxy = new FloatProcessor[2];
+        fpGxy[0] = fpGx;
+        fpGxy[1] = fpGy;
+
+        return fpGxy;
     }
 
     public void release() {
