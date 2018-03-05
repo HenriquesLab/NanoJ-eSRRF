@@ -156,8 +156,7 @@ public class LiveSRRF_ implements PlugIn {
             float[] pixelsPxM = (float[]) fpPxMAndRGC[0].getPixels();
             float[] pixelsRGC = (float[]) fpPxMAndRGC[1].getPixels();
 
-            // TODO: subtract offset at this point !!!
-
+            // Calculate instant projections
             for (int p=0; p<nPixelsM; p++) {
                 //pixelsRGC[p] = (pixelsRGC[p] - pixelsDarkStdDev[p]) * pixelsPxM[p]; // remove offset (calculated from dark frames) from RGC
                 pixelsRGC[p] = pixelsRGC[p];// * pixelsPxM[p]; // remove offset (calculated from dark frames) from RGC
@@ -165,6 +164,9 @@ public class LiveSRRF_ implements PlugIn {
                 pixelsRGCAvg[p] += (pixelsRGC[p] - pixelsRGCAvg[p]) / counter;
                 pixelsRGCMax[p] = max(pixelsRGC[p], pixelsRGCMax[p]);
             }
+
+            // Keep a record of frames if user wants StdDev
+            if (showSTD) pixelsRGCBuffer[counter] = pixelsRGC;
 
             if (counter == nFrames || s == nSlices) {
                 // Re-Normalise Intensity
@@ -189,9 +191,32 @@ public class LiveSRRF_ implements PlugIn {
                     pixelsRGCMax[p] = (pixelsRGCMax[p] - minRGCMax) * (maxPxMAvg - minPxMAvg) / (maxRGCMax - minRGCMax);
                 }
 
+                // special case for StdDev
+                if (showSTD) {
+                    float maxRGCStd = - Float.MAX_VALUE;
+                    float minRGCStd =   Float.MAX_VALUE;
+
+                    for (int c=0; c<counter; c++) {
+                        for (int p=0; p<nPixelsM; p++) {
+                            pixelsRGCStd[p] = (float) (pow(pixelsRGCBuffer[c][p] - pixelsRGCAvg[p], 2) / counter);
+                        }
+                    }
+                    for (int p=0; p<nPixelsM; p++) {
+                        pixelsRGCStd[p] = (float) sqrt(pixelsRGCStd[p]);
+                        maxRGCStd = max(pixelsRGCStd[p], maxRGCStd);
+                        minRGCStd = min(pixelsRGCStd[p], minRGCStd);
+                    }
+
+                    for (int p=0; p<nPixelsM; p++)
+                        pixelsRGCStd[p] = (pixelsRGCStd[p] - minRGCStd) * (maxPxMAvg - minPxMAvg) / (maxRGCStd - minRGCStd);
+                }
+
                 imsPxMAvg.addSlice(new FloatProcessor(wM, hM, pixelsPxMAvg));
                 imsRGCAvg.addSlice(new FloatProcessor(wM, hM, pixelsRGCAvg));
                 imsRGCMax.addSlice(new FloatProcessor(wM, hM, pixelsRGCMax));
+                if (showSTD) {
+                    imsRGCStd.addSlice(new FloatProcessor(wM, hM, pixelsRGCStd));
+                }
 
                 resetArrayBuffer();
             }
@@ -213,7 +238,7 @@ public class LiveSRRF_ implements PlugIn {
         pixelsRGCAvg    = new float[nPixelsM];
         if (showSTD) {
             pixelsRGCStd = new float[nPixelsM];
-            pixelsRGCBuffer = new float[nFrames][nPixels];
+            pixelsRGCBuffer = new float[nFrames][];
         }
     }
 
