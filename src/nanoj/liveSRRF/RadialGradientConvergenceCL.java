@@ -70,11 +70,12 @@ public class RadialGradientConvergenceCL {
         if      (GradMethod.equals("3-point gradient (classic)")){
             kernelCalculateGradient = program.createCLKernel("calculateGradient");
             // in this method the gradient is calculated in the centre of the designated pixel
-            this.vxy_offset = 0.0f;}
+            this.vxy_offset = 0.5f;} // signed distance between the (0,0) continuous space position and the position at which the vector in the (0,0) position in the Gradient image is calculated
         else if (GradMethod.equals("Robert's cross local gradient")){
             kernelCalculateGradient = program.createCLKernel("calculateGradientRobX");
             // in this method the gradient is estimated at the crossing of the pixels, therefore at an offset of 0.5 with respect to the pixel centre
-            this.vxy_offset = 0.5f;}
+            this.vxy_offset = 0.0f;}
+
 
 // // Not implemeted yet
 //        elseif (GradMethod.equals("2-point local + interpolation")){

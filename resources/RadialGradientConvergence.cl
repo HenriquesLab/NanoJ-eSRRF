@@ -62,14 +62,19 @@ __kernel void calculateGradientRobX(
     __global float* GxArray,
     __global float* GyArray
     ) {
-    int x0 = get_global_id(0);
-    int y0 = get_global_id(1);
+//    int x0 = get_global_id(0);
+//    int y0 = get_global_id(1);
+    int x1 = get_global_id(0);
+    int y1 = get_global_id(1);
     int w = get_global_size(0);
     int h = get_global_size(1);
-    int offset = y0 * w + x0;
+//    int offset = y0 * w + x0;
+    int offset = y1 * w + x1;
 
-    int x1 = min(x0+1, w-1);
-    int y1 = min(y0+1, h-1);
+//    int x1 = min(x0+1, w-1);
+//    int y1 = min(y0+1, h-1);
+    int x0 = max(x1-1, 0);
+    int y0 = max(y1-1, 0);
 
     // This calculates Robert's cross gradient and apply the rotation matrix 45 degrees to realign Gx and Gy to the image grid
     GxArray[offset] = pixels[y0 * w + x1] - pixels[y1 * w + x0] + pixels[y1 * w + x1] - pixels[y0 * w + x0];
@@ -99,7 +104,7 @@ __kernel void calculateRadialGradientConvergence(
     int h = hM / magnification;
     int offset = yM * wM + xM;
 
-    float xc = (xM + 0.5) / magnification + shiftX;
+    float xc = (xM + 0.5) / magnification + shiftX; // continuous space position at the centre of magnified pixel
     float yc = (yM + 0.5) / magnification + shiftY;
 
     float CGLH = 0; // CGLH stands for Radiality original name - Culley-Gustafsson-Laine-Henriques transform
@@ -110,10 +115,10 @@ __kernel void calculateRadialGradientConvergence(
     float fradius = sigma * 2;
     int radius = (int) fradius + 1;    // radius can be set to something sensible like 3*Sigma
 
-    for (int j=-radius; j<=radius; j++) {
+    for (int j=-radius; j<=(radius+1); j++) {
         for (int i=-radius; i<=radius; i++) {
-            vx = (int) xc + i + 0.5 + vxy_offset;
-            vy = (int) yc + j + 0.5 + vxy_offset;
+            vx = (int) (xc - vxy_offset) + i + vxy_offset;
+            vy = (int) (yc - vxy_offset) + j + vxy_offset;
 
             float distance = sqrt(pow(vx - xc, 2)+pow(vy - yc, 2));    // Distance D
 
