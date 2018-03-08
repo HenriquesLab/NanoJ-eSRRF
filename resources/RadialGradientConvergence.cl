@@ -108,7 +108,7 @@ __kernel void calculateRadialGradientConvergence(
                 float GMag = sqrt(Gx * Gx + Gy * Gy);
 
                 float distanceWeight = (distance/(sigma*sigma*sigma))*exp(-(distance*distance)/(2*sigma*sigma));  // can use Taylor expansion there
-                distanceWeight = distanceWeight * distanceWeight;
+                //distanceWeight = distanceWeight * distanceWeight;
 
                 weight = distanceWeight * maskWeight;
 

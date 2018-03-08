@@ -89,20 +89,20 @@ public class LiveSRRF_ implements PlugIn {
         imsRGCStd = new ImageStack(wM, hM);
 
         resetArrayBuffer(); // initialised pixelsPxMAvg, pixelsRGCAvg, pixelsRGCMax, pixelsRGCStd
-        float[] pixelsDarkAverage = new float[nPixelsM];
-        float[] pixelsDarkStdDev  = new float[nPixelsM];
+        float[] pixelsDarkAverage = new float[nPixels];
+        float[] pixelsDarkStdDev  = new float[nPixels];
         if (correctSCMOS) {
             IJ.showStatus("Select Dark-Frames Average");
             ImagePlus impDarkAverage = IJ.openImage();
             if (impDarkAverage == null) return;
             pixelsDarkAverage = (float[]) impDarkAverage.getProcessor().convertToFloatProcessor().getPixels();
-            assert (pixelsDarkAverage.length == nPixelsM);
+            assert (pixelsDarkAverage.length == nPixels);
 
             IJ.showStatus("Select Dark-Frames StdDev");
             ImagePlus impDarkStdDev = IJ.openImage();
             if (impDarkStdDev == null) return;
             pixelsDarkStdDev = (float[]) impDarkStdDev.getProcessor().convertToFloatProcessor().getPixels();
-            assert (pixelsDarkStdDev.length == nPixelsM);
+            assert (pixelsDarkStdDev.length == nPixels);
         }
         else { // if we don't have a Dark StdDev, just fill the array with 1
             for (int n=0; n<nPixels; n++) pixelsDarkStdDev[n] = 1;
@@ -131,7 +131,7 @@ public class LiveSRRF_ implements PlugIn {
             if (correctSCMOS) {
                 float[] pixels = (float[]) fpFrame.getPixels();
                 for (int n=0; n<nPixels; n++) pixels[n] -= pixelsDarkAverage[n];
-                fpFrame.blurGaussian(0.5);
+                //fpFrame.blurGaussian(0.5);
             }
 
             // Estimate vibrations
@@ -166,7 +166,7 @@ public class LiveSRRF_ implements PlugIn {
             }
 
             // Keep a record of frames if user wants StdDev
-            if (showSTD) pixelsRGCBuffer[counter] = pixelsRGC;
+            if (showSTD) pixelsRGCBuffer[counter-1] = pixelsRGC;
 
             if (counter == nFrames || s == nSlices) {
                 // Re-Normalise Intensity
@@ -296,52 +296,6 @@ public class LiveSRRF_ implements PlugIn {
         impCCM.setDisplayRange(vMin, vMax);
 
         return new float[] {shiftX, shiftY};
-    }
-
-    class ThreadedCalculateReconstructions extends Thread {
-
-        private float[][] pixelsRGCBuffer;
-
-        public ThreadedCalculateReconstructions(float[][] pixelsRGCBuffer) {
-            this.pixelsRGCBuffer = pixelsRGCBuffer;
-        }
-
-        public void run() {
-            int nSlices = pixelsRGCBuffer.length;
-            int nPixels = pixelsRGCBuffer[0].length;
-            float[] pixelsMax = new float[nPixels];
-            float[] pixelsAvg = new float[nPixels];
-            float[] pixelsStd = new float[nPixels];
-
-            for (int s=0; s<nSlices; s++) {
-                for (int p=0; p<nPixels; p++) {
-                    pixelsMax[p] = max(pixelsRGCBuffer[s][p], pixelsMax[p]);
-                    pixelsAvg[p] += pixelsRGCBuffer[s][p] / nPixels;
-                }
-            }
-            if (showSTD) {
-                for (int s = 1; s < nSlices; s++) {
-                    for (int p = 0; p < nPixels; p++) {
-                        pixelsStd[p] += pow(pixelsRGCBuffer[s][p] - pixelsAvg[p], 2) / nPixels;
-                    }
-                }
-                for (int p = 0; p < nPixels; p++) pixelsStd[p] = (float) sqrt(pixelsStd[p]);
-            }
-
-            int w = imsRGCMax.getWidth();
-            int h = imsRGCMax.getHeight();
-            if (showMAX) imsRGCMax.addSlice(new FloatProcessor(w, h, pixelsMax));
-            if (showAVG) imsRGCAvg.addSlice(new FloatProcessor(w, h, pixelsAvg));
-            if (showSTD) imsRGCStd.addSlice(new FloatProcessor(w, h, pixelsStd));
-        }
-
-        public void finalise() {
-            try {
-                this.join();
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-        }
     }
 }
 
