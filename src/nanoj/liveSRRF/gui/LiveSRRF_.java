@@ -140,8 +140,8 @@ public class LiveSRRF_ implements PlugIn {
         }
 
         t.finalise();
-        if (showMAX) new ImagePlus(imp.getTitle()+" - SRRF AVG", imsSRRF_max).show();
-        if (showAVG) new ImagePlus(imp.getTitle()+" - SRRF MAX", imsSRRF_avg).show();
+        if (showMAX) new ImagePlus(imp.getTitle()+" - SRRF MAX", imsSRRF_max).show();
+        if (showAVG) new ImagePlus(imp.getTitle()+" - SRRF AVG", imsSRRF_avg).show();
         if (showSTD) new ImagePlus(imp.getTitle()+" - SRRF STD", imsSRRF_std).show();
 
         rCL.release();
