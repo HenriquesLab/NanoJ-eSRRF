@@ -62,25 +62,58 @@ __kernel void calculateGradientRobX(
     __global float* GxArray,
     __global float* GyArray
     ) {
-//    int x0 = get_global_id(0);
-//    int y0 = get_global_id(1);
     int x1 = get_global_id(0);
     int y1 = get_global_id(1);
     int w = get_global_size(0);
     int h = get_global_size(1);
-//    int offset = y0 * w + x0;
     int offset = y1 * w + x1;
 
-//    int x1 = min(x0+1, w-1);
-//    int y1 = min(y0+1, h-1);
     int x0 = max(x1-1, 0);
     int y0 = max(y1-1, 0);
 
     // This calculates Robert's cross gradient and apply the rotation matrix 45 degrees to realign Gx and Gy to the image grid
     GxArray[offset] = pixels[y0 * w + x1] - pixels[y1 * w + x0] + pixels[y1 * w + x1] - pixels[y0 * w + x0];
     GyArray[offset] = - pixels[y0 * w + x1] + pixels[y1 * w + x0] + pixels[y1 * w + x1] - pixels[y0 * w + x0];
-
 }
+
+// First kernel: evaluating gradient from image using 2-point gradient --------------------------------------------------
+__kernel void calculateGradient_2point(
+    __global float* pixels,
+    __global float* GxArray,
+    __global float* GyArray
+    ) {
+    int x1 = get_global_id(0);
+    int y1 = get_global_id(1);
+    int w = get_global_size(0);
+    int h = get_global_size(1);
+    int offset = y1 * w + x1;
+
+    int x0 = max(x1-1, 0);
+    int y0 = max(y1-1, 0);
+
+    // 2-point gradient
+    GxArray[offset] = pixels[y1 * w + x1] - pixels[y1 * w + x0];
+    GyArray[offset] = pixels[y1 * w + x1] - pixels[y0 * w + x1];
+}
+
+// First kernel follow up: interpolating gradient from 2-point gradient image -------------------------------------------
+__kernel void calculateGradient2p_Interpolation(
+    __global float* GxArray,
+    __global float* GyArray,
+    __global float* GxIntArray,
+    __global float* GyIntArray
+    ) {
+    int x = get_global_id(0);
+    int y = get_global_id(1);
+    int wInt = get_global_size(0);
+    int hInt = get_global_size(1);
+    int offset = y * wInt + x;
+
+    // Two-fold interpolation of the gradients
+    GxIntArray[offset] = getInterpolatedValue(GxArray, (int) (wInt/2), (int) (hInt/2), (float) (x/2), (float) (y/2));
+    GyIntArray[offset] = getInterpolatedValue(GyArray, (int) (wInt/2), (int) (hInt/2), (float) (x/2), (float) (y/2));
+}
+
 
 
 // Second kernel: evaluating RGC from gradient -----------------------------------------------------------------

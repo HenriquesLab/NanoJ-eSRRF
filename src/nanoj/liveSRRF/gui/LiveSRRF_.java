@@ -125,7 +125,7 @@ public class LiveSRRF_ implements PlugIn {
             }
 
             // Calculate actual Radial-Gradient-Convergence
-            FloatProcessor fpRGC = rCL.calculateRGC(ip, shiftX, shiftY);
+            FloatProcessor fpRGC = rCL.calculateRGC(ip, shiftX, shiftY, GradMethod);
             float[] pixelsRGC = (float[]) fpRGC.getPixels();
 
             // Update buffer

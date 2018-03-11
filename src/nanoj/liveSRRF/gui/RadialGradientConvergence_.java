@@ -55,7 +55,7 @@ public class RadialGradientConvergence_ implements PlugIn {
 
         for (int n=1; n<=nSlices; n++) {
             IJ.showProgress(n, nSlices);
-            FloatProcessor fpRGC = rCL.calculateRGC(ims.getProcessor(n), 0, 0);
+            FloatProcessor fpRGC = rCL.calculateRGC(ims.getProcessor(n), 0, 0, GradChosenMethod);
 
             imsRGC.addSlice(fpRGC);
 

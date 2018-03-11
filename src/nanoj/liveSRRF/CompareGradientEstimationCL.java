@@ -21,7 +21,7 @@ public class CompareGradientEstimationCL {
 
     static CLContext context;
     static CLProgram program;
-    static CLKernel kernelCalculateRGC, kernelCalculateGradient;
+    static CLKernel kernelCalculateGradient, kernelInterpolateGradient;
     static CLCommandQueue queue;
 
     private final int width, height;
@@ -29,7 +29,8 @@ public class CompareGradientEstimationCL {
 
     private CLBuffer<FloatBuffer>
             clBufferPx,
-            clBufferGx, clBufferGy;
+            clBufferGx, clBufferGy,
+            clBufferGxInt, clBufferGyInt;
 
 
     public CompareGradientEstimationCL(int width, int height, String GradMethod) {
@@ -61,15 +62,21 @@ public class CompareGradientEstimationCL {
         if      (GradMethod.equals("3-point gradient (classic)")){
             kernelCalculateGradient = program.createCLKernel("calculateGradient");
             // in this method the gradient is calculated in the centre of the designated pixel
-            this.vxy_offset = 0.0f;}
+            this.vxy_offset = 0.5f;}
+
         else if (GradMethod.equals("Robert's cross local gradient")){
             kernelCalculateGradient = program.createCLKernel("calculateGradientRobX");
             // in this method the gradient is estimated at the crossing of the pixels, therefore at an offset of 0.5 with respect to the pixel centre
-            this.vxy_offset = 0.5f;}
+            this.vxy_offset = 0.0f;}
 
-// // Not implemeted yet
-//        elseif (GradMethod.equals("2-point local + interpolation")){
-//                kernelCalculateGradient = program.createCLKernel("calculateGradient"); }
+        else if (GradMethod.equals("2-point local + interpolation")){
+            kernelCalculateGradient = program.createCLKernel("calculateGradient_2point");
+            kernelInterpolateGradient = program.createCLKernel("calculateGradient2p_Interpolation");
+
+            // this method currently wrecks havock on your data
+            this.vxy_offset = 0.0f;
+            clBufferGxInt = context.createFloatBuffer(4*width * height, READ_WRITE);
+            clBufferGyInt = context.createFloatBuffer(4*width * height, READ_WRITE);}
 
 
         clBufferPx = context.createFloatBuffer(width * height, READ_ONLY);
@@ -77,19 +84,31 @@ public class CompareGradientEstimationCL {
         clBufferGy = context.createFloatBuffer(width * height, READ_WRITE);
 
         System.out.println("used device memory: " + (
-                clBufferPx.getCLSize() +
+                        clBufferPx.getCLSize() +
                         clBufferGx.getCLSize() +
                         clBufferGy.getCLSize())
-                / 1000000d + "MB");
+                / 1000000d + "MB"); // TODO: add size of GxInt and GyInt in total buffer size
     }
 
-    public synchronized FloatProcessor[] calculateGxGy(ImageProcessor ip, float shiftX, float shiftY) {
-        assert (ip.getWidth() == width && ip.getHeight() == height);
+    public synchronized FloatProcessor[] calculateGxGy(ImageProcessor ip, float shiftX, float shiftY, String GradChosenMethod) {
+
+        int GxGyWidth;
+        int GxGyHeight;
+
+//        if (GradChosenMethod.equals("2-point local + interpolation")){
+//            GxGyWidth = 2*width;
+//            GxGyHeight = 2*height;}
+//        else {
+
+            GxGyWidth = width;
+            GxGyHeight = height;
+//    }
+
+        assert (ip.getWidth() == GxGyWidth && ip.getHeight() == GxGyHeight);
 
         FloatProcessor fpPx = ip.convertToFloatProcessor();
-
-        FloatProcessor fpGx = new FloatProcessor(width, height);
-        FloatProcessor fpGy = new FloatProcessor(width, height);
+        FloatProcessor fpGx = new FloatProcessor(GxGyWidth, GxGyHeight);
+        FloatProcessor fpGy = new FloatProcessor(GxGyWidth, GxGyHeight);
 
         // prepare CL buffers
         fillBuffer(clBufferPx, fpPx);
@@ -102,22 +121,42 @@ public class CompareGradientEstimationCL {
         kernelCalculateGradient.setArg( argn++, clBufferGx ); // make sure type is the same !!
         kernelCalculateGradient.setArg( argn++, clBufferGy ); // make sure type is the same !!
 
+        argn = 0;
+        if (GradChosenMethod.equals("2-point local + interpolation")){
+            kernelInterpolateGradient.setArg( argn++, clBufferGx ); // make sure type is the same !!
+            kernelInterpolateGradient.setArg( argn++, clBufferGy ); // make sure type is the same !!
+            kernelInterpolateGradient.setArg( argn++, clBufferGxInt ); // make sure type is the same !!
+            kernelInterpolateGradient.setArg( argn++, clBufferGyInt ); // make sure type is the same !!
+        }
+
+
 
         // asynchronous write of data to GPU device,
         // followed by blocking read to get the computed results back.
         int id = prof.startTimer();
         queue.putWriteBuffer( clBufferPx, false );
         queue.put2DRangeKernel(kernelCalculateGradient, 0, 0, width, height, 0, 0);
-        queue.finish();
 
-        queue.putReadBuffer(clBufferGx, true);
-        queue.putReadBuffer(clBufferGy, true);
+        if (GradChosenMethod.equals("2-point local + interpolation")){
+            queue.put2DRangeKernel(kernelInterpolateGradient, 0, 0, 2*width, 2*height, 0, 0);
+            queue.finish();
+            queue.putReadBuffer(clBufferGxInt, true);
+            queue.putReadBuffer(clBufferGyInt, true);
 
-        prof.recordTime("RadialGradientConvergence.cl", prof.endTimer(id));
+            prof.recordTime("RadialGradientConvergence.cl", prof.endTimer(id));
+            grabBuffer(clBufferGxInt, fpGx);
+            grabBuffer(clBufferGyInt, fpGy);
+        }
+        else {
+            queue.finish();
+            queue.putReadBuffer(clBufferGx, true);
+            queue.putReadBuffer(clBufferGy, true);
+            prof.recordTime("RadialGradientConvergence.cl", prof.endTimer(id));
 
-        //clBufferRGC.getBuffer().get((float[]) fpRadiality.getPixels());
-        grabBuffer(clBufferGx, fpGx);
-        grabBuffer(clBufferGy, fpGy);
+            grabBuffer(clBufferGx, fpGx);
+            grabBuffer(clBufferGy, fpGy);
+        }
+
 
         FloatProcessor[] fpGxy = new FloatProcessor[2];
         fpGxy[0] = fpGx;

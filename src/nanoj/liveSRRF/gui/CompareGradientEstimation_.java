@@ -40,6 +40,9 @@ public class CompareGradientEstimation_ implements PlugIn {
         int w = ims.getWidth();
         int h = ims.getHeight();
 
+        if (GradChosenMethod.equals("2-point local + interpolation")){
+            w *= 2;
+            h *= 2; }
 
         ImageStack imsGx = new ImageStack(w, h);
         ImageStack imsGy = new ImageStack(w, h);
@@ -48,7 +51,7 @@ public class CompareGradientEstimation_ implements PlugIn {
 
         for (int n=1; n<=nSlices; n++) {
             IJ.showProgress(n, nSlices);
-            FloatProcessor[] fpGxy = gCL.calculateGxGy(ims.getProcessor(n), 0, 0);
+            FloatProcessor[] fpGxy = gCL.calculateGxGy(ims.getProcessor(n), 0, 0, GradChosenMethod);
 
             imsGx.addSlice(fpGxy[0]);
             imsGy.addSlice(fpGxy[1]);
