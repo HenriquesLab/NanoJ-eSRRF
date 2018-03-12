@@ -22,7 +22,7 @@ public class LiveSRRF_ implements PlugIn {
     private NanoJProfiler prof = new NanoJProfiler();
     private ImageStack imsSRRF_max, imsSRRF_avg, imsSRRF_std;
     private ImagePlus impCCM = null;
-    private boolean showAVG, showMAX, showSTD;
+    private boolean showAVG, showMAX, showSTD, doRA;
 
     @Override
     public void run(String arg) {
@@ -41,6 +41,11 @@ public class LiveSRRF_ implements PlugIn {
         gd.addCheckbox("Show AVG reconstruction", prefs.get("showAVG", false));
         gd.addCheckbox("Show STD reconstruction", prefs.get("showSTD", true));
         gd.addCheckbox("Show MAX reconstruction", prefs.get("showMAX", false));
+        gd.addMessage("-=-= Rolling analysis =-=-");
+        gd.addNumericField("Frame gap per SR image", prefs.get("FrameGapRA", 1), 0);
+        gd.addMessage("For no rolling analysis: set Frame gap per SR image = Frames per SR image.");
+
+
 
         gd.showDialog();
         if (gd.wasCanceled()) return;
@@ -55,6 +60,9 @@ public class LiveSRRF_ implements PlugIn {
         showSTD = gd.getNextBoolean();
         showMAX = gd.getNextBoolean();
 
+        // Rolling analysis
+        int FrameGapRA = (int) gd.getNextNumber();
+
         prefs.set("magnification", (float) magnification);
         prefs.set("fwhm", fwhm);
         prefs.set("nFrames", nFrames);
@@ -64,6 +72,7 @@ public class LiveSRRF_ implements PlugIn {
         prefs.set("showAVG", showAVG);
         prefs.set("showSTD", showSTD);
         prefs.set("showMAX", showMAX);
+        prefs.set("FrameGapRA", FrameGapRA);
         prefs.save();
 
         if (nFrames == 0) nFrames = imp.getImageStack().getSize();
@@ -74,23 +83,27 @@ public class LiveSRRF_ implements PlugIn {
         int h = ims.getHeight();
         int wM = ims.getWidth() * magnification;
         int hM = ims.getHeight() * magnification;
-        int nPixelsM = wM * hM;
+//        int nPixelsM = wM * hM;
 
         imsSRRF_max = new ImageStack(wM, hM);
         imsSRRF_avg = new ImageStack(wM, hM);
         imsSRRF_std = new ImageStack(wM, hM);
 
         ImageProcessor ipRef = null; // reference slide for Cross-Correlation and vibration correction
-        float[][] pixelsGRCBuffer = null; // buffer containing time-points for reconstructions
+        float[][] pixelsRGCBuffer = null; // buffer containing time-points for reconstructions
+        pixelsRGCBuffer = new float[min(nFrames, nSlices)][]; // first initialization
 
         RadialGradientConvergenceCL rCL = new RadialGradientConvergenceCL(w, h, magnification, fwhm);
         ThreadedCalculateReconstructions t = null; // calculates reconstructions in parallel
 
         float shiftX = 0;
         float shiftY = 0;
-        int counter = 0;
+        int counterSRRFFrames = 0;
+        int counterGap = 0;
+        boolean startCountingGap = false;
 
-        for (int s=1; s<=nSlices; s++) {
+
+        for (int s = 1; s <= nSlices; s++) {
             // Check if user is cancelling calculation
             IJ.showProgress(s, nSlices);
             if (IJ.escapePressed()) {
@@ -99,25 +112,30 @@ public class LiveSRRF_ implements PlugIn {
                 return;
             }
 
+//            IJ.log("------------------");
+//            IJ.log("s: "+s);
+//            IJ.log("Counter SRRF: "+counterSRRFFrames);
+//            IJ.log("Counter Gap: "+counterGap);
+
+
             // Grab the new frame from the list
             imp.setSlice(s);
             ImageProcessor ip = imp.getProcessor();
 
             // Estimate vibrations
             if (correctVibration) {
-                System.out.println("New reference..."+counter);
+                System.out.println("New reference..." + counterSRRFFrames); // TODO: check that using counterSRRFframe works here
                 int id = prof.startTimer();
-                if (counter == 0) {
+                if (counterSRRFFrames == 0) {  // TODO: check that using counterSRRFframe works here
                     ipRef = ip.duplicate();
                     shiftX = 0;
                     shiftY = 0;
-                }
-                else {
+                } else {
                     float[] shift = calculateShift(ipRef, ip, 5);
                     shiftX = shift[0];
                     shiftY = shift[1];
                 }
-                System.out.println("Frame="+s+" shiftX="+shiftX+" shiftY="+shiftY);
+                System.out.println("Frame=" + s + " shiftX=" + shiftX + " shiftY=" + shiftY);
                 prof.recordTime("Drift Estimation", prof.endTimer(id));
             }
 
@@ -126,28 +144,42 @@ public class LiveSRRF_ implements PlugIn {
             float[] pixelsRGC = (float[]) fpRGC.getPixels();
 
             // Update buffer
-            if (s == 1 || counter == 0) pixelsGRCBuffer = new float[min(nFrames, nSlices-s+1)][];
-            pixelsGRCBuffer[counter] = pixelsRGC;
+            pixelsRGCBuffer[counterSRRFFrames] = pixelsRGC;
 
-            if (counter == nFrames-1 || s == nSlices) {
-                // process buffer
-                if (t != null) t.finalise();
-                t = new ThreadedCalculateReconstructions(pixelsGRCBuffer);
-                t.start();
-                counter = 0;
+            if (counterSRRFFrames == nFrames - 1) {
+                counterSRRFFrames = 0;
+                startCountingGap = true; // ensures to fill the buffer the first time
+            } else counterSRRFFrames++;
+
+            // currently if there is not enough frames to process nFrames at the end, the last frames are not saved
+            // TODO: consider either processing the remaining frames or not computing the last frames at all
+            if ((startCountingGap) || (s == nFrames)) {
+                if ((counterGap == FrameGapRA) || (s == nFrames)) {
+                    // process buffer
+//                    IJ.log("Processing...");
+                    if (t != null) t.finalise();
+                    t = new ThreadedCalculateReconstructions(pixelsRGCBuffer);
+                    t.start();
+                    counterGap = 0;
+                }
+                counterGap++;
             }
-            else counter++;
+
         }
 
+
         t.finalise();
-        if (showMAX) new ImagePlus(imp.getTitle()+" - SRRF MAX", imsSRRF_max).show();
-        if (showAVG) new ImagePlus(imp.getTitle()+" - SRRF AVG", imsSRRF_avg).show();
-        if (showSTD) new ImagePlus(imp.getTitle()+" - SRRF STD", imsSRRF_std).show();
+        if (showMAX) new ImagePlus(imp.getTitle() + " - SRRF MAX", imsSRRF_max).show();
+        if (showAVG) new ImagePlus(imp.getTitle() + " - SRRF AVG", imsSRRF_avg).show();
+        if (showSTD) new ImagePlus(imp.getTitle() + " - SRRF STD", imsSRRF_std).show();
 
         rCL.release();
         IJ.log(prof.report());
+
     }
 
+
+    // Calculate the shifts --------------------------------------------------------------------------------------------
     private float[] calculateShift(ImageProcessor ipRef, ImageProcessor ip, int radius) {
 
         FloatProcessor fpCCM = (FloatProcessor) calculateCrossCorrelationMap(ipRef, ip, false);
@@ -205,6 +237,7 @@ public class LiveSRRF_ implements PlugIn {
         return new float[] {shiftX, shiftY};
     }
 
+    // Perform the projections from the stack of RGC -------------------------------------------------------------------
     class ThreadedCalculateReconstructions extends Thread {
 
         private float[][] pixelsRGCBuffer;
