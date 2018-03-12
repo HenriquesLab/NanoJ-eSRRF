@@ -34,7 +34,7 @@ static float getVBoundaryCheck(__global float* array, int const width, int const
 }
 
 
-// First kernel: evaluating gradient from image --------------------------------------------------------------
+// First kernel: evaluating gradient from image: 3-point gradient --------------------------------------------------------------
 __kernel void calculateGradient(
     __global float* pixels,
     __global float* GxArray,
@@ -110,8 +110,8 @@ __kernel void calculateGradient2p_Interpolation(
     int offset = y * wInt + x;
 
     // Two-fold interpolation of the gradients
-    GxIntArray[offset] = getInterpolatedValue(GxArray, (int) (wInt/2), (int) (hInt/2), (float) (x/2), (float) (y/2));
-    GyIntArray[offset] = getInterpolatedValue(GyArray, (int) (wInt/2), (int) (hInt/2), (float) (x/2), (float) (y/2));
+    GxIntArray[offset] = getInterpolatedValue(GxArray, (int) (wInt/2), (int) (hInt/2), (float) (x)/2.0f, (float) (y)/2.0f);
+    GyIntArray[offset] = getInterpolatedValue(GyArray, (int) (wInt/2), (int) (hInt/2), (float) (x)/2.0f, (float) (y)/2.0f);
 }
 
 
@@ -123,10 +123,14 @@ __kernel void calculateRadialGradientConvergence(
     __global float* GyArray,
     __global float* RGCArray,
     int const magnification,
+    int const GxGyMagnification,
     float const fwhm,
     float const shiftX,
     float const shiftY,
-    float const vxy_offset
+    float const vxy_offset,
+    int const vx_shift,
+    int const vy_shift
+
     ) {
 
     int xM = get_global_id(0);
@@ -150,14 +154,14 @@ __kernel void calculateRadialGradientConvergence(
 
     for (int j=-radius; j<=(radius+1); j++) {
         for (int i=-radius; i<=radius; i++) {
-            vx = (int) (xc - vxy_offset) + i + vxy_offset;
-            vy = (int) (yc - vxy_offset) + j + vxy_offset;
+            vx = (int) (xc - vxy_offset) + i + vxy_offset; // position in continuous space
+            vy = (int) (yc - vxy_offset) + j + vxy_offset; // position in continuous space
 
             float distance = sqrt(pow(vx - xc, 2)+pow(vy - yc, 2));    // Distance D
 
             if (distance != 0) {
-                Gx = getVBoundaryCheck(GxArray, w, h, vx-vxy_offset, vy-vxy_offset);
-                Gy = getVBoundaryCheck(GyArray, w, h, vx-vxy_offset, vy-vxy_offset);
+                Gx = getVBoundaryCheck(GxArray, GxGyMagnification*w, GxGyMagnification*h, GxGyMagnification*(vx - vxy_offset) + vx_shift, GxGyMagnification*(vy - vxy_offset));
+                Gy = getVBoundaryCheck(GyArray, GxGyMagnification*w, GxGyMagnification*h, GxGyMagnification*(vx - vxy_offset), GxGyMagnification*(vy - vxy_offset) + vy_shift);
 
                 float GMag = sqrt(Gx * Gx + Gy * Gy);
 

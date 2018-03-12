@@ -84,7 +84,7 @@ public class CompareGradientEstimationCL {
         clBufferGy = context.createFloatBuffer(width * height, READ_WRITE);
 
         System.out.println("used device memory: " + (
-                        clBufferPx.getCLSize() +
+                clBufferPx.getCLSize() +
                         clBufferGx.getCLSize() +
                         clBufferGy.getCLSize())
                 / 1000000d + "MB"); // TODO: add size of GxInt and GyInt in total buffer size
@@ -100,8 +100,8 @@ public class CompareGradientEstimationCL {
 //            GxGyHeight = 2*height;}
 //        else {
 
-            GxGyWidth = width;
-            GxGyHeight = height;
+        GxGyWidth = width;
+        GxGyHeight = height;
 //    }
 
         assert (ip.getWidth() == GxGyWidth && ip.getHeight() == GxGyHeight);

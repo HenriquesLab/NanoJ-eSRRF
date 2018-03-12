@@ -25,9 +25,12 @@ public class RadialGradientConvergenceCL {
     static CLKernel kernelCalculateRGC, kernelCalculateGradient, kernelInterpolateGradient;
     static CLCommandQueue queue;
 
-    private final int width, height, widthM, heightM, magnification;
+    private final int width, height, widthM, heightM, magnification, GxGyMagnification;
     private final float fwhm;
     private float vxy_offset;
+    private int vx_shift;
+    private int vy_shift;
+
 //    private String GradMethod;
 
     public int nVectors = 12;
@@ -46,7 +49,9 @@ public class RadialGradientConvergenceCL {
         this.heightM = height * magnification;
         this.magnification = magnification;
         this.fwhm = fwhm;
-//        this.GradMethod = GradMethod;
+
+        if (GradMethod.equals("2-point local + interpolation")) this.GxGyMagnification = 2;
+        else this.GxGyMagnification = 1;
 
         //Create a context from GPU
         //context = CLContext.create( CLDevice.Type.GPU );
@@ -72,12 +77,16 @@ public class RadialGradientConvergenceCL {
             kernelCalculateGradient = program.createCLKernel("calculateGradient");
             // in this method the gradient is calculated in the centre of the designated pixel
             this.vxy_offset = 0.5f; // signed distance between the (0,0) continuous space position and the position at which the vector in the (0,0) position in the Gradient image is calculated
+            this.vx_shift = 0;
+            this.vy_shift = 0;
         }
 
         else if (GradMethod.equals("Robert's cross local gradient")){
             kernelCalculateGradient = program.createCLKernel("calculateGradientRobX");
             // in this method the gradient is estimated at the crossing of the pixels, therefore at an offset of 0.5 with respect to the pixel centre
-            this.vxy_offset = 0.0f;
+            this.vxy_offset = 0.0f; // signed distance between the (0,0) continuous space position and the position at which the vector in the (0,0) position in the Gradient image is calculated
+            this.vx_shift = 0;
+            this.vy_shift = 0;
         }
 
         else if (GradMethod.equals("2-point local + interpolation")){
@@ -85,7 +94,10 @@ public class RadialGradientConvergenceCL {
             kernelInterpolateGradient = program.createCLKernel("calculateGradient2p_Interpolation");
 
             // this method currently wrecks havock on your data
-            this.vxy_offset = 0.0f;
+            this.vxy_offset = 0.5f; // signed distance between the (0,0) continuous space position and the position at which the vector in the (0,0) position in the Gradient image is calculated
+            this.vx_shift = 1;
+            this.vy_shift = 1;
+
             clBufferGxInt = context.createFloatBuffer(4*width * height, READ_WRITE);
             clBufferGyInt = context.createFloatBuffer(4*width * height, READ_WRITE);
         }
@@ -148,10 +160,14 @@ public class RadialGradientConvergenceCL {
 
         kernelCalculateRGC.setArg( argn++, clBufferRGC); // make sure type is the same !!
         kernelCalculateRGC.setArg( argn++, magnification ); // make sure type is the same !!
+        kernelCalculateRGC.setArg( argn++, this.GxGyMagnification ); // make sure type is the same !!
         kernelCalculateRGC.setArg( argn++, fwhm ); // make sure type is the same !!
         kernelCalculateRGC.setArg( argn++, shiftX ); // make sure type is the same !!
         kernelCalculateRGC.setArg( argn++, shiftY ); // make sure type is the same !!
         kernelCalculateRGC.setArg( argn++, vxy_offset ); // make sure type is the same !!
+        kernelCalculateRGC.setArg( argn++, vx_shift ); // make sure type is the same !!,
+        kernelCalculateRGC.setArg( argn++, vy_shift ); // make sure type is the same !!
+
 
         // asynchronous write of data to GPU device,
         // followed by blocking read to get the computed results back.
