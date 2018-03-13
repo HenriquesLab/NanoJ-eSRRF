@@ -31,10 +31,17 @@ public class LiveSRRF_ implements PlugIn {
         if (imp == null) imp = IJ.openImage();
         imp.show();
 
+        // initilizaing string for gradient estimation choice
+        String[] GradMethods = new String[3];
+        GradMethods[0] = "3-point gradient (classic)";
+        GradMethods[1] = "Robert's cross local gradient";
+        GradMethods[2] = "2-point local + interpolation";
+
         NonBlockingGenericDialog gd = new NonBlockingGenericDialog("Radial Gradient Convergence");
         gd.addNumericField("Magnification", prefs.get("magnification", 4), 0);
         gd.addNumericField("FWHM (pixels)", prefs.get("fwhm", 3), 2);
         gd.addNumericField("Frames per SR image", prefs.get("nFrames", 0), 0);
+        gd.addChoice("Gradient estimation method", GradMethods, GradMethods[0]);
         gd.addCheckbox("Correct vibration", prefs.get("correctVibration", false));
         gd.addCheckbox("Correct sCMOS patterning", prefs.get("correctSCMOS", false));
         gd.addMessage("-=-= Reconstructions =-=-");
@@ -48,6 +55,7 @@ public class LiveSRRF_ implements PlugIn {
         int magnification = (int) gd.getNextNumber();
         float fwhm = (float) gd.getNextNumber();
         int nFrames = (int) gd.getNextNumber();
+        String GradChosenMethod = gd.getNextChoice();
         boolean correctVibration = gd.getNextBoolean();
         boolean correctSCMOS = gd.getNextBoolean();
 
@@ -83,10 +91,7 @@ public class LiveSRRF_ implements PlugIn {
         ImageProcessor ipRef = null; // reference slide for Cross-Correlation and vibration correction
         float[][] pixelsGRCBuffer = null; // buffer containing time-points for reconstructions
 
-        // For now LiveSRRF uses only the standard Gradient estimation
-        String GradMethod = "3-point gradient (classic)";
-
-        RadialGradientConvergenceCL rCL = new RadialGradientConvergenceCL(w, h, magnification, fwhm, GradMethod);
+        RadialGradientConvergenceCL rCL = new RadialGradientConvergenceCL(w, h, magnification, fwhm, GradChosenMethod);
         ThreadedCalculateReconstructions t = null; // calculates reconstructions in parallel
 
         float shiftX = 0;
@@ -125,7 +130,7 @@ public class LiveSRRF_ implements PlugIn {
             }
 
             // Calculate actual Radial-Gradient-Convergence
-            FloatProcessor fpRGC = rCL.calculateRGC(ip, shiftX, shiftY, GradMethod);
+            FloatProcessor fpRGC = rCL.calculateRGC(ip, shiftX, shiftY, GradChosenMethod);
             float[] pixelsRGC = (float[]) fpRGC.getPixels();
 
             // Update buffer
@@ -148,7 +153,7 @@ public class LiveSRRF_ implements PlugIn {
         if (showSTD) new ImagePlus(imp.getTitle()+" - SRRF STD", imsSRRF_std).show();
 
         rCL.release();
-        IJ.log(prof.report());
+        IJ.log(prof.report()); // TODO: look into profiler since iterations add up between consective runs (by design?)
     }
 
     private float[] calculateShift(ImageProcessor ipRef, ImageProcessor ip, int radius) {

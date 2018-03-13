@@ -31,9 +31,6 @@ public class RadialGradientConvergenceCL {
     private int vx_shift;
     private int vy_shift;
 
-//    private String GradMethod;
-
-    public int nVectors = 12;
 
     private CLBuffer<FloatBuffer>
             clBufferPx,
@@ -93,7 +90,7 @@ public class RadialGradientConvergenceCL {
             kernelCalculateGradient = program.createCLKernel("calculateGradient_2point");
             kernelInterpolateGradient = program.createCLKernel("calculateGradient2p_Interpolation");
 
-            // this method currently wrecks havock on your data
+            // this method currently wrecks havock on your data (now a bit less)
             this.vxy_offset = 0.5f; // signed distance between the (0,0) continuous space position and the position at which the vector in the (0,0) position in the Gradient image is calculated
             this.vx_shift = 1;
             this.vy_shift = 1;
@@ -111,12 +108,17 @@ public class RadialGradientConvergenceCL {
         clBufferGy = context.createFloatBuffer(width * height, READ_WRITE);
         clBufferRGC = context.createFloatBuffer(widthM * heightM, WRITE_ONLY);
 
-        System.out.println("used device memory: " + (
-                        clBufferPx.getCLSize() +
-                        clBufferGx.getCLSize() +
-                        clBufferGy.getCLSize() +
-                        clBufferRGC.getCLSize())
-                / 1000000d + "MB"); // TODO: add the clBufferGxInt and GyInt to the buffer size calculation
+        // estimating the memory necessary for running this instance of SRRF
+        double MemorySize = (clBufferPx.getCLSize() +
+                clBufferGx.getCLSize() +
+                clBufferGy.getCLSize() +
+                clBufferRGC.getCLSize());
+
+        if (GradMethod.equals("2-point local + interpolation")){
+            MemorySize += clBufferGxInt.getCLSize() + clBufferGyInt.getCLSize();
+        }
+        MemorySize /= 1000000d;
+        System.out.println("used device memory: " + MemorySize + "MB");
     }
 
     public synchronized FloatProcessor calculateRGC(ImageProcessor ip, float shiftX, float shiftY, String GradChosenMethod) {
@@ -152,11 +154,11 @@ public class RadialGradientConvergenceCL {
         if (GradChosenMethod.equals("2-point local + interpolation")){
             kernelCalculateRGC.setArg( argn++, clBufferGxInt ); // make sure type is the same !!
             kernelCalculateRGC.setArg( argn++, clBufferGyInt ); // make sure type is the same !!
-            }
+        }
         else {
             kernelCalculateRGC.setArg( argn++, clBufferGx ); // make sure type is the same !!
             kernelCalculateRGC.setArg( argn++, clBufferGy ); // make sure type is the same !!
-            }
+        }
 
         kernelCalculateRGC.setArg( argn++, clBufferRGC); // make sure type is the same !!
         kernelCalculateRGC.setArg( argn++, magnification ); // make sure type is the same !!
