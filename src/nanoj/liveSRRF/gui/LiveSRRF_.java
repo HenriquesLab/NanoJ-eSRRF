@@ -21,6 +21,8 @@ public class LiveSRRF_ implements PlugIn {
 
     private NanoJPrefs prefs = new NanoJPrefs(this.getClass().getName());
     private NanoJUsageTracker tracker = new NanoJUsageTracker("NanoJ-LiveSRRF", "20180413", "UA-61590656-4");
+    //private NanoJUsageTracker tracker = new NanoJUsageTracker("NanoJ-LiveSRRF", "20180413-GrahamDellaire", "UA-61590656-4");
+
 
     private NanoJProfiler prof = new NanoJProfiler();
     private ImageStack imsSRRF_max, imsSRRF_avg, imsSRRF_std;
@@ -35,7 +37,7 @@ public class LiveSRRF_ implements PlugIn {
         if (imp == null) imp = IJ.openImage();
         imp.show();
 
-        NonBlockingGenericDialog gd = new NonBlockingGenericDialog("Radial Gradient Convergence");
+        NonBlockingGenericDialog gd = new NonBlockingGenericDialog("Live SRRF (aka SRRF2) - In Development");
         gd.addNumericField("Magnification", prefs.get("magnification", 4), 0);
         gd.addNumericField("FWHM (pixels)", prefs.get("fwhm", 3), 2);
         gd.addNumericField("Frames per SR image", prefs.get("nFrames", 0), 0);
@@ -82,6 +84,7 @@ public class LiveSRRF_ implements PlugIn {
         }
 
         if (nFrames == 0) nFrames = imp.getImageStack().getSize();
+        nFrames = min(imp.getImageStack().getSize(), nFrames);
 
         ImageStack ims = imp.getImageStack();
         int nSlices = ims.getSize();
