@@ -24,12 +24,10 @@ public class RadialGradientConvergence_ implements PlugIn {
         GradMethods[1] = "Robert's cross local gradient";
         GradMethods[2] = "2-point local + interpolation";
 
-
         NonBlockingGenericDialog gd = new NonBlockingGenericDialog("Radial Gradient Convergence");
         gd.addNumericField("Magnification", prefs.get("magnification", 4), 0);
         gd.addNumericField("FWHM (pixels)", prefs.get("fwhm", 3), 2);
         gd.addChoice("Gradient estimation method", GradMethods, GradMethods[0]);
-
 
         gd.showDialog();
         if (gd.wasCanceled()) return;

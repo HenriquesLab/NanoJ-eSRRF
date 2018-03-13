@@ -1,5 +1,6 @@
 //#pragma OPENCL EXTENSION cl_khr_fp64: enable
 
+// cubic function for interpolation
 static float cubic(float x) {
     float a = 0.5f; // Catmull-Rom interpolation
     if (x < 0.0f) x = -x;
@@ -11,7 +12,8 @@ static float cubic(float x) {
     return z;
 }
 
-static float getInterpolatedValue(__global float* array, int const width, int const height, float const x, float const y) {
+// interpolation function: interpolate in continuous space with respect to the reference of the array
+static float getInterpolatedValue(__global float* array, int const width, int const height, float const x, float const y) { // TODO: review the grid position in the interpolation (seems offset)
     int u0 = (int) floor(x - 0.5f);
     int v0 = (int) floor(y - 0.5f);
     float q = 0.0f;
@@ -27,6 +29,7 @@ static float getInterpolatedValue(__global float* array, int const width, int co
     return q;
 }
 
+// check boundaries of the image and returns the gradient value
 static float getVBoundaryCheck(__global float* array, int const width, int const height, int const x, int const y) {
     int _x = min(max(x, 0), width-1);
     int _y = min(max(y, 0), height-1);
@@ -165,8 +168,8 @@ __kernel void calculateRadialGradientConvergence(
 
                 float GMag = sqrt(Gx * Gx + Gy * Gy);
 
-                float distanceWeight = (distance/(sigma*sigma*sigma))*exp(-(distance*distance)/(2*sigma*sigma));  // can use Taylor expansion there
-                distanceWeight = distanceWeight * distanceWeight;
+                float distanceWeight = distance*exp(-(distance*distance)/(2*sigma*sigma));  // TODO: dGauss: can use Taylor expansion there
+                distanceWeight = distanceWeight * distanceWeight;  // TODO: dGauss: what power is best? Let's FRC !
 
                 // Calculate perpendicular distance from (xc,yc) to gradient line through (vx,vy)
                 float Dk = fabs(Gy * (xc - vx) - Gx * (yc - vy)) / GMag;    // Dk = D*sin(theta)
