@@ -77,6 +77,10 @@ public class LiveSRRF_ implements PlugIn {
         prefs.set("showMAX", showMAX);
         prefs.save();
 
+        if (correctSCMOS) {
+            IJ.showMessage("SCMOS correction is disabled for now on purpose =)");
+        }
+
         if (nFrames == 0) nFrames = imp.getImageStack().getSize();
 
         ImageStack ims = imp.getImageStack();
