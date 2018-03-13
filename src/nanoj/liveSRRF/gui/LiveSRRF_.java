@@ -11,6 +11,7 @@ import ij.process.FloatProcessor;
 import ij.process.ImageProcessor;
 import nanoj.core2.NanoJPrefs;
 import nanoj.core2.NanoJProfiler;
+import nanoj.core2.NanoJUsageTracker;
 import nanoj.liveSRRF.RadialGradientConvergenceCL;
 
 import static java.lang.Math.*;
@@ -19,6 +20,8 @@ import static nanoj.core2.NanoJCrossCorrelation.calculateCrossCorrelationMap;
 public class LiveSRRF_ implements PlugIn {
 
     private NanoJPrefs prefs = new NanoJPrefs(this.getClass().getName());
+    private NanoJUsageTracker tracker = new NanoJUsageTracker("NanoJ-LiveSRRF", "20180413", "UA-61590656-4");
+
     private NanoJProfiler prof = new NanoJProfiler();
     private ImageStack imsSRRF_max, imsSRRF_avg, imsSRRF_std;
     private ImagePlus impCCM = null;
@@ -26,6 +29,7 @@ public class LiveSRRF_ implements PlugIn {
 
     @Override
     public void run(String arg) {
+        tracker.logUsage("LiveSRRF_");
 
         ImagePlus imp = WindowManager.getCurrentImage();
         if (imp == null) imp = IJ.openImage();
@@ -41,6 +45,13 @@ public class LiveSRRF_ implements PlugIn {
         gd.addCheckbox("Show AVG reconstruction", prefs.get("showAVG", false));
         gd.addCheckbox("Show STD reconstruction", prefs.get("showSTD", true));
         gd.addCheckbox("Show MAX reconstruction", prefs.get("showMAX", false));
+
+        gd.addMessage("-=-= CONFIDENTIAL =-=-");
+        gd.addMessage(
+                "This is a preview of the 'in development' version of the \n" +
+                        "SRRF2 engine developed by the Henriques lab @ UCL.\n" +
+                        "It is only meant to be used by researchers who received\n" +
+                        "a direct email by Ricardo Henriques.");
 
         gd.showDialog();
         if (gd.wasCanceled()) return;
