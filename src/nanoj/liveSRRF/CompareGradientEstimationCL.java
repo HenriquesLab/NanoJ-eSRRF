@@ -95,14 +95,13 @@ public class CompareGradientEstimationCL {
         int GxGyWidth;
         int GxGyHeight;
 
-//        if (GradChosenMethod.equals("2-point local + interpolation")){
-//            GxGyWidth = 2*width;
-//            GxGyHeight = 2*height;}
-//        else {
-
-        GxGyWidth = width;
-        GxGyHeight = height;
-//    }
+        if (GradChosenMethod.equals("2-point local + interpolation")){
+            GxGyWidth = 2*width;
+            GxGyHeight = 2*height;}
+        else {
+            GxGyWidth = width;
+            GxGyHeight = height;
+        }
 
         assert (ip.getWidth() == GxGyWidth && ip.getHeight() == GxGyHeight);
 
