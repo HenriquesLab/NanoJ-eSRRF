@@ -1,5 +1,6 @@
 //#pragma OPENCL EXTENSION cl_khr_fp64: enable
 
+// cubic function for interpolation
 static float cubic(float x) {
     float a = 0.5f; // Catmull-Rom interpolation
     if (x < 0.0f) x = -x;
@@ -11,7 +12,8 @@ static float cubic(float x) {
     return z;
 }
 
-static float getInterpolatedValue(__global float* array, int const width, int const height, float const x, float const y) {
+// interpolation function: interpolate in continuous space with respect to the reference of the array
+static float getInterpolatedValue(__global float* array, int const width, int const height, float const x, float const y) { // TODO: review the grid position in the interpolation (seems offset)
     int u0 = (int) floor(x - 0.5f);
     int v0 = (int) floor(y - 0.5f);
     float q = 0.0f;
@@ -27,12 +29,15 @@ static float getInterpolatedValue(__global float* array, int const width, int co
     return q;
 }
 
+// check boundaries of the image and returns the gradient value
 static float getVBoundaryCheck(__global float* array, int const width, int const height, int const x, int const y) {
     int _x = min(max(x, 0), width-1);
     int _y = min(max(y, 0), height-1);
     return array[_y*width+_x];
 }
 
+
+// First kernel: evaluating gradient from image: 3-point gradient --------------------------------------------------------------
 __kernel void calculateGradient(
     __global float* pixels,
     __global float* GxArray,
@@ -51,6 +56,26 @@ __kernel void calculateGradient(
 
     GxArray[offset] = - pixels[y * w + x0] + pixels[y * w + x1];
     GyArray[offset] = - pixels[y0 * w + x] + pixels[y1 * w + x];
+}
+
+// First kernel: evaluating gradient from image using Robert's cross ------------------------------------------
+__kernel void calculateGradientRobX(
+    __global float* pixels,
+    __global float* GxArray,
+    __global float* GyArray
+    ) {
+    int x1 = get_global_id(0);
+    int y1 = get_global_id(1);
+    int w = get_global_size(0);
+    int h = get_global_size(1);
+    int offset = y1 * w + x1;
+
+    int x0 = max(x1-1, 0);
+    int y0 = max(y1-1, 0);
+
+    // This calculates Robert's cross gradient and apply the rotation matrix 45 degrees to realign Gx and Gy to the image grid
+    GxArray[offset] = pixels[y0 * w + x1] - pixels[y1 * w + x0] + pixels[y1 * w + x1] - pixels[y0 * w + x0];
+    GyArray[offset] = - pixels[y0 * w + x1] + pixels[y1 * w + x0] + pixels[y1 * w + x1] - pixels[y0 * w + x0];
 }
 
 __kernel void calculateRadialGradientConvergence(
@@ -72,16 +97,15 @@ __kernel void calculateRadialGradientConvergence(
     int h = hM / magnification;
     int offset = yM * wM + xM;
 
-    float xc = (xM + 0.5) / magnification + shiftX;
+    float xc = (xM + 0.5) / magnification + shiftX; // continuous space position at the centre of magnified pixel
     float yc = (yM + 0.5) / magnification + shiftY;
 
     float CGLH = 0; // CGLH stands for Radiality original name - Culley-Gustafsson-Laine-Henriques transform
     float distanceWeightSum = 0;
 
     float vx, vy, Gx, Gy;
-    float sigma = fwhm / 2.354f; // need to ask user Sigma = 0.21 * lambda/NA in theory
-    float fradius = sigma * 2;
-    int radius = (int) fradius + 1;    // radius can be set to something sensible like 3*Sigma
+    float sigma = fwhm / 2.354f; // Sigma = 0.21 * lambda/NA in theory
+    int radius = (int) (sigma * 2) + 1;    // radius can be set to something sensible like 3*Sigma
 
     for (int j=-radius; j<=radius; j++) {
         for (int i=-radius; i<=radius; i++) {
@@ -96,15 +120,16 @@ __kernel void calculateRadialGradientConvergence(
 
                 float GMag = sqrt(Gx * Gx + Gy * Gy);
 
-                float distanceWeight = (distance/(sigma*sigma*sigma))*exp(-(distance*distance)/(2*sigma*sigma));  // can use Taylor expansion there
-                distanceWeight = distanceWeight * distanceWeight;
+                float distanceWeight = distance*exp(-(distance*distance)/(2*sigma*sigma));  // TODO: dGauss: can use Taylor expansion there
+                distanceWeight = distanceWeight * distanceWeight;  // TODO: dGauss: what power is best? Let's FRC !
 
                 // Calculate perpendicular distance from (xc,yc) to gradient line through (vx,vy)
                 float Dk = fabs(Gy * (xc - vx) - Gx * (yc - vy)) / GMag;    // Dk = D*sin(theta)
                 if (isnan(Dk)) Dk = distance; // this makes Dk = 0 in the next line
 
                 Dk = 1 - Dk / distance; // Dk is now between 0 to 1, 1 if vector points precisely to (xc, yx), Dk = 1-sin(theta)
-                Dk = fmax(Dk - 0.5f, 0)*2;
+//                Dk = fmax(Dk - 0.5f, 0)*2;
+
                 //Dk = Dk*Dk*Dk*Dk;   // i think it's better to apply non-linear functions at the CGH level
 //                if (Dk >= 0.75) Dk = 1;
 //                else Dk = 0;
@@ -119,8 +144,6 @@ __kernel void calculateRadialGradientConvergence(
         }
     }
     CGLH /= distanceWeightSum;
-//    if (CGLH >= 0) CGLH = pow(CGLH, radialitySensitivity);
-//    else CGLH = 0;
 
     float v = getInterpolatedValue(pixels, w, h, ((float) xM)/magnification + shiftX, ((float) yM)/magnification + shiftY);
     RGCArray[offset] = v * CGLH;

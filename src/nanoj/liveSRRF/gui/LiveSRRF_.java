@@ -19,10 +19,13 @@ import static nanoj.core2.NanoJCrossCorrelation.calculateCrossCorrelationMap;
 
 public class LiveSRRF_ implements PlugIn {
 
-    private NanoJPrefs prefs = new NanoJPrefs(this.getClass().getName());
-    private NanoJUsageTracker tracker = new NanoJUsageTracker("NanoJ-LiveSRRF", "20180413", "UA-61590656-4");
-    //private NanoJUsageTracker tracker = new NanoJUsageTracker("NanoJ-LiveSRRF", "20180413-GrahamDellaire", "UA-61590656-4");
+    private String user = "HenriquesLab";
+    private String version = "20180415-"+user;
 
+    private NanoJPrefs prefs = new NanoJPrefs(this.getClass().getName());
+    //private NanoJUsageTracker tracker = new NanoJUsageTracker("NanoJ-LiveSRRF", "20180413", "UA-61590656-4");
+    //private NanoJUsageTracker tracker = new NanoJUsageTracker("NanoJ-LiveSRRF", "20180413-GrahamDellaire", "UA-61590656-4");
+    private NanoJUsageTracker tracker = new NanoJUsageTracker("NanoJ-LiveSRRF", version, "UA-61590656-4");
 
     private NanoJProfiler prof = new NanoJProfiler();
     private ImageStack imsSRRF_max, imsSRRF_avg, imsSRRF_std;
@@ -37,7 +40,7 @@ public class LiveSRRF_ implements PlugIn {
         if (imp == null) imp = IJ.openImage();
         imp.show();
 
-        NonBlockingGenericDialog gd = new NonBlockingGenericDialog("Live SRRF (aka SRRF2) - In Development");
+        NonBlockingGenericDialog gd = new NonBlockingGenericDialog("Live SRRF (aka SRRF2) - In Development (for "+user+")");
         gd.addNumericField("Magnification", prefs.get("magnification", 4), 0);
         gd.addNumericField("FWHM (pixels)", prefs.get("fwhm", 3), 2);
         gd.addNumericField("Frames per SR image", prefs.get("nFrames", 0), 0);
@@ -252,6 +255,25 @@ public class LiveSRRF_ implements PlugIn {
                     }
                 }
                 for (int p = 0; p < nPixels; p++) pixelsStd[p] = (float) sqrt(pixelsStd[p]);
+
+//                for (int p = 0; p < nPixels; p++) {
+//
+//                    int counter = 0;
+//                    double pps = 0;
+//
+//                    for (int t0 = 1; t0 < nSlices; t0++) {
+//                        double v0 = abs(pixelsRGCBuffer[t0][p] - pixelsAvg[p]);
+//
+//                        for (int t1 = t0; t1 < nSlices; t1++) {
+//                            double v1 = abs(pixelsRGCBuffer[t1][p] - pixelsAvg[p]);
+//                            pps += v0 * v1;
+//                            counter++;
+//                        }
+//                    }
+//
+//                    pps /= counter;
+//                    pixelsStd[p] = (float) pps;
+//                }
             }
 
             int w = imsSRRF_max.getWidth();
