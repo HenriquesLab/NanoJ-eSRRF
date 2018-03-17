@@ -62,6 +62,7 @@ public class RadialGradientConvergenceCL {
             e.printStackTrace();
         }
         kernelCalculateGradient = program.createCLKernel("calculateGradientRobX");
+//        kernelCalculateGradient = program.createCLKernel("calculateGradient");
         kernelCalculateRGC = program.createCLKernel("calculateRadialGradientConvergence");
 
 

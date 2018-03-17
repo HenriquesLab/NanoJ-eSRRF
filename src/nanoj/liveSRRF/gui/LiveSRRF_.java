@@ -20,7 +20,7 @@ import static nanoj.core2.NanoJCrossCorrelation.calculateCrossCorrelationMap;
 public class LiveSRRF_ implements PlugIn {
 
     private String user = "HenriquesLab";
-    private String version = "20180415-"+user;
+    private String version = "20180416-"+user;
 
     private NanoJPrefs prefs = new NanoJPrefs(this.getClass().getName());
     //private NanoJUsageTracker tracker = new NanoJUsageTracker("NanoJ-LiveSRRF", "20180413", "UA-61590656-4");
@@ -251,7 +251,7 @@ public class LiveSRRF_ implements PlugIn {
             if (showSTD) {
                 for (int s = 1; s < nSlices; s++) {
                     for (int p = 0; p < nPixels; p++) {
-                        pixelsStd[p] += pow(pixelsRGCBuffer[s][p] - pixelsAvg[p], 2) / nPixels;
+                        pixelsStd[p] += pow(pixelsRGCBuffer[s][p] - pixelsAvg[p], 2) / (nSlices-1);
                     }
                 }
                 for (int p = 0; p < nPixels; p++) pixelsStd[p] = (float) sqrt(pixelsStd[p]);
