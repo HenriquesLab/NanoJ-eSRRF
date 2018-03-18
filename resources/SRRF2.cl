@@ -139,7 +139,6 @@ __kernel void calculateSRRF(
             }
         }
 
-        //float v = getInterpolatedValue(pixels, w, h, ((float) xM)/magnification + ShiftXArray[f] - .5f, ((float) yM)/magnification + ShiftYArray[f] - .5f, f);
         float v = getInterpolatedValue(pixels, w, h, ((float) xM)/magnification + ShiftXArray[f], ((float) yM)/magnification + ShiftYArray[f], f);
         CGLH[f] /= distanceWeightSum;
 

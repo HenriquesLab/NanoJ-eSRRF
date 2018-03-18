@@ -6,6 +6,7 @@ import ij.ImageStack;
 import ij.WindowManager;
 import ij.gui.NonBlockingGenericDialog;
 import ij.gui.PointRoi;
+import ij.measure.Calibration;
 import ij.plugin.PlugIn;
 import ij.process.FloatProcessor;
 import ij.process.ImageProcessor;
@@ -26,6 +27,7 @@ public class LiveSRRF2_ implements PlugIn {
     private String user = "HenriquesLab";
     //private String user = "AudreySalles";
     //private String user = "PaulReynolds";
+    //private String user = "GrahamDellaire";
     private String version = "20180418-"+user;
 
     private NanoJPrefs prefs = new NanoJPrefs(this.getClass().getName());
@@ -94,9 +96,16 @@ public class LiveSRRF2_ implements PlugIn {
         int hM = ims.getHeight() * magnification;
         int nPixelsM = wM * hM;
 
-        ImagePlus impSRRF = null;
+        ImagePlus impSRRF = new ImagePlus(imp.getTitle()+" - SRRF2");
+        impSRRF.copyScale(imp); // make sure we copy the pixel sizes correctly accross
+        Calibration cal = impSRRF.getCalibration();
+        cal.pixelWidth /= magnification;
+        cal.pixelHeight /= magnification;
+
         imsSRRF = new ImageStack(wM, hM);
+        //impSRRF.setStack(imsSRRF);
         ImageStack imsRawDataBuffer = new ImageStack(w, h);
+        boolean firstTime = true;
 
         ImageProcessor ipRef = null; // reference slide for Cross-Correlation and vibration correction
 
@@ -156,10 +165,12 @@ public class LiveSRRF2_ implements PlugIn {
                         imsSRRF.setSliceLabel(srrf2CL.reconstructionLabel[r - 1], imsSRRF.getSize());
                     }
                 }
-                if (impSRRF == null) {
-                    impSRRF = new ImagePlus(imp.getTitle()+" - SRRF2", imsSRRF);
+                if (firstTime) {
+                    impSRRF.setStack(imsSRRF);
                     impSRRF.show();
+                    impSRRF.setSlice(imsSRRF.getSize());
                     IJ.run(impSRRF, "Enhance Contrast", "saturated=0.35");
+                    firstTime = false;
                 }
                 else {
                     impSRRF.setSlice(imsSRRF.getSize());
@@ -174,6 +185,7 @@ public class LiveSRRF2_ implements PlugIn {
         }
 
         impSRRF.setStack(imsSRRF);
+        IJ.run(impSRRF, "Enhance Contrast", "saturated=0.35");
 
         srrf2CL.release();
         IJ.log(prof.report());
