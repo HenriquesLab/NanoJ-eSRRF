@@ -2,7 +2,6 @@ package nanoj.liveSRRF;
 
 import com.jogamp.opencl.*;
 import ij.IJ;
-import ij.ImagePlus;
 import ij.ImageStack;
 import ij.process.FloatProcessor;
 import nanoj.core2.NanoJProfiler;
@@ -19,7 +18,6 @@ import static java.lang.Math.abs;
 import static java.lang.Math.max;
 import static java.lang.Math.min;
 import static nanoj.core2.NanoJCL.fillBuffer;
-import static nanoj.core2.NanoJCL.grabBuffer;
 import static nanoj.core2.NanoJImageStackArrayConvertion.ImageStackToFloatArray;
 
 public class SRRF2CL {
@@ -29,13 +27,13 @@ public class SRRF2CL {
 
     public static String[] reconstructionLabel = new String[]{
             "Raw Average",
-            "SRRF Maximum",
-            "SRRF Average",
-            "SRRF StdDev",
-            "SRRF 2nd-Order",
-            "SRRF 3rd-Order",
-            "SRRF 4th-Order",
-            "SRRF Fusion"
+            "SRRF2 Maximum",
+            "SRRF2 Average",
+            "SRRF2 StdDev",
+            "SRRF2 2nd-Order",
+            "SRRF2 3rd-Order",
+            "SRRF2 4th-Order",
+            "SRRF2 Fusion"
     };
 
     static CLContext context;
@@ -97,7 +95,7 @@ public class SRRF2CL {
         clBufferGy = context.createFloatBuffer(width * height * nFrames, READ_WRITE);
         clBufferSRRF = context.createFloatBuffer(widthM * heightM * 7, READ_WRITE);
         clBufferSRRF_CVH = context.createFloatBuffer(widthM * heightM * 7, READ_WRITE);
-        clBufferSRRF_CV  = context.createFloatBuffer(widthM * heightM * 7, READ_WRITE);
+        clBufferSRRF_CV  = context.createFloatBuffer(widthM * heightM * 7, WRITE_ONLY);
 
         System.out.println("used device memory: " + (
                 clBufferPx.getCLSize() +
@@ -120,7 +118,7 @@ public class SRRF2CL {
         int argn;
 
         // prepare and upload CL buffers
-        IJ.showStatus("Uploading data to GPU...");
+        showStatus("Uploading data to GPU...");
         int id = prof.startTimer();
         fillBuffer(clBufferPx, dataPx);
         fillBuffer(clBufferShiftX, shiftX);
@@ -132,7 +130,7 @@ public class SRRF2CL {
 
         // make kernelCalculateRGC assignment
         argn = 0;
-        IJ.showStatus("Calculating gradient...");
+        showStatus("Calculating gradient...");
         id = prof.startTimer();
         kernelCalculateGradient.setArg( argn++, clBufferPx ); // make sure type is the same !!
         kernelCalculateGradient.setArg( argn++, clBufferGx ); // make sure type is the same !!
@@ -143,7 +141,7 @@ public class SRRF2CL {
 
         // make kernelCalculateSRRF assignment
         argn = 0;
-        IJ.showStatus("Calculating SRRF...");
+        showStatus("Calculating SRRF...");
         id = prof.startTimer();
         kernelCalculateSRRF.setArg( argn++, clBufferPx ); // make sure type is the same !!
         kernelCalculateSRRF.setArg( argn++, clBufferGx ); // make sure type is the same !!
@@ -158,7 +156,7 @@ public class SRRF2CL {
         prof.recordTime("kernelCalculateSRRF", prof.endTimer(id));
 
         argn = 0;
-        IJ.showStatus("Convolving SRRF...");
+        showStatus("Convolving SRRF...");
         float sigmaM = magnification * fwhm / 2.354f;
         id = prof.startTimer();
         kernelConvolveH.setArg( argn++, clBufferSRRF ); // make sure type is the same !!
@@ -181,7 +179,7 @@ public class SRRF2CL {
         prof.recordTime("waiting for queue to finish", prof.endTimer(id));
 
         // download CL buffers
-        IJ.showStatus("Downloading data from GPU...");
+        showStatus("Downloading data from GPU...");
         id = prof.startTimer();
         queue.putReadBuffer(clBufferSRRF, true);
         queue.putReadBuffer(clBufferSRRF_CV, true);
@@ -192,7 +190,7 @@ public class SRRF2CL {
         ImageStack imsSRRF = new ImageStack(widthM, heightM);
 
         // grab interpolated data frame and calculate its max and min
-        IJ.showStatus("Preparing data...");
+        showStatus("Preparing data...");
         float[] RAW_AVE = new float[whM];
         float RAW_AVE_MAX = -Float.MAX_VALUE;
         float RAW_AVE_MIN =  Float.MAX_VALUE;
@@ -213,20 +211,25 @@ public class SRRF2CL {
             float[] dataConvolved = new float[whM];
             float dataMax = -Float.MAX_VALUE;
             float dataMin = Float.MAX_VALUE;
+            float dataConvMax = -Float.MAX_VALUE;
+            float dataConvMin = Float.MAX_VALUE;
 
             for(int n=0; n<whM; n++) {
                 data[n] = bufferSRRF.get(n+offset);
+                dataMax = max(data[n], dataMax);
+                dataMin = min(data[n], dataMin);
                 dataConvolved[n] = bufferSRRF_CV.get(n+offset);
-                dataMax = max(dataConvolved[n], dataMax);
-                dataMin = min(dataConvolved[n], dataMin);
+                dataConvMax = max(dataConvolved[n], dataConvMax);
+                dataConvMin = min(dataConvolved[n], dataConvMin);
             }
 
             // renormalise data and calculate erro map
-            float gain = (RAW_AVE_MAX - RAW_AVE_MIN) / dataMax;
+            float gain     = (RAW_AVE_MAX - RAW_AVE_MIN) / dataMax;
+            float gainConv = (RAW_AVE_MAX - RAW_AVE_MIN) / dataConvMax;
             if (r>0) for (int n = 0; n < whM; n++) data[n] = (data[n] - dataMin) * gain + RAW_AVE_MIN;
 
             for (int n = 0; n < whM; n++) {
-                dataConvolved[n] = (dataConvolved[n] - dataMin) * gain + RAW_AVE_MIN;
+                dataConvolved[n] = (dataConvolved[n] - dataConvMin) * gainConv + RAW_AVE_MIN;
                 errorMap[r][n] = abs(RAW_AVE[n] - dataConvolved[n]);
                 errorMax[n] = max(errorMax[n], errorMap[r][n]);
             }
@@ -234,14 +237,15 @@ public class SRRF2CL {
             imsSRRF.addSlice(new FloatProcessor(widthM, heightM, data));
         }
 
-        IJ.showStatus("Calculating SRRF Fusion...");
+        showStatus("Calculating SRRF Fusion...");
         float[] fusion = new float[whM];
         double[] weightSum = new double[whM];
 
         for (int r=0; r<7; r++) {
             float[] pixelsSRRF = (float[]) imsSRRF.getProcessor(r+1).getPixels();
             for (int n = 0; n < whM; n++) {
-                double w = (errorMax[n]) / max(errorMap[r][n], 1);
+                //double w = (errorMax[n]) / max(errorMap[r][n], 1);
+                double w = 1 / max(errorMap[r][n], 1);
                 fusion[n] += pixelsSRRF[n] * w;
                 weightSum[n] += w;
             }
@@ -250,6 +254,10 @@ public class SRRF2CL {
         imsSRRF.addSlice(new FloatProcessor(widthM, heightM, fusion));
 
         return imsSRRF;
+    }
+
+    public void showStatus(String text) {
+        IJ.showStatus("SRRF2: "+text);
     }
 
     public void release() {

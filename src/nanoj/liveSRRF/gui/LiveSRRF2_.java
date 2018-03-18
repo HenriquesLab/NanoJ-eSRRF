@@ -14,20 +14,24 @@ import nanoj.core2.NanoJProfiler;
 import nanoj.core2.NanoJUsageTracker;
 import nanoj.liveSRRF.SRRF2CL;
 
+import java.awt.*;
+
 import static java.lang.Math.*;
 import static nanoj.core2.NanoJCrossCorrelation.calculateCrossCorrelationMap;
 
 public class LiveSRRF2_ implements PlugIn {
 
-    //private String user = "HenriquesLab";
+    private Font headerFont = new Font("Arial", Font.BOLD, 16);
+
+    private String user = "HenriquesLab";
     //private String user = "AudreySalles";
-    private String user = "PaulReynolds";
+    //private String user = "PaulReynolds";
     private String version = "20180418-"+user;
 
     private NanoJPrefs prefs = new NanoJPrefs(this.getClass().getName());
     private NanoJUsageTracker tracker = new NanoJUsageTracker("NanoJ-LiveSRRF", version, "UA-61590656-4");
-
     private NanoJProfiler prof = new NanoJProfiler();
+
     private ImageStack imsSRRF;
     private ImagePlus impCCM = null;
     private boolean showAllReconstructions;
@@ -41,15 +45,15 @@ public class LiveSRRF2_ implements PlugIn {
         imp.show();
 
         NonBlockingGenericDialog gd = new NonBlockingGenericDialog("Live SRRF (aka SRRF2) - In Development (for "+user+")");
-        gd.addNumericField("Magnification", prefs.get("magnification", 4), 0);
-        gd.addNumericField("FWHM (pixels)", prefs.get("fwhm", 3), 2);
-        gd.addNumericField("Frames per SR image", prefs.get("nFrames", 0), 0);
+        gd.addNumericField("Magnification (default: 4)", prefs.get("magnification", 4), 0);
+        gd.addNumericField("FWHM (pixels, default: 3)", prefs.get("fwhm", 3), 2);
+        gd.addNumericField("Frames_per_time-point (0 - auto)", prefs.get("nFrames", 0), 0);
         gd.addCheckbox("Correct vibration", prefs.get("correctVibration", false));
         gd.addCheckbox("Correct sCMOS patterning", prefs.get("correctSCMOS", false));
-//        gd.addMessage("-=-= Reconstructions =-=-");
-//        gd.addCheckbox("Show all reconstruction", prefs.get("showAllReconstructions", false));
+        gd.addMessage("-=-= Reconstructions =-=-\n", headerFont);
+        gd.addCheckbox("Show_all reconstruction", prefs.get("showAllReconstructions", false));
 
-        gd.addMessage("-=-= CONFIDENTIAL =-=-");
+        gd.addMessage("-=-= CONFIDENTIAL =-=-\n", headerFont);
         gd.addMessage(
                 "This is a preview of the 'in development' version of the \n" +
                         "SRRF2 engine developed by the Henriques lab @ UCL.\n" +
@@ -64,7 +68,7 @@ public class LiveSRRF2_ implements PlugIn {
         int nFrames = (int) gd.getNextNumber();
         boolean correctVibration = gd.getNextBoolean();
         boolean correctSCMOS = gd.getNextBoolean();
-//        boolean showAllReconstructions = gd.getNextBoolean();
+        boolean showAllReconstructions = gd.getNextBoolean();
 
         prefs.set("magnification", (float) magnification);
         prefs.set("fwhm", fwhm);
@@ -72,7 +76,7 @@ public class LiveSRRF2_ implements PlugIn {
         prefs.set("correctVibration", correctVibration);
         prefs.set("correctSCMOS", correctSCMOS);
 
-//        prefs.set("showAllReconstructions", showAllReconstructions);
+        prefs.set("showAllReconstructions", showAllReconstructions);
         prefs.save();
 
         if (correctSCMOS) {
@@ -90,6 +94,7 @@ public class LiveSRRF2_ implements PlugIn {
         int hM = ims.getHeight() * magnification;
         int nPixelsM = wM * hM;
 
+        ImagePlus impSRRF = null;
         imsSRRF = new ImageStack(wM, hM);
         ImageStack imsRawDataBuffer = new ImageStack(w, h);
 
@@ -100,6 +105,10 @@ public class LiveSRRF2_ implements PlugIn {
         float[] shiftX = new float[nFrames];
         float[] shiftY = new float[nFrames];
         int counter = 0;
+
+        //////////////////////////////////////
+        // !!! MAIN LOOP THROUGH FRAMES !!! //
+        //////////////////////////////////////
 
         for (int s=1; s<=nSlices; s++) {
             // Check if user is cancelling calculation
@@ -134,20 +143,37 @@ public class LiveSRRF2_ implements PlugIn {
             }
 
             if (counter == nFrames-1 || s == nSlices) {
+                int id = prof.startTimer();
                 ImageStack imsResults = srrf2CL.calculateSRRF(imsRawDataBuffer, shiftX, shiftY);
-                for (int r=1; r<=imsResults.getSize(); r++) {
-                    imsSRRF.addSlice(imsResults.getProcessor(r));
-                    imsSRRF.setSliceLabel(srrf2CL.reconstructionLabel[r-1], imsSRRF.getSize());
+                int nReconstructions = imsResults.getSize();
+                if (!showAllReconstructions) {
+                    imsSRRF.addSlice(imsResults.getProcessor(nReconstructions));
+                    imsSRRF.setSliceLabel(srrf2CL.reconstructionLabel[nReconstructions-1], imsSRRF.getSize());
+                }
+                else {
+                    for (int r = 1; r <= imsResults.getSize(); r++) {
+                        imsSRRF.addSlice(imsResults.getProcessor(r));
+                        imsSRRF.setSliceLabel(srrf2CL.reconstructionLabel[r - 1], imsSRRF.getSize());
+                    }
+                }
+                if (impSRRF == null) {
+                    impSRRF = new ImagePlus(imp.getTitle()+" - SRRF2", imsSRRF);
+                    impSRRF.show();
+                    IJ.run(impSRRF, "Enhance Contrast", "saturated=0.35");
+                }
+                else {
+                    impSRRF.setSlice(imsSRRF.getSize());
                 }
 
                 // reset buffers
                 imsRawDataBuffer = new ImageStack(w, h);
                 counter = 0;
+                prof.recordTime("full SRRF-frame calculation", prof.endTimer(id));
             }
             else counter++;
         }
 
-        new ImagePlus(imp.getTitle()+" - SRRF2", imsSRRF).show();
+        impSRRF.setStack(imsSRRF);
 
         srrf2CL.release();
         IJ.log(prof.report());
