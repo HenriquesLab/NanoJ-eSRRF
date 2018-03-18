@@ -2,9 +2,9 @@ package nanoj.liveSRRF;
 
 import com.jogamp.opencl.*;
 import ij.IJ;
+import ij.ImagePlus;
 import ij.ImageStack;
 import ij.process.FloatProcessor;
-import ij.process.ImageProcessor;
 import nanoj.core2.NanoJProfiler;
 import org.apache.commons.io.IOUtils;
 
@@ -15,9 +15,11 @@ import java.nio.FloatBuffer;
 import static com.jogamp.opencl.CLMemory.Mem.READ_ONLY;
 import static com.jogamp.opencl.CLMemory.Mem.READ_WRITE;
 import static com.jogamp.opencl.CLMemory.Mem.WRITE_ONLY;
+import static java.lang.Math.abs;
 import static java.lang.Math.max;
 import static java.lang.Math.min;
 import static nanoj.core2.NanoJCL.fillBuffer;
+import static nanoj.core2.NanoJCL.grabBuffer;
 import static nanoj.core2.NanoJImageStackArrayConvertion.ImageStackToFloatArray;
 
 public class SRRF2CL {
@@ -32,24 +34,23 @@ public class SRRF2CL {
             "SRRF StdDev",
             "SRRF 2nd-Order",
             "SRRF 3rd-Order",
-            "SRRF 4th-Order"
+            "SRRF 4th-Order",
+            "SRRF Fusion"
     };
 
     static CLContext context;
-    static CLProgram program;
-    static CLKernel kernelCalculateRGC, kernelCalculateGradient, kernelCalculateSRRF;
+    static CLProgram programSRRF2, programConvolve2DIntegratedGaussian;
+    static CLKernel kernelCalculateGradient, kernelCalculateSRRF, kernelConvolveH, kernelConvolveV;
     static CLCommandQueue queue;
 
     private final int width, height, widthM, heightM, nFrames, magnification, whM;
     private final float fwhm;
 
-
-
     private CLBuffer<FloatBuffer>
             clBufferPx,
             clBufferGx, clBufferGy,
             clBufferShiftX, clBufferShiftY,
-            clBufferSRRF;
+            clBufferSRRF, clBufferSRRF_CVH, clBufferSRRF_CV;
 
     public SRRF2CL(int width, int height, int nFrames, int magnification, float fwhm) {
         this.nFrames = nFrames;
@@ -78,27 +79,35 @@ public class SRRF2CL {
             InputStream programStream = RadialGradientConvergenceCL.class.getResourceAsStream("/SRRF2.cl");
             String programString = IOUtils.toString(programStream);
             programString = programString.replace("MAX_FRAMES", ""+nFrames);
-            program = context.createProgram(programString).build();
+            programSRRF2 = context.createProgram(programString).build();
+
+            programConvolve2DIntegratedGaussian = context.createProgram(RadialGradientConvergenceCL.class.getResourceAsStream("/Convolve2DIntegratedGaussian.cl")).build();
         } catch (IOException e) {
             e.printStackTrace();
         }
-        kernelCalculateGradient = program.createCLKernel("calculateGradientRobX");
-//        kernelCalculateGradient = program.createCLKernel("calculateGradient");
-        kernelCalculateSRRF = program.createCLKernel("calculateSRRF");
+        kernelCalculateGradient = programSRRF2.createCLKernel("calculateGradientRobX");
+        kernelCalculateSRRF = programSRRF2.createCLKernel("calculateSRRF");
+        kernelConvolveH = programConvolve2DIntegratedGaussian.createCLKernel("convolveHorizontal");
+        kernelConvolveV = programConvolve2DIntegratedGaussian.createCLKernel("convolveVertical");
 
         clBufferPx = context.createFloatBuffer(width * height * nFrames, READ_ONLY);
         clBufferShiftX = context.createFloatBuffer(nFrames, READ_ONLY);
         clBufferShiftY = context.createFloatBuffer(nFrames, READ_ONLY);
         clBufferGx = context.createFloatBuffer(width * height * nFrames, READ_WRITE);
         clBufferGy = context.createFloatBuffer(width * height * nFrames, READ_WRITE);
-        clBufferSRRF = context.createFloatBuffer(widthM * heightM * 7, WRITE_ONLY);
+        clBufferSRRF = context.createFloatBuffer(widthM * heightM * 7, READ_WRITE);
+        clBufferSRRF_CVH = context.createFloatBuffer(widthM * heightM * 7, READ_WRITE);
+        clBufferSRRF_CV  = context.createFloatBuffer(widthM * heightM * 7, READ_WRITE);
 
         System.out.println("used device memory: " + (
                 clBufferPx.getCLSize() +
+                        clBufferShiftX.getCLSize() +
+                        clBufferShiftY.getCLSize() +
                         clBufferGx.getCLSize() +
                         clBufferGy.getCLSize() +
-                        //clBufferRGC.getCLSize() +
-                        clBufferSRRF.getCLSize())
+                        clBufferSRRF.getCLSize() +
+                        clBufferSRRF_CVH.getCLSize() +
+                        clBufferSRRF_CV.getCLSize())
                 / 1000000d + "MB");
     }
 
@@ -146,50 +155,99 @@ public class SRRF2CL {
         kernelCalculateSRRF.setArg( argn++, magnification ); // make sure type is the same !!
         kernelCalculateSRRF.setArg( argn++, fwhm ); // make sure type is the same !!
         queue.put2DRangeKernel(kernelCalculateSRRF, 0, 0, widthM, heightM, 0, 0);
-        IJ.showStatus("Waiting for GPU to finish...");
-        queue.finish();
         prof.recordTime("kernelCalculateSRRF", prof.endTimer(id));
+
+        argn = 0;
+        IJ.showStatus("Convolving SRRF...");
+        float sigmaM = magnification * fwhm / 2.354f;
+        id = prof.startTimer();
+        kernelConvolveH.setArg( argn++, clBufferSRRF ); // make sure type is the same !!
+        kernelConvolveH.setArg( argn++, clBufferSRRF_CVH ); // make sure type is the same !!
+        kernelConvolveH.setArg( argn++, 0 ); // make sure type is the same !!
+        kernelConvolveH.setArg( argn++, 7 ); // make sure type is the same !!
+        kernelConvolveH.setArg( argn++, sigmaM); // make sure type is the same !!
+        queue.put2DRangeKernel(kernelConvolveH, 0, 0, widthM, heightM, 0, 0);
+        argn = 0;
+        kernelConvolveV.setArg( argn++, clBufferSRRF_CVH ); // make sure type is the same !!
+        kernelConvolveV.setArg( argn++, clBufferSRRF_CV ); // make sure type is the same !!
+        kernelConvolveV.setArg( argn++, 0 ); // make sure type is the same !!
+        kernelConvolveV.setArg( argn++, 7 ); // make sure type is the same !!
+        kernelConvolveV.setArg( argn++, sigmaM ); // make sure type is the same !!
+        queue.put2DRangeKernel(kernelConvolveV, 0, 0, widthM, heightM, 0, 0);
+        prof.recordTime("kernelConvolveH & kernelConvolveV", prof.endTimer(id));
+
+        id = prof.startTimer();
+        queue.finish(); // make sure everything is done...
+        prof.recordTime("waiting for queue to finish", prof.endTimer(id));
 
         // download CL buffers
         IJ.showStatus("Downloading data from GPU...");
         id = prof.startTimer();
         queue.putReadBuffer(clBufferSRRF, true);
+        queue.putReadBuffer(clBufferSRRF_CV, true);
+        prof.recordTime("downloading data from GPU", prof.endTimer(id));
 
-        FloatBuffer buffer = clBufferSRRF.getBuffer();
+        FloatBuffer bufferSRRF = clBufferSRRF.getBuffer();
+        FloatBuffer bufferSRRF_CV = clBufferSRRF_CV.getBuffer();
         ImageStack imsSRRF = new ImageStack(widthM, heightM);
 
-        // grab interpolated data frame
-        float[] SRRF_RAW = new float[whM];
-        float SRRF_RAW_MAX = -Float.MAX_VALUE;
-        float SRRF_RAW_MIN = Float.MAX_VALUE;
+        // grab interpolated data frame and calculate its max and min
+        IJ.showStatus("Preparing data...");
+        float[] RAW_AVE = new float[whM];
+        float RAW_AVE_MAX = -Float.MAX_VALUE;
+        float RAW_AVE_MIN =  Float.MAX_VALUE;
         for(int n=0; n<whM; n++) {
-            SRRF_RAW[n] = buffer.get(n);
-            SRRF_RAW_MAX = max(SRRF_RAW[n], SRRF_RAW_MAX);
-            SRRF_RAW_MIN = min(SRRF_RAW[n], SRRF_RAW_MIN);
+            RAW_AVE[n] = bufferSRRF.get(n);
+            RAW_AVE_MAX = max(RAW_AVE[n], RAW_AVE_MAX);
+            RAW_AVE_MIN = min(RAW_AVE[n], RAW_AVE_MIN);
         }
-        imsSRRF.addSlice(new FloatProcessor(widthM, heightM, SRRF_RAW));
 
-        // grab other data frames
-        for (int r=1; r<7; r++) {
+        // grab data from convolved frames
+        double[][] errorMap = new double[7][whM];
+        double[] errorMax = new double[whM];
+
+        for (int r=0; r<7; r++) {
             int offset = whM * r;
 
             float[] data = new float[whM];
+            float[] dataConvolved = new float[whM];
             float dataMax = -Float.MAX_VALUE;
             float dataMin = Float.MAX_VALUE;
 
             for(int n=0; n<whM; n++) {
-                data[n] = buffer.get(n+offset);
-                dataMax = max(data[n], dataMax);
-                dataMin = min(data[n], dataMin);
+                data[n] = bufferSRRF.get(n+offset);
+                dataConvolved[n] = bufferSRRF_CV.get(n+offset);
+                dataMax = max(dataConvolved[n], dataMax);
+                dataMin = min(dataConvolved[n], dataMin);
             }
 
-            // renormalise data
-            float gain = (SRRF_RAW_MAX - SRRF_RAW_MIN) / dataMax;
-            for(int n=0; n<whM; n++) {
-                data[n] = (data[n] - dataMin) * gain + SRRF_RAW_MIN;
+            // renormalise data and calculate erro map
+            float gain = (RAW_AVE_MAX - RAW_AVE_MIN) / dataMax;
+            if (r>0) for (int n = 0; n < whM; n++) data[n] = (data[n] - dataMin) * gain + RAW_AVE_MIN;
+
+            for (int n = 0; n < whM; n++) {
+                dataConvolved[n] = (dataConvolved[n] - dataMin) * gain + RAW_AVE_MIN;
+                errorMap[r][n] = abs(RAW_AVE[n] - dataConvolved[n]);
+                errorMax[n] = max(errorMax[n], errorMap[r][n]);
             }
+
             imsSRRF.addSlice(new FloatProcessor(widthM, heightM, data));
         }
+
+        IJ.showStatus("Calculating SRRF Fusion...");
+        float[] fusion = new float[whM];
+        double[] weightSum = new double[whM];
+
+        for (int r=0; r<7; r++) {
+            float[] pixelsSRRF = (float[]) imsSRRF.getProcessor(r+1).getPixels();
+            for (int n = 0; n < whM; n++) {
+                double w = (errorMax[n]) / max(errorMap[r][n], 1);
+                fusion[n] += pixelsSRRF[n] * w;
+                weightSum[n] += w;
+            }
+        }
+        for (int n = 0; n < whM; n++) fusion[n] /= weightSum[n];
+        imsSRRF.addSlice(new FloatProcessor(widthM, heightM, fusion));
 
         return imsSRRF;
     }

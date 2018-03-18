@@ -19,12 +19,12 @@ import static nanoj.core2.NanoJCrossCorrelation.calculateCrossCorrelationMap;
 
 public class LiveSRRF2_ implements PlugIn {
 
-    private String user = "HenriquesLab";
+    //private String user = "HenriquesLab";
+    //private String user = "AudreySalles";
+    private String user = "PaulReynolds";
     private String version = "20180418-"+user;
 
     private NanoJPrefs prefs = new NanoJPrefs(this.getClass().getName());
-    //private NanoJUsageTracker tracker = new NanoJUsageTracker("NanoJ-LiveSRRF", "20180413", "UA-61590656-4");
-    //private NanoJUsageTracker tracker = new NanoJUsageTracker("NanoJ-LiveSRRF", "20180413-GrahamDellaire", "UA-61590656-4");
     private NanoJUsageTracker tracker = new NanoJUsageTracker("NanoJ-LiveSRRF", version, "UA-61590656-4");
 
     private NanoJProfiler prof = new NanoJProfiler();
