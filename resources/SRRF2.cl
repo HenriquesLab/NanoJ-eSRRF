@@ -1,4 +1,13 @@
 //#pragma OPENCL EXTENSION cl_khr_fp64: enable
+#define fwhm $FWHM$
+#define sigma $SIGMA$
+#define magnification $MAGNIFICATION$
+#define w $WIDTH$
+#define h $HEIGHT$
+#define wh $WH$
+#define wM $WM$
+#define hM $HM$
+#define whM $WHM$
 
 // cubic function for interpolation
 static float cubic(float x) {
@@ -38,9 +47,6 @@ __kernel void calculateGradientRobX(
     ) {
     int x1 = get_global_id(0);
     int y1 = get_global_id(1);
-    int w = get_global_size(0);
-    int h = get_global_size(1);
-    int wh = w * h;
     int xyOffset = y1 * w + x1;
 
     int x0 = max(x1-1, 0);
@@ -67,29 +73,20 @@ __kernel void calculateSRRF(
     __global float* ShiftXArray,
     __global float* ShiftYArray,
     __global float* SRRFArray,
-    int const nFrames,
-    int const magnification,
-    float const fwhm
+    int const nFrames
     ) {
 
     int xM = get_global_id(0);
     int yM = get_global_id(1);
-    int wM = get_global_size(0);
-    int hM = get_global_size(1);
-    int w = wM / magnification;
-    int h = hM / magnification;
-    int wh = w * h;
-    int whM = wM * hM;
     int xyMOffset = yM * wM + xM;
 
-    float CGLH[MAX_FRAMES]; // note, MAX_FRAMES is passed before compile
+    float CGLH[$MAX_FRAMES$]; // note, MAX_FRAMES is passed before compile
     float vRAW_AVE = 0;
     float vSRRF_AVE = 0;
     float vSRRF_MAX = 0;
 
     // FIRST CALCULATE LOCAL GRADIENT CONVERGENCE (OLD RADIALITY!!)
 
-    float sigma = fwhm / 2.354f; // Sigma = 0.21 * lambda/NA in theory
     float sigma22 = 2 * sigma * sigma;
     int radius = (int) (sigma * 2) + 1;    // radius can be set to something sensible like 3*Sigma
     float Gx, Gy;
@@ -112,7 +109,7 @@ __kernel void calculateSRRF(
 
                 float dx = vxPixelCentred - xc;
                 float dy = vyPixelCentred - yc;
-                float distance = sqrt(dx * dx+ dy * dy);
+                float distance = sqrt(dx * dx + dy * dy);
 
                 if (distance != 0 && vxPixelCentred >=0 && vxPixelCentred < w && vyPixelCentred >=0 && vyPixelCentred < h) {
                     int p = fOffset + vyPixelOrigin * w + vxPixelOrigin;
@@ -137,7 +134,7 @@ __kernel void calculateSRRF(
                     // Accumulate Variables
                     float GdotR = (Gx * i * magnification + Gy * j * magnification); // tells you if vector was pointing inward or outward
                     if (GdotR <= 0) CGLH[f] += Dk; // vector was pointing inwards
-                    //else CGLH -= Dk; // vector was pointing outwards
+                    //else CGLH[f] -= Dk; // vector was pointing outwards
                 }
             }
         }

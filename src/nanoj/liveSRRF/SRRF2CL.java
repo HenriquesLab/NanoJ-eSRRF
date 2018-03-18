@@ -18,6 +18,7 @@ import static java.lang.Math.abs;
 import static java.lang.Math.max;
 import static java.lang.Math.min;
 import static nanoj.core2.NanoJCL.fillBuffer;
+import static nanoj.core2.NanoJCL.replaceFirst;
 import static nanoj.core2.NanoJImageStackArrayConvertion.ImageStackToFloatArray;
 
 public class SRRF2CL {
@@ -74,9 +75,19 @@ public class SRRF2CL {
 
         // create the program
         try {
+            float sigma = fwhm/2.354f;
             InputStream programStream = RadialGradientConvergenceCL.class.getResourceAsStream("/SRRF2.cl");
             String programString = IOUtils.toString(programStream);
-            programString = programString.replace("MAX_FRAMES", ""+nFrames);
+            programString = replaceFirst(programString,"$MAX_FRAMES$", ""+nFrames);
+            programString = replaceFirst(programString,"$MAGNIFICATION$", ""+magnification);
+            programString = replaceFirst(programString,"$FWHM$", ""+fwhm);
+            programString = replaceFirst(programString,"$SIGMA$", ""+sigma);
+            programString = replaceFirst(programString,"$WIDTH$", ""+width);
+            programString = replaceFirst(programString,"$HEIGHT$", ""+height);
+            programString = replaceFirst(programString,"$WH$", ""+(width*height));
+            programString = replaceFirst(programString,"$WM$", ""+(width*magnification));
+            programString = replaceFirst(programString,"$HM$", ""+(height*magnification));
+            programString = replaceFirst(programString,"$WHM$", ""+(width*height*magnification*magnification));
             programSRRF2 = context.createProgram(programString).build();
 
             programConvolve2DIntegratedGaussian = context.createProgram(RadialGradientConvergenceCL.class.getResourceAsStream("/Convolve2DIntegratedGaussian.cl")).build();
@@ -150,8 +161,6 @@ public class SRRF2CL {
         kernelCalculateSRRF.setArg( argn++, clBufferShiftY ); // make sure type is the same !!
         kernelCalculateSRRF.setArg( argn++, clBufferSRRF); // make sure type is the same !!
         kernelCalculateSRRF.setArg( argn++, nFrames); // make sure type is the same !!
-        kernelCalculateSRRF.setArg( argn++, magnification ); // make sure type is the same !!
-        kernelCalculateSRRF.setArg( argn++, fwhm ); // make sure type is the same !!
         queue.put2DRangeKernel(kernelCalculateSRRF, 0, 0, widthM, heightM, 0, 0);
         prof.recordTime("kernelCalculateSRRF", prof.endTimer(id));
 
