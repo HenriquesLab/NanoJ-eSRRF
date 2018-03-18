@@ -18,8 +18,6 @@ import static com.jogamp.opencl.CLMemory.Mem.WRITE_ONLY;
 import static java.lang.Math.max;
 import static java.lang.Math.min;
 import static nanoj.core2.NanoJCL.fillBuffer;
-import static nanoj.core2.NanoJCL.grabBuffer;
-import static nanoj.core2.NanoJImageStackArrayConvertion.ImageStackFromFloatArray;
 import static nanoj.core2.NanoJImageStackArrayConvertion.ImageStackToFloatArray;
 
 public class SRRF2CL {

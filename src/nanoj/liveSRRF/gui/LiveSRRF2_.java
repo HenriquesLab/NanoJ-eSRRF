@@ -20,7 +20,7 @@ import static nanoj.core2.NanoJCrossCorrelation.calculateCrossCorrelationMap;
 public class LiveSRRF2_ implements PlugIn {
 
     private String user = "HenriquesLab";
-    private String version = "20180416-"+user;
+    private String version = "20180418-"+user;
 
     private NanoJPrefs prefs = new NanoJPrefs(this.getClass().getName());
     //private NanoJUsageTracker tracker = new NanoJUsageTracker("NanoJ-LiveSRRF", "20180413", "UA-61590656-4");
@@ -46,8 +46,8 @@ public class LiveSRRF2_ implements PlugIn {
         gd.addNumericField("Frames per SR image", prefs.get("nFrames", 0), 0);
         gd.addCheckbox("Correct vibration", prefs.get("correctVibration", false));
         gd.addCheckbox("Correct sCMOS patterning", prefs.get("correctSCMOS", false));
-        gd.addMessage("-=-= Reconstructions =-=-");
-        gd.addCheckbox("Show all reconstruction", prefs.get("showAllReconstructions", false));
+//        gd.addMessage("-=-= Reconstructions =-=-");
+//        gd.addCheckbox("Show all reconstruction", prefs.get("showAllReconstructions", false));
 
         gd.addMessage("-=-= CONFIDENTIAL =-=-");
         gd.addMessage(
@@ -64,7 +64,7 @@ public class LiveSRRF2_ implements PlugIn {
         int nFrames = (int) gd.getNextNumber();
         boolean correctVibration = gd.getNextBoolean();
         boolean correctSCMOS = gd.getNextBoolean();
-        boolean showAllReconstructions = gd.getNextBoolean();
+//        boolean showAllReconstructions = gd.getNextBoolean();
 
         prefs.set("magnification", (float) magnification);
         prefs.set("fwhm", fwhm);
@@ -72,7 +72,7 @@ public class LiveSRRF2_ implements PlugIn {
         prefs.set("correctVibration", correctVibration);
         prefs.set("correctSCMOS", correctSCMOS);
 
-        prefs.set("showAllReconstructions", showAllReconstructions);
+//        prefs.set("showAllReconstructions", showAllReconstructions);
         prefs.save();
 
         if (correctSCMOS) {
