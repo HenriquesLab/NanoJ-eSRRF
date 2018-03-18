@@ -119,7 +119,6 @@ public class RadialGradientConvergenceCL {
         queue.putReadBuffer(clBufferRGC, true);
         prof.recordTime("RadialGradientConvergence.cl", prof.endTimer(id));
 
-        //clBufferRGC.getBuffer().get((float[]) fpRadiality.getPixels());
         grabBuffer(clBufferRGC, fpRGC);
 
         return fpRGC;
