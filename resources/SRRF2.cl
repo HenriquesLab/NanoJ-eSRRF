@@ -91,6 +91,7 @@ __kernel void calculateSRRF(
     int xyMOffset = yM * wM + xM;
 
     float CGLH[MAX_FRAMES]; // note, MAX_FRAMES is passed before compile
+    float vSRRF_RAW = 0;
     float vSRRF_AVE = 0;
     float vSRRF_MAX = 0;
 
@@ -148,35 +149,61 @@ __kernel void calculateSRRF(
             }
         }
 
+        float v = getInterpolatedValue(pixels, w, h, ((float) xM)/magnification + ShiftXArray[f], ((float) yM)/magnification + ShiftYArray[f], f);
         CGLH[f] /= distanceWeightSum;
-        CGLH[f] *= getInterpolatedValue(pixels, w, h, ((float) xM)/magnification + ShiftXArray[f], ((float) yM)/magnification + ShiftYArray[f], f);
+        CGLH[f] *= v;
 
         // CALCULATE SRRF AVERAGE AND MAXIMUM
+        int f1 = f+1;
+        vSRRF_RAW += (v - vSRRF_RAW) / f1;
         vSRRF_MAX = fmax(CGLH[f], vSRRF_MAX);
-        vSRRF_AVE += (CGLH[f] - vSRRF_AVE) / (f+1);
+        vSRRF_AVE += (CGLH[f] - vSRRF_AVE) / f1;
     }
 
-    SRRFArray[0 * whM + xyMOffset] = vSRRF_MAX;
-    SRRFArray[1 * whM + xyMOffset] = vSRRF_AVE;
+    SRRFArray[0 * whM + xyMOffset] = vSRRF_RAW;
+    SRRFArray[1 * whM + xyMOffset] = vSRRF_MAX;
+    SRRFArray[2 * whM + xyMOffset] = vSRRF_AVE;
 
     // CALCULATE SRRF TEMPORAL CORRELATIONS
 
     // mean subtract first
     for (int f=0; f<nFrames; f++) CGLH[f] -= vSRRF_AVE;
 
-    // now calculate temporal correlations
-    for (int tl = 0; tl < 8; tl++) { // assuming a max of 8 time-lags
-        int counter = 0;
-        double covariance = 0;
+    // calculate auto-correlation
+    float vSRRF_1ST = 0;
+    float vSRRF_2ND = 0;
+    float vSRRF_3RD = 0;
+    float vSRRF_4TH = 0;
 
-        for (int f=tl; f<nFrames; f++) {
-            counter++;
-            float v0 = CGLH[f-tl];
-            float v1 = CGLH[f];
-            covariance += (fabs(v0 * v1) - covariance) / counter;
+    for (int f=0; f<nFrames; f++) {
+        vSRRF_1ST += (CGLH[f] * CGLH[f] - vSRRF_1ST) / (f+1);
+        if (f<nFrames-1)
+            vSRRF_2ND += (fabs(CGLH[f] * CGLH[f+1]) - vSRRF_2ND) / (f+1);
+        if (f<nFrames-2)
+            vSRRF_3RD += (fabs(CGLH[f] * CGLH[f+1] * CGLH[f+2]) - vSRRF_3RD) / (f+1);
+        if (f<nFrames-3) {
+            float A = CGLH[f];
+            float B = CGLH[f+1];
+            float C = CGLH[f+2];
+            float D = CGLH[f+3];
+            float ABCD = A * B * C * D;
+            float AB = A * B;
+            float CD = C * D;
+            float AC = A * C;
+            float BD = B * D;
+            float AD = A * D;
+            float BC = B * C;
+            vSRRF_4TH += (fabs(ABCD - AB * CD - AC * BD - AD * BC) - vSRRF_4TH) / (f+1);
         }
-        //covariance = sqrt(covariance);
-        SRRFArray[(2+tl) * whM + xyMOffset] = covariance;
+
     }
+    vSRRF_1ST = sqrt(vSRRF_1ST);
+    vSRRF_2ND = sqrt(vSRRF_2ND);
+    vSRRF_3RD = pow(vSRRF_3RD, 1./3.);
+    vSRRF_4TH = pow(vSRRF_4TH, 1./4.);
+    SRRFArray[3 * whM + xyMOffset] = vSRRF_1ST;
+    SRRFArray[4 * whM + xyMOffset] = vSRRF_2ND;
+    SRRFArray[5 * whM + xyMOffset] = vSRRF_3RD;
+    SRRFArray[6 * whM + xyMOffset] = vSRRF_4TH;
 }
 

@@ -15,6 +15,8 @@ import java.nio.FloatBuffer;
 import static com.jogamp.opencl.CLMemory.Mem.READ_ONLY;
 import static com.jogamp.opencl.CLMemory.Mem.READ_WRITE;
 import static com.jogamp.opencl.CLMemory.Mem.WRITE_ONLY;
+import static java.lang.Math.max;
+import static java.lang.Math.min;
 import static nanoj.core2.NanoJCL.fillBuffer;
 import static nanoj.core2.NanoJCL.grabBuffer;
 import static nanoj.core2.NanoJImageStackArrayConvertion.ImageStackFromFloatArray;
@@ -30,7 +32,7 @@ public class SRRF2CL {
     static CLKernel kernelCalculateRGC, kernelCalculateGradient, kernelCalculateSRRF;
     static CLCommandQueue queue;
 
-    private final int width, height, widthM, heightM, nFrames, magnification;
+    private final int width, height, widthM, heightM, nFrames, magnification, whM;
     private final float fwhm;
 
     public int nVectors = 12;
@@ -47,6 +49,7 @@ public class SRRF2CL {
         this.height = height;
         this.widthM = width * magnification;
         this.heightM = height * magnification;
+        this.whM = widthM * heightM;
         this.magnification = magnification;
         this.fwhm = fwhm;
 
@@ -80,7 +83,7 @@ public class SRRF2CL {
         clBufferShiftY = context.createFloatBuffer(nFrames, READ_ONLY);
         clBufferGx = context.createFloatBuffer(width * height * nFrames, READ_WRITE);
         clBufferGy = context.createFloatBuffer(width * height * nFrames, READ_WRITE);
-        clBufferSRRF = context.createFloatBuffer(widthM * heightM * 10, WRITE_ONLY);
+        clBufferSRRF = context.createFloatBuffer(widthM * heightM * 7, WRITE_ONLY);
 
         System.out.println("used device memory: " + (
                 clBufferPx.getCLSize() +
@@ -143,11 +146,44 @@ public class SRRF2CL {
         IJ.showStatus("Downloading data from GPU...");
         id = prof.startTimer();
         queue.putReadBuffer(clBufferSRRF, true);
-        float[] data = new float[widthM * heightM * 10];
-        grabBuffer(clBufferSRRF, data);
-        prof.recordTime("dowloading data from GPU", prof.endTimer(id));
 
-        ImageStack imsSRRF = ImageStackFromFloatArray(data, widthM, heightM);
+        FloatBuffer buffer = clBufferSRRF.getBuffer();
+        ImageStack imsSRRF = new ImageStack(widthM, heightM);
+
+        // grab interpolated data frame
+        float[] SRRF_RAW = new float[whM];
+        float SRRF_RAW_MAX = -Float.MAX_VALUE;
+        float SRRF_RAW_MIN = Float.MAX_VALUE;
+        for(int n=0; n<whM; n++) {
+            SRRF_RAW[n] = buffer.get(n);
+            SRRF_RAW_MAX = max(SRRF_RAW[n], SRRF_RAW_MAX);
+            SRRF_RAW_MIN = min(SRRF_RAW[n], SRRF_RAW_MIN);
+        }
+        imsSRRF.addSlice(new FloatProcessor(widthM, heightM, SRRF_RAW));
+
+        // grab other data frames
+        for (int r=1; r<7; r++) {
+            int offset = whM * r;
+
+            float[] data = new float[whM];
+            float dataMax = -Float.MAX_VALUE;
+            float dataMin = Float.MAX_VALUE;
+
+            for(int n=0; n<whM; n++) {
+                data[n] = buffer.get(n+offset);
+                dataMax = max(data[n], dataMax);
+                dataMin = min(data[n], dataMin);
+            }
+
+            // renormalise data
+            float gain = (SRRF_RAW_MAX - SRRF_RAW_MIN) / dataMax;
+            for(int n=0; n<whM; n++) {
+                //data[n] = (data[n] - dataMin) * gain + SRRF_RAW_MIN;
+                data[n] = (data[n] - dataMin) * gain + SRRF_RAW_MIN;
+            }
+            imsSRRF.addSlice(new FloatProcessor(widthM, heightM, data));
+        }
+
         return imsSRRF;
     }
 
