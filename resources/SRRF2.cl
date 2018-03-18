@@ -2,21 +2,20 @@
 
 // cubic function for interpolation
 static float cubic(float x) {
-    float a = 0.5f; // Catmull-Rom interpolation
     if (x < 0.0f) x = -x;
     float z = 0.0f;
     if (x < 1.0f)
-        z = x * x * (x * (-a + 2.0f) + (a - 3.0f)) + 1.0f;
+        z = x * x * (x * (1.5f) + (- 2.5f)) + 1.0f;
     else if (x < 2.0f)
-        z = -a * x * x * x + 5.0f * a * x * x - 8.0f * a * x + 4.0f * a;
+        z = -.5f * x * x * x + 2.5f * x * x - 4.0f * x + 2.0f;
     return z;
 }
 
 // interpolation function: interpolate in continuous space with respect to the reference of the array
 static float getInterpolatedValue(__global float* array, int const width, int const height, float const x, float const y, float const f) { // TODO: review the grid position in the interpolation (seems offset)
-    int fwh = f * width * height;
-    int u0 = (int) floor(x - 0.5f);
-    int v0 = (int) floor(y - 0.5f);
+    const int fwh = f * width * height;
+    const int u0 = (int) floor(x - 0.5f);
+    const int v0 = (int) floor(y - 0.5f);
     float q = 0.0f;
     for (int j = 0; j <= 3; j++) {
         int v = min(max(v0 - 1 + j, 0), height-1);
@@ -28,13 +27,6 @@ static float getInterpolatedValue(__global float* array, int const width, int co
         q = q + p * cubic(y - (v + 0.5f));
     }
     return q;
-}
-
-// check boundaries of the image and returns the gradient value
-static float getVBoundaryCheck(__global float* array, int const width, int const height, int const x, int const y) {
-    int _x = min(max(x, 0), width-1);
-    int _y = min(max(y, 0), height-1);
-    return array[_y*width+_x];
 }
 
 // First kernel: evaluating gradient from image using Robert's cross ------------------------------------------
@@ -200,8 +192,8 @@ __kernel void calculateSRRF(
     }
     vSRRF_1ST = sqrt(vSRRF_1ST);
     vSRRF_2ND = sqrt(vSRRF_2ND);
-    vSRRF_3RD = pow(vSRRF_3RD, 1./3.);
-    vSRRF_4TH = pow(vSRRF_4TH, 1./4.);
+    vSRRF_3RD = pow(vSRRF_3RD, 0.3333333f);
+    vSRRF_4TH = pow(vSRRF_4TH, 0.25f);
     SRRFArray[3 * whM + xyMOffset] = vSRRF_1ST * vRAW_AVE;
     SRRFArray[4 * whM + xyMOffset] = vSRRF_2ND * vRAW_AVE;
     SRRFArray[5 * whM + xyMOffset] = vSRRF_3RD * vRAW_AVE;
