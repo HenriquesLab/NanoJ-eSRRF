@@ -25,7 +25,17 @@ import static nanoj.core2.NanoJImageStackArrayConvertion.ImageStackToFloatArray;
 public class SRRF2CL {
 
     public boolean DEBUG = false;
-    public NanoJProfiler prof = new NanoJProfiler();
+    private NanoJProfiler prof = new NanoJProfiler();
+
+    public static String[] reconstructionLabel = new String[]{
+            "Raw Average",
+            "SRRF Maximum",
+            "SRRF Average",
+            "SRRF StdDev",
+            "SRRF 2nd-Order",
+            "SRRF 3rd-Order",
+            "SRRF 4th-Order"
+    };
 
     static CLContext context;
     static CLProgram program;
@@ -35,7 +45,7 @@ public class SRRF2CL {
     private final int width, height, widthM, heightM, nFrames, magnification, whM;
     private final float fwhm;
 
-    public int nVectors = 12;
+
 
     private CLBuffer<FloatBuffer>
             clBufferPx,
@@ -178,7 +188,6 @@ public class SRRF2CL {
             // renormalise data
             float gain = (SRRF_RAW_MAX - SRRF_RAW_MIN) / dataMax;
             for(int n=0; n<whM; n++) {
-                //data[n] = (data[n] - dataMin) * gain + SRRF_RAW_MIN;
                 data[n] = (data[n] - dataMin) * gain + SRRF_RAW_MIN;
             }
             imsSRRF.addSlice(new FloatProcessor(widthM, heightM, data));

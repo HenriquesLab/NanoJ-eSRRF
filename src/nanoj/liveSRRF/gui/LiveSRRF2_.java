@@ -30,7 +30,7 @@ public class LiveSRRF2_ implements PlugIn {
     private NanoJProfiler prof = new NanoJProfiler();
     private ImageStack imsSRRF;
     private ImagePlus impCCM = null;
-    private boolean showAVG, showMAX, showSTD;
+    private boolean showAllReconstructions;
 
     @Override
     public void run(String arg) {
@@ -47,9 +47,7 @@ public class LiveSRRF2_ implements PlugIn {
         gd.addCheckbox("Correct vibration", prefs.get("correctVibration", false));
         gd.addCheckbox("Correct sCMOS patterning", prefs.get("correctSCMOS", false));
         gd.addMessage("-=-= Reconstructions =-=-");
-        gd.addCheckbox("Show AVG reconstruction", prefs.get("showAVG", false));
-        gd.addCheckbox("Show STD reconstruction", prefs.get("showSTD", true));
-        gd.addCheckbox("Show MAX reconstruction", prefs.get("showMAX", false));
+        gd.addCheckbox("Show all reconstruction", prefs.get("showAllReconstructions", false));
 
         gd.addMessage("-=-= CONFIDENTIAL =-=-");
         gd.addMessage(
@@ -66,6 +64,7 @@ public class LiveSRRF2_ implements PlugIn {
         int nFrames = (int) gd.getNextNumber();
         boolean correctVibration = gd.getNextBoolean();
         boolean correctSCMOS = gd.getNextBoolean();
+        boolean showAllReconstructions = gd.getNextBoolean();
 
         prefs.set("magnification", (float) magnification);
         prefs.set("fwhm", fwhm);
@@ -73,9 +72,7 @@ public class LiveSRRF2_ implements PlugIn {
         prefs.set("correctVibration", correctVibration);
         prefs.set("correctSCMOS", correctSCMOS);
 
-        prefs.set("showAVG", showAVG);
-        prefs.set("showSTD", showSTD);
-        prefs.set("showMAX", showMAX);
+        prefs.set("showAllReconstructions", showAllReconstructions);
         prefs.save();
 
         if (correctSCMOS) {
@@ -140,6 +137,7 @@ public class LiveSRRF2_ implements PlugIn {
                 ImageStack imsResults = srrf2CL.calculateSRRF(imsRawDataBuffer, shiftX, shiftY);
                 for (int r=1; r<=imsResults.getSize(); r++) {
                     imsSRRF.addSlice(imsResults.getProcessor(r));
+                    imsSRRF.setSliceLabel(srrf2CL.reconstructionLabel[r-1], imsSRRF.getSize());
                 }
 
                 // reset buffers

@@ -91,7 +91,7 @@ __kernel void calculateSRRF(
     int xyMOffset = yM * wM + xM;
 
     float CGLH[MAX_FRAMES]; // note, MAX_FRAMES is passed before compile
-    float vSRRF_RAW = 0;
+    float vRAW_AVE = 0;
     float vSRRF_AVE = 0;
     float vSRRF_MAX = 0;
 
@@ -104,8 +104,8 @@ __kernel void calculateSRRF(
 
     for (int f=0; f<nFrames; f++) {
         int fOffset = f * wh;
-        float xc = (xM + 0.5f) / magnification + ShiftXArray[f]; // continuous space position at the centre of magnified pixel
-        float yc = (yM + 0.5f) / magnification + ShiftYArray[f];
+        float xc = (xM + 0.5f) / magnification + ShiftXArray[f] + .5f; // continuous space position at the centre of magnified pixel
+        float yc = (yM + 0.5f) / magnification + ShiftYArray[f] + .5f; // this last .5f sum align the RGC to the interpolated magnified image - don't know why... but works
 
         float distanceWeightSum = 0;
         CGLH[f] = 0;
@@ -130,6 +130,7 @@ __kernel void calculateSRRF(
                     float GMag = sqrt(Gx * Gx + Gy * Gy);
 
                     float distanceWeight = distance*exp(-(distance*distance)/sigma22);  // TODO: dGauss: can use Taylor expansion there
+                    distanceWeight = distanceWeight * distanceWeight;
 
                     // Calculate perpendicular distance from (xc,yc) to gradient line through (vx,vy)
                     float Dk = fabs(Gy * (xc - vxPixelCentred) - Gx * (yc - vyPixelCentred)) / GMag;    // Dk = D*sin(theta)
@@ -149,20 +150,20 @@ __kernel void calculateSRRF(
             }
         }
 
+        //float v = getInterpolatedValue(pixels, w, h, ((float) xM)/magnification + ShiftXArray[f] - .5f, ((float) yM)/magnification + ShiftYArray[f] - .5f, f);
         float v = getInterpolatedValue(pixels, w, h, ((float) xM)/magnification + ShiftXArray[f], ((float) yM)/magnification + ShiftYArray[f], f);
         CGLH[f] /= distanceWeightSum;
-        CGLH[f] *= v;
 
         // CALCULATE SRRF AVERAGE AND MAXIMUM
         int f1 = f+1;
-        vSRRF_RAW += (v - vSRRF_RAW) / f1;
+        vRAW_AVE += (v - vRAW_AVE) / f1;
         vSRRF_MAX = fmax(CGLH[f], vSRRF_MAX);
         vSRRF_AVE += (CGLH[f] - vSRRF_AVE) / f1;
     }
 
-    SRRFArray[0 * whM + xyMOffset] = vSRRF_RAW;
-    SRRFArray[1 * whM + xyMOffset] = vSRRF_MAX;
-    SRRFArray[2 * whM + xyMOffset] = vSRRF_AVE;
+    SRRFArray[0 * whM + xyMOffset] = vRAW_AVE;
+    SRRFArray[1 * whM + xyMOffset] = vSRRF_MAX * vRAW_AVE;
+    SRRFArray[2 * whM + xyMOffset] = vSRRF_AVE * vRAW_AVE;
 
     // CALCULATE SRRF TEMPORAL CORRELATIONS
 
@@ -201,9 +202,9 @@ __kernel void calculateSRRF(
     vSRRF_2ND = sqrt(vSRRF_2ND);
     vSRRF_3RD = pow(vSRRF_3RD, 1./3.);
     vSRRF_4TH = pow(vSRRF_4TH, 1./4.);
-    SRRFArray[3 * whM + xyMOffset] = vSRRF_1ST;
-    SRRFArray[4 * whM + xyMOffset] = vSRRF_2ND;
-    SRRFArray[5 * whM + xyMOffset] = vSRRF_3RD;
-    SRRFArray[6 * whM + xyMOffset] = vSRRF_4TH;
+    SRRFArray[3 * whM + xyMOffset] = vSRRF_1ST * vRAW_AVE;
+    SRRFArray[4 * whM + xyMOffset] = vSRRF_2ND * vRAW_AVE;
+    SRRFArray[5 * whM + xyMOffset] = vSRRF_3RD * vRAW_AVE;
+    SRRFArray[6 * whM + xyMOffset] = vSRRF_4TH * vRAW_AVE;
 }
 
