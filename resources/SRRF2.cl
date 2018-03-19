@@ -118,8 +118,10 @@ __kernel void calculateSRRF(
 
                     float GMag = sqrt(Gx * Gx + Gy * Gy);
 
+                    //float distanceWeight = exp(-0.5f*pow((float) (distanceWeight/sigma),2)); // gaussian weight
+                    //float distanceWeight = exp(-0.5f*pow((float) (distanceWeight/(2*sigma)),4)); // gaussian flat top weight
                     float distanceWeight = distance*exp(-(distance*distance)/sigma22);  // TODO: dGauss: can use Taylor expansion there
-                    distanceWeight = distanceWeight * distanceWeight;
+                    distanceWeight = pow(distanceWeight, 2);
 
                     // Calculate perpendicular distance from (xc,yc) to gradient line through (vx,vy)
                     float Dk = fabs(Gy * (xc - vxPixelCentred) - Gx * (yc - vyPixelCentred)) / GMag;    // Dk = D*sin(theta)
