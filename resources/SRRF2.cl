@@ -141,6 +141,7 @@ __kernel void calculateSRRF(
 
         float v = getInterpolatedValue(pixels, w, h, ((float) xM)/magnification + ShiftXArray[f], ((float) yM)/magnification + ShiftYArray[f], f);
         CGLH[f] /= distanceWeightSum;
+        //CGLH[f] = fmax(CGLH[f] - 0.2f, 0) * 1.2;
 
         // CALCULATE SRRF AVERAGE AND MAXIMUM
         int f1 = f+1;

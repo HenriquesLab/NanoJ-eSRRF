@@ -225,18 +225,21 @@ public class SRRF2CL {
 
             for(int n=0; n<whM; n++) {
                 data[n] = bufferSRRF.get(n+offset);
-                dataMax = max(data[n], dataMax);
-                dataMin = min(data[n], dataMin);
+                if (!Float.isNaN(data[n])) {
+                    dataMax = max(data[n], dataMax);
+                    dataMin = min(data[n], dataMin);
+                }
                 dataConvolved[n] = bufferSRRF_CV.get(n+offset);
-                dataConvMax = max(dataConvolved[n], dataConvMax);
-                dataConvMin = min(dataConvolved[n], dataConvMin);
+                if (!Float.isNaN(dataConvolved[n])) {
+                    dataConvMax = max(dataConvolved[n], dataConvMax);
+                    dataConvMin = min(dataConvolved[n], dataConvMin);
+                }
             }
 
             // renormalise data and calculate erro map
             float gain     = (RAW_AVE_MAX - RAW_AVE_MIN) / dataMax;
             float gainConv = (RAW_AVE_MAX - RAW_AVE_MIN) / dataConvMax;
             if (r>0) for (int n = 0; n < whM; n++) data[n] = (data[n] - dataMin) * gain + RAW_AVE_MIN;
-
             for (int n = 0; n < whM; n++) {
                 dataConvolved[n] = (dataConvolved[n] - dataConvMin) * gainConv + RAW_AVE_MIN;
                 errorMap[r][n] = abs(RAW_AVE[n] - dataConvolved[n]);

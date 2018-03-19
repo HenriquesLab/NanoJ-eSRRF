@@ -186,6 +186,7 @@ public class LiveSRRF2_ implements PlugIn {
 
         impSRRF.setStack(imsSRRF);
         IJ.run(impSRRF, "Enhance Contrast", "saturated=0.35");
+        impSRRF.setTitle(imp.getTitle()+" - SRRF2");
 
         srrf2CL.release();
         IJ.log(prof.report());
