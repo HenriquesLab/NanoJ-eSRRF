@@ -5,10 +5,9 @@ import ij.IJ;
 import ij.ImageStack;
 import ij.process.FloatProcessor;
 import nanoj.core2.NanoJProfiler;
-import org.apache.commons.io.IOUtils;
+import nanoj.core2.NanoJThreadExecutor;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.FloatBuffer;
 
 import static com.jogamp.opencl.CLMemory.Mem.READ_ONLY;
@@ -16,8 +15,8 @@ import static com.jogamp.opencl.CLMemory.Mem.READ_WRITE;
 import static com.jogamp.opencl.CLMemory.Mem.WRITE_ONLY;
 import static java.lang.Math.abs;
 import static java.lang.Math.max;
-import static java.lang.Math.min;
 import static nanoj.core2.NanoJCL.fillBuffer;
+import static nanoj.core2.NanoJCL.getResourceAsString;
 import static nanoj.core2.NanoJCL.replaceFirst;
 import static nanoj.core2.NanoJImageStackArrayConvertion.ImageStackToFloatArray;
 
@@ -44,6 +43,7 @@ public class SRRF2CL {
 
     private final int width, height, widthM, heightM, nFrames, magnification, whM;
     private final float fwhm;
+    private int nGPUReconstructions = 7;
 
     private CLBuffer<FloatBuffer>
             clBufferPx,
@@ -76,8 +76,7 @@ public class SRRF2CL {
         // create the program
         try {
             float sigma = fwhm/2.354f;
-            InputStream programStream = RadialGradientConvergenceCL.class.getResourceAsStream("/SRRF2.cl");
-            String programString = IOUtils.toString(programStream);
+            String programString = getResourceAsString(RadialGradientConvergenceCL.class, "SRRF2.cl");
             programString = replaceFirst(programString,"$MAX_FRAMES$", ""+nFrames);
             programString = replaceFirst(programString,"$MAGNIFICATION$", ""+magnification);
             programString = replaceFirst(programString,"$FWHM$", ""+fwhm);
@@ -104,9 +103,9 @@ public class SRRF2CL {
         clBufferShiftY = context.createFloatBuffer(nFrames, READ_ONLY);
         clBufferGx = context.createFloatBuffer(width * height * nFrames, READ_WRITE);
         clBufferGy = context.createFloatBuffer(width * height * nFrames, READ_WRITE);
-        clBufferSRRF = context.createFloatBuffer(widthM * heightM * 7, READ_WRITE);
-        clBufferSRRF_CVH = context.createFloatBuffer(widthM * heightM * 7, READ_WRITE);
-        clBufferSRRF_CV  = context.createFloatBuffer(widthM * heightM * 7, WRITE_ONLY);
+        clBufferSRRF = context.createFloatBuffer(widthM * heightM * nGPUReconstructions, READ_WRITE);
+        clBufferSRRF_CVH = context.createFloatBuffer(widthM * heightM * nGPUReconstructions, READ_WRITE);
+        clBufferSRRF_CV  = context.createFloatBuffer(widthM * heightM * nGPUReconstructions, WRITE_ONLY);
 
         System.out.println("used device memory: " + (
                 clBufferPx.getCLSize() +
@@ -171,14 +170,14 @@ public class SRRF2CL {
         kernelConvolveH.setArg( argn++, clBufferSRRF ); // make sure type is the same !!
         kernelConvolveH.setArg( argn++, clBufferSRRF_CVH ); // make sure type is the same !!
         kernelConvolveH.setArg( argn++, 0 ); // make sure type is the same !!
-        kernelConvolveH.setArg( argn++, 7 ); // make sure type is the same !!
+        kernelConvolveH.setArg( argn++, nGPUReconstructions ); // make sure type is the same !!
         kernelConvolveH.setArg( argn++, sigmaM); // make sure type is the same !!
         queue.put2DRangeKernel(kernelConvolveH, 0, 0, widthM, heightM, 0, 0);
         argn = 0;
         kernelConvolveV.setArg( argn++, clBufferSRRF_CVH ); // make sure type is the same !!
         kernelConvolveV.setArg( argn++, clBufferSRRF_CV ); // make sure type is the same !!
         kernelConvolveV.setArg( argn++, 0 ); // make sure type is the same !!
-        kernelConvolveV.setArg( argn++, 7 ); // make sure type is the same !!
+        kernelConvolveV.setArg( argn++, nGPUReconstructions ); // make sure type is the same !!
         kernelConvolveV.setArg( argn++, sigmaM ); // make sure type is the same !!
         queue.put2DRangeKernel(kernelConvolveV, 0, 0, widthM, heightM, 0, 0);
         prof.recordTime("kernelConvolveH & kernelConvolveV", prof.endTimer(id));
@@ -201,52 +200,29 @@ public class SRRF2CL {
         // grab interpolated data frame and calculate its max and min
         showStatus("Preparing data...");
         float[] RAW_AVE = new float[whM];
-        float RAW_AVE_MAX = -Float.MAX_VALUE;
-        float RAW_AVE_MIN =  Float.MAX_VALUE;
-        for(int n=0; n<whM; n++) {
-            RAW_AVE[n] = bufferSRRF.get(n);
-            RAW_AVE_MAX = max(RAW_AVE[n], RAW_AVE_MAX);
-            RAW_AVE_MIN = min(RAW_AVE[n], RAW_AVE_MIN);
-        }
+        for(int n=0; n<whM; n++) RAW_AVE[n] = bufferSRRF.get(n);
 
         // grab data from convolved frames
-        double[][] errorMap = new double[7][whM];
-        double[] errorMax = new double[whM];
+        float[][] errorMap = new float[nGPUReconstructions][whM];
+        float[] errorMax = new float[whM];
+        NanoJThreadExecutor NTE = new NanoJThreadExecutor(true);
+        ThreadedReadBufferAndNormalise[] threadList = new ThreadedReadBufferAndNormalise[nGPUReconstructions];
 
-        for (int r=0; r<7; r++) {
+        for (int r=0; r<nGPUReconstructions; r++) {
             int offset = whM * r;
+            // this thread will read the buffer for SRRF and SRRF_CV plus rescale their intensity to match RAW_AVE
+            ThreadedReadBufferAndNormalise t = new ThreadedReadBufferAndNormalise(RAW_AVE, bufferSRRF, bufferSRRF_CV, offset);
+            NTE.execute(t);
+            threadList[r] = t;
+        }
+        NTE.finish();
 
-            float[] data = new float[whM];
-            float[] dataConvolved = new float[whM];
-            float dataMax = -Float.MAX_VALUE;
-            float dataMin = Float.MAX_VALUE;
-            float dataConvMax = -Float.MAX_VALUE;
-            float dataConvMin = Float.MAX_VALUE;
-
-            for(int n=0; n<whM; n++) {
-                data[n] = bufferSRRF.get(n+offset);
-                if (!Float.isNaN(data[n])) {
-                    dataMax = max(data[n], dataMax);
-                    dataMin = min(data[n], dataMin);
-                }
-                dataConvolved[n] = bufferSRRF_CV.get(n+offset);
-                if (!Float.isNaN(dataConvolved[n])) {
-                    dataConvMax = max(dataConvolved[n], dataConvMax);
-                    dataConvMin = min(dataConvolved[n], dataConvMin);
-                }
-            }
-
-            // renormalise data and calculate erro map
-            float gain     = (RAW_AVE_MAX - RAW_AVE_MIN) / dataMax;
-            float gainConv = (RAW_AVE_MAX - RAW_AVE_MIN) / dataConvMax;
-            if (r>0) for (int n = 0; n < whM; n++) data[n] = (data[n] - dataMin) * gain + RAW_AVE_MIN;
-            for (int n = 0; n < whM; n++) {
-                dataConvolved[n] = (dataConvolved[n] - dataConvMin) * gainConv + RAW_AVE_MIN;
-                errorMap[r][n] = abs(RAW_AVE[n] - dataConvolved[n]);
-                errorMax[n] = max(errorMax[n], errorMap[r][n]);
-            }
-
-            imsSRRF.addSlice(new FloatProcessor(widthM, heightM, data));
+        // calculate the error map and send off each reconstruction to imsSRRF
+        for (int r=0; r<nGPUReconstructions; r++) {
+            float[] dataSRRF = threadList[r].dataSRRF;
+            errorMap[r] = threadList[r].errorMap;
+            errorMax[r] = threadList[r].errorMax;
+            imsSRRF.addSlice(new FloatProcessor(widthM, heightM, dataSRRF));
         }
 
         showStatus("Calculating SRRF Fusion...");
@@ -274,5 +250,75 @@ public class SRRF2CL {
 
     public void release() {
         context.release();
+    }
+
+    class ThreadedReadBufferAndNormalise extends Thread {
+        private final float[] dataRef;
+        private final FloatBuffer bufferSRRF;
+        private final FloatBuffer bufferSRRF_CV;
+        private int offset;
+        public float g, o;
+        public float[] dataSRRF, dataSRRF_CV, errorMap;
+        public float errorMax = - Float.MAX_VALUE;
+
+        public ThreadedReadBufferAndNormalise(float[] dataRef, FloatBuffer bufferSRRF, FloatBuffer bufferSRRF_CV, int offset) {
+            this.dataRef = dataRef;
+            this.bufferSRRF = bufferSRRF;
+            this.bufferSRRF_CV = bufferSRRF_CV;
+            this.offset = offset;
+        }
+
+        @Override
+        public void run() {
+
+            int nPixels = dataRef.length;
+            dataSRRF = new float[nPixels];
+            dataSRRF_CV = new float[nPixels];
+            errorMap = new float[nPixels];
+
+            for (int n=0; n<nPixels; n++) {
+                dataSRRF[n] = bufferSRRF.get(n+offset);
+                dataSRRF_CV[n] = bufferSRRF_CV.get(n+offset);
+                if (Float.isNaN(dataSRRF[n])) dataSRRF[n] = 0; // make sure we dont get any weirdness
+                if (Float.isNaN(dataSRRF_CV[n])) dataSRRF_CV[n] = 0; // make sure we dont get any weirdness
+            }
+
+            // now calculate linear regression
+            float[] x = dataSRRF_CV;
+            float[] y = dataRef;
+
+            double xMean = 0;
+            double yMean = 0;
+
+            // first pass: read in data, compute xbar and ybar
+            for (int i=0; i<nPixels; i++) {
+                xMean  += x[i] / nPixels;
+                yMean  += y[i] / nPixels;
+            }
+            double xbar = xMean / nPixels;
+            double ybar = yMean / nPixels;
+
+            // second pass: compute summary statistics
+            double xxbar = 0.0, yybar = 0.0, xybar = 0.0;
+            for (int n = 0; n < nPixels; n++) {
+                xxbar += (x[n] - xMean) * (x[n] - xMean);
+                yybar += (y[n] - yMean) * (y[n] - yMean);
+                xybar += (x[n] - xMean) * (y[n] - yMean);
+            }
+
+            g = (float) (xybar / xxbar);
+            o = (float) (ybar - g * xbar);
+
+            // print results
+            //System.out.println("y = " + g + " * x + " + o);
+
+            // normalise data and calculate error map
+            for (int n = 0; n < nPixels; n++) {
+                dataSRRF[n] = dataSRRF[n] * g + o;
+                dataSRRF_CV[n] = dataSRRF_CV[n] * g + o;
+                errorMap[n] = abs(dataRef[n] - dataSRRF_CV[n]);
+                errorMax = max(errorMap[n], errorMax);
+            }
+        }
     }
 }

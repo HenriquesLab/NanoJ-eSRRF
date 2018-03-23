@@ -11,10 +11,10 @@
 
 // cubic function for interpolation
 static float cubic(float x) {
-    if (x < 0.0f) x = -x;
+    if (x < 0.0f) x = -x; // don't understand why? - do fabs instead?
     float z = 0.0f;
     if (x < 1.0f)
-        z = x * x * (x * (1.5f) + (- 2.5f)) + 1.0f;
+        z = x * x * (x * 1.5f - 2.5f) + 1.0f;
     else if (x < 2.0f)
         z = -.5f * x * x * x + 2.5f * x * x - 4.0f * x + 2.0f;
     return z;
@@ -23,17 +23,39 @@ static float cubic(float x) {
 // interpolation function: interpolate in continuous space with respect to the reference of the array
 static float getInterpolatedValue(__global float* array, int const width, int const height, float const x, float const y, float const f) { // TODO: review the grid position in the interpolation (seems offset)
     const int fwh = f * width * height;
-    const int u0 = (int) floor(x - 0.5f);
-    const int v0 = (int) floor(y - 0.5f);
+    const int u0 = (int) floor(x);
+    const int v0 = (int) floor(y);
+
     float q = 0.0f;
-    for (int j = 0; j <= 3; j++) {
-        int v = min(max(v0 - 1 + j, 0), height-1);
-        float p = 0.0f;
-        for (int i = 0; i <= 3; i++) {
-            int u = min(max(u0 - 1 + i, 0), width-1);
-            p = p + array[fwh + v * width + u] * cubic(x - (u + 0.5f));
+    if (u0 > 0 && u0 < w - 2 && v0 > 0 && v0 < h - 2) { // do bicubic interpolation
+        for (int j = 0; j <= 3; j++) {
+            int v = v0 - 1 + j;
+            float p = 0.0f;
+            for (int i = 0; i <= 3; i++) {
+                int u = u0 - 1 + i;
+                p += array[fwh + v * width + u] * cubic(x - (float)u);
+            }
+            q = q + p * cubic(y - (float)v);
         }
-        q = q + p * cubic(y - (v + 0.5f));
+    }
+    else if (x >= 0 && x < w && y >= 0 && y < h) {
+        int xbase = (int)x;
+        int ybase = (int)y;
+        int xbase1 = min(xbase+1, w-1);
+        int ybase1 = min(ybase+1, h-1);
+
+        float xFraction = x - (float)xbase;
+        float yFraction = y - (float)ybase;
+        xFraction = fmax(xFraction, 0);
+        yFraction = fmax(yFraction, 0);
+
+        float lowerLeft = array[fwh + ybase * width + xbase];
+        float lowerRight = array[fwh + ybase * width + xbase1];
+        float upperRight = array[fwh + ybase1 * width + xbase1];
+        float upperLeft = array[fwh + ybase1 * width + xbase];
+        float upperAverage = upperLeft + xFraction * (upperRight - upperLeft);
+        float lowerAverage = lowerLeft + xFraction * (lowerRight - lowerLeft);
+        q = lowerAverage + yFraction * (upperAverage - lowerAverage);
     }
     return q;
 }
@@ -93,8 +115,8 @@ __kernel void calculateSRRF(
 
     for (int f=0; f<nFrames; f++) {
         int fOffset = f * wh;
-        float xc = (xM + 0.5f) / magnification + ShiftXArray[f] + .5f; // continuous space position at the centre of magnified pixel
-        float yc = (yM + 0.5f) / magnification + ShiftYArray[f] + .5f; // this last .5f sum align the RGC to the interpolated magnified image - don't know why... but works
+        float xc = (xM + 0.5f) / magnification + ShiftXArray[f] + 1; // continuous space position at the centre of magnified pixel
+        float yc = (yM + 0.5f) / magnification + ShiftYArray[f] + 1; // this last +1 sum align the RGC to the interpolated magnified image - don't know why... but works
 
         float distanceWeightSum = 0;
         CGLH[f] = 0;
@@ -186,8 +208,8 @@ __kernel void calculateSRRF(
             float AD = A * D;
             float BC = B * C;
             vSRRF_4TH += (fabs(ABCD - AB * CD - AC * BD - AD * BC) - vSRRF_4TH) / (f+1);
+            //vSRRF_4TH += (fabs(ABCD) - vSRRF_4TH) / (f+1);
         }
-
     }
     vSRRF_1ST = sqrt(vSRRF_1ST);
     vSRRF_2ND = sqrt(vSRRF_2ND);
