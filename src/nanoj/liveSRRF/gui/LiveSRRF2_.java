@@ -4,12 +4,15 @@ import ij.IJ;
 import ij.ImagePlus;
 import ij.ImageStack;
 import ij.WindowManager;
+import ij.gui.DialogListener;
+import ij.gui.GenericDialog;
 import ij.gui.NonBlockingGenericDialog;
 import ij.gui.PointRoi;
 import ij.measure.Calibration;
 import ij.plugin.PlugIn;
 import ij.process.FloatProcessor;
 import ij.process.ImageProcessor;
+import nanoj.core.java.gui._BaseDialog_;
 import nanoj.core2.NanoJPrefs;
 import nanoj.core2.NanoJProfiler;
 import nanoj.core2.NanoJUsageTracker;
@@ -19,6 +22,7 @@ import java.awt.*;
 
 import static java.lang.Math.*;
 import static nanoj.core2.NanoJCrossCorrelation.calculateCrossCorrelationMap;
+import static nanoj.liveSRRF.SRRF2CL.predictMemoryUsed;
 
 public class LiveSRRF2_ implements PlugIn {
 
@@ -36,13 +40,18 @@ public class LiveSRRF2_ implements PlugIn {
 
     private ImageStack imsSRRF;
     private ImagePlus impCCM = null;
+
+    private ImagePlus imp;
+    private int magnification, nFrames;
+    private float fwhm;
+    private boolean correctVibration, correctSCMOS;
     private boolean showAllReconstructions;
 
     @Override
     public void run(String arg) {
         tracker.logUsage("LiveSRRF_");
 
-        ImagePlus imp = WindowManager.getCurrentImage();
+        imp = WindowManager.getCurrentImage();
         if (imp == null) imp = IJ.openImage();
         imp.show();
 
@@ -62,31 +71,15 @@ public class LiveSRRF2_ implements PlugIn {
                         "It is only meant to be used by researchers who received\n" +
                         "a direct email by Ricardo Henriques.");
 
+        MyDialogListener dl = new MyDialogListener(); // this serves to estimate a few indicators such as RAM usage
+        gd.addDialogListener(dl);
         gd.showDialog();
         if (gd.wasCanceled()) return;
-
-        int magnification = (int) gd.getNextNumber();
-        float fwhm = (float) gd.getNextNumber();
-        int nFrames = (int) gd.getNextNumber();
-        boolean correctVibration = gd.getNextBoolean();
-        boolean correctSCMOS = gd.getNextBoolean();
-        boolean showAllReconstructions = gd.getNextBoolean();
-
-        prefs.set("magnification", (float) magnification);
-        prefs.set("fwhm", fwhm);
-        prefs.set("nFrames", nFrames);
-        prefs.set("correctVibration", correctVibration);
-        prefs.set("correctSCMOS", correctSCMOS);
-
-        prefs.set("showAllReconstructions", showAllReconstructions);
-        prefs.save();
+        //grabSettings(gd);
 
         if (correctSCMOS) {
             IJ.showMessage("SCMOS correction is disabled for now on purpose =)");
         }
-
-        if (nFrames == 0) nFrames = imp.getImageStack().getSize();
-        nFrames = min(imp.getImageStack().getSize(), nFrames);
 
         ImageStack ims = imp.getImageStack();
         int nSlices = ims.getSize();
@@ -199,6 +192,41 @@ public class LiveSRRF2_ implements PlugIn {
 //        }
     }
 
+    private void grabSettings(GenericDialog gd) {
+        magnification = (int) gd.getNextNumber();
+        fwhm = (float) gd.getNextNumber();
+        nFrames = (int) gd.getNextNumber();
+        correctVibration = gd.getNextBoolean();
+        correctSCMOS = gd.getNextBoolean();
+        showAllReconstructions = gd.getNextBoolean();
+
+        prefs.set("magnification", (float) magnification);
+        prefs.set("fwhm", fwhm);
+        prefs.set("nFrames", nFrames);
+        prefs.set("correctVibration", correctVibration);
+        prefs.set("correctSCMOS", correctSCMOS);
+
+        prefs.set("showAllReconstructions", showAllReconstructions);
+        prefs.save();
+
+        if (nFrames == 0) nFrames = imp.getImageStack().getSize();
+        nFrames = min(imp.getImageStack().getSize(), nFrames);
+    }
+
+    class MyDialogListener implements DialogListener {
+        @Override
+        public boolean dialogItemChanged(GenericDialog gd, AWTEvent awtEvent) {
+
+            grabSettings(gd);
+            ImageStack ims = imp.getImageStack();
+
+            double memUsed = predictMemoryUsed(ims.getWidth(), ims.getHeight(), nFrames, magnification);
+            IJ.showStatus("SRRF2 - Predicted used GPU memory: "+Math.round(memUsed)+"MB");
+
+            return true;
+        }
+    }
+
     private float[] calculateShift(ImageProcessor ipRef, ImageProcessor ip, int radius) {
 
         FloatProcessor fpCCM = (FloatProcessor) calculateCrossCorrelationMap(ipRef, ip, false);
@@ -255,4 +283,6 @@ public class LiveSRRF2_ implements PlugIn {
 
         return new float[] {shiftX, shiftY};
     }
+
+
 }

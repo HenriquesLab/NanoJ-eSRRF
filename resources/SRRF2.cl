@@ -1,7 +1,8 @@
 //#pragma OPENCL EXTENSION cl_khr_fp64: enable
-#define fwhm $FWHM$
-#define sigma $SIGMA$
-#define magnification $MAGNIFICATION$
+#define FWHM $FWHM$
+#define RADIUS $RADIUS$
+#define SIGMA $SIGMA$
+#define MAGNIFICATION $MAGNIFICATION$
 #define w $WIDTH$
 #define h $HEIGHT$
 #define wh $WH$
@@ -60,6 +61,12 @@ static float getInterpolatedValue(__global float* array, int const width, int co
     return q;
 }
 
+static float product(float* array, int start, int end) {
+    float v = 1;
+    for (int p=start; p<=end; p++) v *= array[p];
+    return v;
+}
+
 // First kernel: evaluating gradient from image using Robert's cross ------------------------------------------
 __kernel void calculateGradientRobX(
     __global float* pixels,
@@ -109,20 +116,18 @@ __kernel void calculateSRRF(
 
     // FIRST CALCULATE LOCAL GRADIENT CONVERGENCE (OLD RADIALITY!!)
 
-    float sigma22 = 2 * sigma * sigma;
-    int radius = (int) (sigma * 2) + 1;    // radius can be set to something sensible like 3*Sigma
+    float sigma22 = 2 * SIGMA * SIGMA;
     float Gx, Gy;
 
     for (int f=0; f<nFrames; f++) {
         int fOffset = f * wh;
-        float xc = (xM + 0.5f) / magnification + ShiftXArray[f] + 1; // continuous space position at the centre of magnified pixel
-        float yc = (yM + 0.5f) / magnification + ShiftYArray[f] + 1; // this last +1 sum align the RGC to the interpolated magnified image - don't know why... but works
+        float xc = (xM + 0.5f) / MAGNIFICATION + ShiftXArray[f] + 1; // continuous space position at the centre of magnified pixel
+        float yc = (yM + 0.5f) / MAGNIFICATION + ShiftYArray[f] + 1; // this last +1 sum align the RGC to the interpolated magnified image - don't know why... but works
 
         float distanceWeightSum = 0;
-        CGLH[f] = 0;
 
-        for (int j=-radius; j<=radius; j++) {
-            for (int i=-radius; i<=radius; i++) {
+        for (int j=-RADIUS; j<=RADIUS; j++) {
+            for (int i=-RADIUS; i<=RADIUS; i++) {
 
                 int vxPixelOrigin = (int) xc  + i;
                 int vyPixelOrigin = (int) yc  + j;
@@ -140,8 +145,8 @@ __kernel void calculateSRRF(
 
                     float GMag = sqrt(Gx * Gx + Gy * Gy);
 
-                    //float distanceWeight = exp(-0.5f*pow((float) (distanceWeight/sigma),2)); // gaussian weight
-                    //float distanceWeight = exp(-0.5f*pow((float) (distanceWeight/(2*sigma)),4)); // gaussian flat top weight
+                    //float distanceWeight = exp(-0.5f*pow((float) (distanceWeight/SIGMA),2)); // gaussian weight
+                    //float distanceWeight = exp(-0.5f*pow((float) (distanceWeight/(2*SIGMA)),4)); // gaussian flat top weight
                     float distanceWeight = distance*exp(-(distance*distance)/sigma22);  // TODO: dGauss: can use Taylor expansion there
                     distanceWeight = pow(distanceWeight, 2);
 
@@ -156,14 +161,14 @@ __kernel void calculateSRRF(
                     distanceWeightSum += distanceWeight;
 
                     // Accumulate Variables
-                    float GdotR = (Gx * i * magnification + Gy * j * magnification); // tells you if vector was pointing inward or outward
+                    float GdotR = (Gx * i * MAGNIFICATION + Gy * j * MAGNIFICATION); // tells you if vector was pointing inward or outward
                     if (GdotR <= 0) CGLH[f] += Dk; // vector was pointing inwards
                     //else CGLH[f] -= Dk; // vector was pointing outwards
                 }
             }
         }
 
-        float v = getInterpolatedValue(pixels, w, h, ((float) xM)/magnification + ShiftXArray[f], ((float) yM)/magnification + ShiftYArray[f], f);
+        float v = getInterpolatedValue(pixels, w, h, ((float) xM)/MAGNIFICATION + ShiftXArray[f], ((float) yM)/MAGNIFICATION + ShiftYArray[f], f);
         CGLH[f] /= distanceWeightSum;
         //CGLH[f] = fmax(CGLH[f] - 0.2f, 0) * 1.2;
 
@@ -177,41 +182,39 @@ __kernel void calculateSRRF(
     // CALCULATE SRRF TEMPORAL CORRELATIONS
 
     // mean subtract first
-    for (int f=0; f<nFrames; f++) CGLH[f] -= vSRRF_AVE;
+    for (int f=0; f<nFrames; f++) CGLH[f] = fabs(CGLH[f] - vSRRF_AVE);
 
     // calculate auto-correlation
-    float SRRFCumTimeLags[6]; // cumulative timelags
-    for (int tl = 0; tl<7; tl++) SRRFCumTimeLags[tl] = 0; // initialise SRRFCumTimeLags at 0
+    float SRRFCumTimeLags[9]; // cumulative timelags
+    for (int tl = 0; tl<9; tl++) SRRFCumTimeLags[tl] = 0; // initialise SRRFCumTimeLags at 0
     int nFrames1 = nFrames-1;
 
     for (int f=0; f<nFrames; f++) {
         int f1 = f+1;
-        float A = fabs(CGLH[f]);
-        float B = fabs(CGLH[min(f+1, nFrames1)]);
-        float C = fabs(CGLH[min(f+2, nFrames1)]);
-        float D = fabs(CGLH[min(f+3, nFrames1)]);
-        float E = fabs(CGLH[min(f+4, nFrames1)]);
-        float F = fabs(CGLH[min(f+5, nFrames1)]);
-        float G = fabs(CGLH[min(f+6, nFrames1)]);
 
-        SRRFCumTimeLags[0] += (A * A - SRRFCumTimeLags[0]) / f1;
-
-        if (f < nFrames - 1) SRRFCumTimeLags[1] += (A * B - SRRFCumTimeLags[1]) / f1;
-        if (f < nFrames - 2) SRRFCumTimeLags[2] += (A * B * C - SRRFCumTimeLags[2]) / f1;
-        if (f < nFrames - 3) SRRFCumTimeLags[3] += (A * B * C * D - SRRFCumTimeLags[3]) / f1;
-        if (f < nFrames - 4) SRRFCumTimeLags[4] += (A * B * C * D * E - SRRFCumTimeLags[4]) / f1;
-        if (f < nFrames - 5) SRRFCumTimeLags[5] += (A * B * C * D * E * F - SRRFCumTimeLags[5]) / f1;
-        if (f < nFrames - 6) SRRFCumTimeLags[6] += (A * B * C * D * E * F * G - SRRFCumTimeLags[6]) / f1;
+        SRRFCumTimeLags[0] += (CGLH[f] * CGLH[f] - SRRFCumTimeLags[0]) / f1;
+        for (int n=1; n<9; n++) {
+            if (f < nFrames - n) SRRFCumTimeLags[n] += (product(CGLH, f, f+n) - SRRFCumTimeLags[n]) / f1;
+        }
     }
 
-    SRRFArray[0 * whM + xyMOffset] = vRAW_AVE;
-    SRRFArray[1 * whM + xyMOffset] = vSRRF_MAX * vRAW_AVE;
-    SRRFArray[2 * whM + xyMOffset] = vSRRF_AVE * vRAW_AVE;
-    SRRFArray[3 * whM + xyMOffset] = sqrt(SRRFCumTimeLags[0]) * vRAW_AVE;
-    SRRFArray[4 * whM + xyMOffset] = sqrt(SRRFCumTimeLags[1]) * vRAW_AVE;
-    SRRFArray[5 * whM + xyMOffset] = pow(SRRFCumTimeLags[2], 1/3.f) * vRAW_AVE;
-    SRRFArray[6 * whM + xyMOffset] = pow(SRRFCumTimeLags[3], 1/4.f) * vRAW_AVE;
-    SRRFArray[7 * whM + xyMOffset] = pow(SRRFCumTimeLags[4], 1/5.f) * vRAW_AVE;
-    SRRFArray[8 * whM + xyMOffset] = pow(SRRFCumTimeLags[5], 1/6.f) * vRAW_AVE;
+    SRRFArray[0 * whM + xyMOffset]  = vRAW_AVE;
+    SRRFArray[1 * whM + xyMOffset]  = vSRRF_MAX * vRAW_AVE;
+    SRRFArray[2 * whM + xyMOffset]  = vSRRF_AVE * vRAW_AVE;
+    SRRFArray[3 * whM + xyMOffset]  = rootn(SRRFCumTimeLags[0], 2) * vRAW_AVE;
+    for (int n=1; n<=8; n++) {
+        SRRFArray[(3+n) * whM + xyMOffset] = rootn(SRRFCumTimeLags[n], 1+n) * vRAW_AVE;
+    }
+
+//    SRRFArray[4 * whM + xyMOffset]  = rootn(SRRFCumTimeLags[1], 2) * vRAW_AVE;
+//    SRRFArray[5 * whM + xyMOffset]  = rootn(SRRFCumTimeLags[2], 3) * vRAW_AVE;
+//    SRRFArray[6 * whM + xyMOffset]  = rootn(SRRFCumTimeLags[3], 4) * vRAW_AVE;
+//    SRRFArray[7 * whM + xyMOffset]  = rootn(SRRFCumTimeLags[4], 5) * vRAW_AVE;
+//    SRRFArray[8 * whM + xyMOffset]  = rootn(SRRFCumTimeLags[5], 6) * vRAW_AVE;
+//    SRRFArray[9 * whM + xyMOffset]  = rootn(SRRFCumTimeLags[6], 7) * vRAW_AVE;
+//    SRRFArray[10 * whM + xyMOffset] = rootn(SRRFCumTimeLags[7], 8) * vRAW_AVE;
+//    SRRFArray[11 * whM + xyMOffset] = rootn(SRRFCumTimeLags[8], 9) * vRAW_AVE;
+
+
 }
 

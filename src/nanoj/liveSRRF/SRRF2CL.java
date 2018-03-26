@@ -35,6 +35,9 @@ public class SRRF2CL {
             "SRRF2 Accum. TL3",
             "SRRF2 Accum. TL4",
             "SRRF2 Accum. TL5",
+            "SRRF2 Accum. TL6",
+            "SRRF2 Accum. TL7",
+            "SRRF2 Accum. TL8",
             "SRRF2 Fusion"
     };
 
@@ -45,13 +48,29 @@ public class SRRF2CL {
 
     private final int width, height, widthM, heightM, nFrames, magnification, whM;
     private final float fwhm;
-    private int nGPUReconstructions = reconstructionLabel.length-1;
+    private static int nGPUReconstructions = reconstructionLabel.length-1;
 
     private CLBuffer<FloatBuffer>
             clBufferPx,
             clBufferGx, clBufferGy,
             clBufferShiftX, clBufferShiftY,
             clBufferSRRF, clBufferSRRF_CVH, clBufferSRRF_CV;
+
+    // return predicted memory usage in MB
+    public static double predictMemoryUsed(int width, int height, int nFrames, int magnification) {
+        double memUsed = 0;
+        memUsed += width * height * nFrames; // clBufferPx
+        memUsed += nFrames; // clBufferShiftX
+        memUsed += nFrames; // clBufferShiftY
+        memUsed += width * height * nFrames; // clBufferGx
+        memUsed += width * height * nFrames; // clBufferGy
+        memUsed += width * height * magnification * magnification * nGPUReconstructions; // clBufferSRRF
+        memUsed += width * height * magnification * magnification * nGPUReconstructions; // clBufferSRRF_CVH
+        memUsed += width * height * magnification * magnification * nGPUReconstructions; // clBufferSRRF_CV
+
+        memUsed *= Float.SIZE / 8000000d;
+        return memUsed;
+    }
 
     public SRRF2CL(int width, int height, int nFrames, int magnification, float fwhm) {
         this.nFrames = nFrames;
@@ -83,6 +102,7 @@ public class SRRF2CL {
             programString = replaceFirst(programString,"$MAGNIFICATION$", ""+magnification);
             programString = replaceFirst(programString,"$FWHM$", ""+fwhm);
             programString = replaceFirst(programString,"$SIGMA$", ""+sigma);
+            programString = replaceFirst(programString,"$RADIUS$", ""+((int) (sigma * 2) + 1));
             programString = replaceFirst(programString,"$WIDTH$", ""+width);
             programString = replaceFirst(programString,"$HEIGHT$", ""+height);
             programString = replaceFirst(programString,"$WH$", ""+(width*height));
@@ -205,8 +225,6 @@ public class SRRF2CL {
         for(int n=0; n<whM; n++) RAW_AVE[n] = bufferSRRF.get(n);
 
         // grab data from convolved frames
-        float[][] errorMap = new float[nGPUReconstructions][whM];
-        float[] errorMax = new float[whM];
         NanoJThreadExecutor NTE = new NanoJThreadExecutor(true);
         ThreadedReadBufferAndNormalise[] threadList = new ThreadedReadBufferAndNormalise[nGPUReconstructions];
 
@@ -219,24 +237,29 @@ public class SRRF2CL {
         }
         NTE.finish();
 
+        float[][] dataSRRF = new float[nGPUReconstructions][];
+        float[][] errorMap = new float[nGPUReconstructions][whM];
         // calculate the error map and send off each reconstruction to imsSRRF
         for (int r=0; r<nGPUReconstructions; r++) {
-            float[] dataSRRF = threadList[r].dataSRRF;
+            dataSRRF[r] = threadList[r].dataSRRF;
             errorMap[r] = threadList[r].errorMap;
-            errorMax[r] = threadList[r].errorMax;
-            imsSRRF.addSlice(new FloatProcessor(widthM, heightM, dataSRRF));
+            imsSRRF.addSlice(new FloatProcessor(widthM, heightM, dataSRRF[r]));
         }
 
         showStatus("Calculating SRRF Fusion...");
         float[] fusion = new float[whM];
         double[] weightSum = new double[whM];
 
-        for (int r=0; r<7; r++) {
-            float[] pixelsSRRF = (float[]) imsSRRF.getProcessor(r+1).getPixels();
-            for (int n = 0; n < whM; n++) {
-//                double w = (errorMax[n]) / max(errorMap[r][n], 1);
-                double w = 1 / max(errorMap[r][n], 1);
-                fusion[n] += pixelsSRRF[n] * w;
+        for (int n = 0; n < whM; n++) {
+            float errorMax = -Float.MAX_VALUE;
+            float errorMin =  Float.MAX_VALUE;
+            for (int r=1; r<nGPUReconstructions; r++) errorMax = max(errorMap[r][n], errorMax);
+
+            for (int r=1; r<nGPUReconstructions; r++) {
+                float v = dataSRRF[r][n];
+                double w = errorMax / max(errorMap[r][n], 1);
+                //double w = 1 / max(errorMap[r][n], 1);
+                fusion[n] += v * w;
                 weightSum[n] += w;
             }
         }
@@ -261,7 +284,6 @@ public class SRRF2CL {
         private int offset;
         public float g, o;
         public float[] dataSRRF, dataSRRF_CV, errorMap;
-        public float errorMax = - Float.MAX_VALUE;
 
         public ThreadedReadBufferAndNormalise(float[] dataRef, FloatBuffer bufferSRRF, FloatBuffer bufferSRRF_CV, int offset) {
             this.dataRef = dataRef;
@@ -311,15 +333,11 @@ public class SRRF2CL {
             g = (float) (xybar / xxbar);
             o = (float) (ybar - g * xbar);
 
-            // print results
-            //System.out.println("y = " + g + " * x + " + o);
-
             // normalise data and calculate error map
             for (int n = 0; n < nPixels; n++) {
                 dataSRRF[n] = dataSRRF[n] * g + o;
                 dataSRRF_CV[n] = dataSRRF_CV[n] * g + o;
                 errorMap[n] = abs(dataRef[n] - dataSRRF_CV[n]);
-                errorMax = max(errorMap[n], errorMax);
             }
         }
     }
