@@ -114,6 +114,7 @@ public class LiveSRRF2_ implements PlugIn {
         float[] shiftX = new float[nFrames];
         float[] shiftY = new float[nFrames];
         int counter = 0;
+        int nReconstructions = 1;
 
         //////////////////////////////////////
         // !!! MAIN LOOP THROUGH FRAMES !!! //
@@ -154,7 +155,7 @@ public class LiveSRRF2_ implements PlugIn {
             if (counter == nFrames-1 || s == nSlices) {
                 int id = prof.startTimer();
                 ImageStack imsResults = srrf2CL.calculateSRRF(imsRawDataBuffer, shiftX, shiftY);
-                int nReconstructions = imsResults.getSize();
+                nReconstructions = imsResults.getSize();
                 if (!showAllReconstructions) {
                     imsSRRF.addSlice(imsResults.getProcessor(nReconstructions));
                     imsSRRF.setSliceLabel(srrf2CL.reconstructionLabel[nReconstructions-1], imsSRRF.getSize());
@@ -184,12 +185,18 @@ public class LiveSRRF2_ implements PlugIn {
             else counter++;
         }
 
+        srrf2CL.release(); // Release the GPU!!!
+        IJ.log(prof.report());
+
+        // Show final rendering...
         impSRRF.setStack(imsSRRF);
-        IJ.run(impSRRF, "Enhance Contrast", "saturated=0.35");
+        IJ.run(impSRRF, "Enhance Contrast", "saturated=0.5");
         impSRRF.setTitle(imp.getTitle()+" - SRRF2");
 
-        srrf2CL.release();
-        IJ.log(prof.report());
+//        if (showAllReconstructions) {
+//            int nSRRFFrames = imsSRRF.getSize() / nReconstructions;
+//            IJ.run(impSRRF, "Stack to Hyperstack...", "order=xyczt(default) channels="+nReconstructions+" slices=1 frames="+nSRRFFrames+" display=Grayscale");
+//        }
     }
 
     private float[] calculateShift(ImageProcessor ipRef, ImageProcessor ip, int radius) {

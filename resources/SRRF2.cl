@@ -174,50 +174,44 @@ __kernel void calculateSRRF(
         vSRRF_AVE += (CGLH[f] - vSRRF_AVE) / f1;
     }
 
-    SRRFArray[0 * whM + xyMOffset] = vRAW_AVE;
-    SRRFArray[1 * whM + xyMOffset] = vSRRF_MAX * vRAW_AVE;
-    SRRFArray[2 * whM + xyMOffset] = vSRRF_AVE * vRAW_AVE;
-
     // CALCULATE SRRF TEMPORAL CORRELATIONS
 
     // mean subtract first
     for (int f=0; f<nFrames; f++) CGLH[f] -= vSRRF_AVE;
 
     // calculate auto-correlation
-    float vSRRF_1ST = 0;
-    float vSRRF_2ND = 0;
-    float vSRRF_3RD = 0;
-    float vSRRF_4TH = 0;
+    float SRRFCumTimeLags[6]; // cumulative timelags
+    for (int tl = 0; tl<7; tl++) SRRFCumTimeLags[tl] = 0; // initialise SRRFCumTimeLags at 0
+    int nFrames1 = nFrames-1;
 
     for (int f=0; f<nFrames; f++) {
-        vSRRF_1ST += (CGLH[f] * CGLH[f] - vSRRF_1ST) / (f+1);
-        if (f<nFrames-1)
-            vSRRF_2ND += (fabs(CGLH[f] * CGLH[f+1]) - vSRRF_2ND) / (f+1);
-        if (f<nFrames-2)
-            vSRRF_3RD += (fabs(CGLH[f] * CGLH[f+1] * CGLH[f+2]) - vSRRF_3RD) / (f+1);
-        if (f<nFrames-3) {
-            float A = CGLH[f];
-            float B = CGLH[f+1];
-            float C = CGLH[f+2];
-            float D = CGLH[f+3];
-            float ABCD = A * B * C * D;
-            float AB = A * B;
-            float CD = C * D;
-            float AC = A * C;
-            float BD = B * D;
-            float AD = A * D;
-            float BC = B * C;
-            vSRRF_4TH += (fabs(ABCD - AB * CD - AC * BD - AD * BC) - vSRRF_4TH) / (f+1);
-            //vSRRF_4TH += (fabs(ABCD) - vSRRF_4TH) / (f+1);
-        }
+        int f1 = f+1;
+        float A = fabs(CGLH[f]);
+        float B = fabs(CGLH[min(f+1, nFrames1)]);
+        float C = fabs(CGLH[min(f+2, nFrames1)]);
+        float D = fabs(CGLH[min(f+3, nFrames1)]);
+        float E = fabs(CGLH[min(f+4, nFrames1)]);
+        float F = fabs(CGLH[min(f+5, nFrames1)]);
+        float G = fabs(CGLH[min(f+6, nFrames1)]);
+
+        SRRFCumTimeLags[0] += (A * A - SRRFCumTimeLags[0]) / f1;
+
+        if (f < nFrames - 1) SRRFCumTimeLags[1] += (A * B - SRRFCumTimeLags[1]) / f1;
+        if (f < nFrames - 2) SRRFCumTimeLags[2] += (A * B * C - SRRFCumTimeLags[2]) / f1;
+        if (f < nFrames - 3) SRRFCumTimeLags[3] += (A * B * C * D - SRRFCumTimeLags[3]) / f1;
+        if (f < nFrames - 4) SRRFCumTimeLags[4] += (A * B * C * D * E - SRRFCumTimeLags[4]) / f1;
+        if (f < nFrames - 5) SRRFCumTimeLags[5] += (A * B * C * D * E * F - SRRFCumTimeLags[5]) / f1;
+        if (f < nFrames - 6) SRRFCumTimeLags[6] += (A * B * C * D * E * F * G - SRRFCumTimeLags[6]) / f1;
     }
-    vSRRF_1ST = sqrt(vSRRF_1ST);
-    vSRRF_2ND = sqrt(vSRRF_2ND);
-    vSRRF_3RD = pow(vSRRF_3RD, 0.3333333f);
-    vSRRF_4TH = pow(vSRRF_4TH, 0.25f);
-    SRRFArray[3 * whM + xyMOffset] = vSRRF_1ST * vRAW_AVE;
-    SRRFArray[4 * whM + xyMOffset] = vSRRF_2ND * vRAW_AVE;
-    SRRFArray[5 * whM + xyMOffset] = vSRRF_3RD * vRAW_AVE;
-    SRRFArray[6 * whM + xyMOffset] = vSRRF_4TH * vRAW_AVE;
+
+    SRRFArray[0 * whM + xyMOffset] = vRAW_AVE;
+    SRRFArray[1 * whM + xyMOffset] = vSRRF_MAX * vRAW_AVE;
+    SRRFArray[2 * whM + xyMOffset] = vSRRF_AVE * vRAW_AVE;
+    SRRFArray[3 * whM + xyMOffset] = sqrt(SRRFCumTimeLags[0]) * vRAW_AVE;
+    SRRFArray[4 * whM + xyMOffset] = sqrt(SRRFCumTimeLags[1]) * vRAW_AVE;
+    SRRFArray[5 * whM + xyMOffset] = pow(SRRFCumTimeLags[2], 1/3.f) * vRAW_AVE;
+    SRRFArray[6 * whM + xyMOffset] = pow(SRRFCumTimeLags[3], 1/4.f) * vRAW_AVE;
+    SRRFArray[7 * whM + xyMOffset] = pow(SRRFCumTimeLags[4], 1/5.f) * vRAW_AVE;
+    SRRFArray[8 * whM + xyMOffset] = pow(SRRFCumTimeLags[5], 1/6.f) * vRAW_AVE;
 }
 

@@ -30,9 +30,11 @@ public class SRRF2CL {
             "SRRF2 Maximum",
             "SRRF2 Average",
             "SRRF2 StdDev",
-            "SRRF2 2nd-Order",
-            "SRRF2 3rd-Order",
-            "SRRF2 4th-Order",
+            "SRRF2 Accum. TL1",
+            "SRRF2 Accum. TL2",
+            "SRRF2 Accum. TL3",
+            "SRRF2 Accum. TL4",
+            "SRRF2 Accum. TL5",
             "SRRF2 Fusion"
     };
 
@@ -43,7 +45,7 @@ public class SRRF2CL {
 
     private final int width, height, widthM, heightM, nFrames, magnification, whM;
     private final float fwhm;
-    private int nGPUReconstructions = 7;
+    private int nGPUReconstructions = reconstructionLabel.length-1;
 
     private CLBuffer<FloatBuffer>
             clBufferPx,
@@ -232,7 +234,7 @@ public class SRRF2CL {
         for (int r=0; r<7; r++) {
             float[] pixelsSRRF = (float[]) imsSRRF.getProcessor(r+1).getPixels();
             for (int n = 0; n < whM; n++) {
-                //double w = (errorMax[n]) / max(errorMap[r][n], 1);
+//                double w = (errorMax[n]) / max(errorMap[r][n], 1);
                 double w = 1 / max(errorMap[r][n], 1);
                 fusion[n] += pixelsSRRF[n] * w;
                 weightSum[n] += w;
