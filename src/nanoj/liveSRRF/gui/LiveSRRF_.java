@@ -4,90 +4,87 @@ import ij.IJ;
 import ij.ImagePlus;
 import ij.ImageStack;
 import ij.WindowManager;
+import ij.gui.DialogListener;
+import ij.gui.GenericDialog;
 import ij.gui.NonBlockingGenericDialog;
 import ij.gui.PointRoi;
+import ij.measure.Calibration;
 import ij.plugin.PlugIn;
 import ij.process.FloatProcessor;
 import ij.process.ImageProcessor;
 import nanoj.core2.NanoJPrefs;
 import nanoj.core2.NanoJProfiler;
 import nanoj.core2.NanoJUsageTracker;
-import nanoj.liveSRRF.RadialGradientConvergenceCL;
+import nanoj.liveSRRF.SRRF2CL;
+
+import java.awt.*;
 
 import static java.lang.Math.*;
 import static nanoj.core2.NanoJCrossCorrelation.calculateCrossCorrelationMap;
+import static nanoj.liveSRRF.SRRF2CL.predictMemoryUsed;
 
 public class LiveSRRF_ implements PlugIn {
 
+    private Font headerFont = new Font("Arial", Font.BOLD, 16);
+
     private String user = "HenriquesLab";
-    private String version = "20180416-"+user;
+    //private String user = "AudreySalles";
+    //private String user = "PaulReynolds";
+    //private String user = "GrahamDellaire";
+    private String version = "20180418-"+user;
 
     private NanoJPrefs prefs = new NanoJPrefs(this.getClass().getName());
-    //private NanoJUsageTracker tracker = new NanoJUsageTracker("NanoJ-LiveSRRF", "20180413", "UA-61590656-4");
-    //private NanoJUsageTracker tracker = new NanoJUsageTracker("NanoJ-LiveSRRF", "20180413-GrahamDellaire", "UA-61590656-4");
     private NanoJUsageTracker tracker = new NanoJUsageTracker("NanoJ-LiveSRRF", version, "UA-61590656-4");
-
     private NanoJProfiler prof = new NanoJProfiler();
-    private ImageStack imsSRRF_max, imsSRRF_avg, imsSRRF_std;
+
+    private ImageStack imsSRRF;
     private ImagePlus impCCM = null;
-    private boolean showAVG, showMAX, showSTD;
+
+    private ImagePlus imp;
+    private int magnification, nFrames;
+    private float fwhm;
+    private boolean correctVibration, correctSCMOS;
+    private boolean showAllReconstructions;
 
     @Override
     public void run(String arg) {
         tracker.logUsage("LiveSRRF_");
 
-        ImagePlus imp = WindowManager.getCurrentImage();
+        imp = WindowManager.getCurrentImage();
         if (imp == null) imp = IJ.openImage();
         imp.show();
 
         NonBlockingGenericDialog gd = new NonBlockingGenericDialog("Live SRRF (aka SRRF2) - In Development (for "+user+")");
-        gd.addNumericField("Magnification", prefs.get("magnification", 4), 0);
-        gd.addNumericField("FWHM (pixels)", prefs.get("fwhm", 3), 2);
-        gd.addNumericField("Frames per SR image", prefs.get("nFrames", 0), 0);
+        gd.addNumericField("Magnification (default: 4)", prefs.get("magnification", 4), 0);
+        gd.addNumericField("FWHM (pixels, default: 3)", prefs.get("fwhm", 3), 2);
+        gd.addNumericField("Frames_per_time-point (0 - auto)", prefs.get("nFrames", 0), 0);
         gd.addCheckbox("Correct vibration", prefs.get("correctVibration", false));
         gd.addCheckbox("Correct sCMOS patterning", prefs.get("correctSCMOS", false));
-        gd.addMessage("-=-= Reconstructions =-=-");
-        gd.addCheckbox("Show AVG reconstruction", prefs.get("showAVG", false));
-        gd.addCheckbox("Show STD reconstruction", prefs.get("showSTD", true));
-        gd.addCheckbox("Show MAX reconstruction", prefs.get("showMAX", false));
+        gd.addMessage("-=-= Reconstructions =-=-\n", headerFont);
+        gd.addCheckbox("Show_all reconstruction", prefs.get("showAllReconstructions", false));
+        gd.addMessage("-=-= Advice =-=-\n", headerFont);
+        gd.addMessage(
+                "SRRF2 is a GPU resources-hog, if it fails to run consider\n" +
+                     "reducing the magnification. For larger temporal datasets,\n" +
+                     "consider doing batches of 100 frames at a time, then do a \n" +
+                     "a mean projecting for them.");
 
-        gd.addMessage("-=-= CONFIDENTIAL =-=-");
+        gd.addMessage("-=-= CONFIDENTIAL =-=-\n", headerFont);
         gd.addMessage(
                 "This is a preview of the 'in development' version of the \n" +
                         "SRRF2 engine developed by the Henriques lab @ UCL.\n" +
                         "It is only meant to be used by researchers who received\n" +
                         "a direct email by Ricardo Henriques.");
 
+        MyDialogListener dl = new MyDialogListener(); // this serves to estimate a few indicators such as RAM usage
+        gd.addDialogListener(dl);
         gd.showDialog();
         if (gd.wasCanceled()) return;
-
-        int magnification = (int) gd.getNextNumber();
-        float fwhm = (float) gd.getNextNumber();
-        int nFrames = (int) gd.getNextNumber();
-        boolean correctVibration = gd.getNextBoolean();
-        boolean correctSCMOS = gd.getNextBoolean();
-
-        showAVG = gd.getNextBoolean();
-        showSTD = gd.getNextBoolean();
-        showMAX = gd.getNextBoolean();
-
-        prefs.set("magnification", (float) magnification);
-        prefs.set("fwhm", fwhm);
-        prefs.set("nFrames", nFrames);
-        prefs.set("correctVibration", correctVibration);
-        prefs.set("correctSCMOS", correctSCMOS);
-
-        prefs.set("showAVG", showAVG);
-        prefs.set("showSTD", showSTD);
-        prefs.set("showMAX", showMAX);
-        prefs.save();
+        //grabSettings(gd);
 
         if (correctSCMOS) {
             IJ.showMessage("SCMOS correction is disabled for now on purpose =)");
         }
-
-        if (nFrames == 0) nFrames = imp.getImageStack().getSize();
-        nFrames = min(imp.getImageStack().getSize(), nFrames);
 
         ImageStack ims = imp.getImageStack();
         int nSlices = ims.getSize();
@@ -97,32 +94,43 @@ public class LiveSRRF_ implements PlugIn {
         int hM = ims.getHeight() * magnification;
         int nPixelsM = wM * hM;
 
-        imsSRRF_max = new ImageStack(wM, hM);
-        imsSRRF_avg = new ImageStack(wM, hM);
-        imsSRRF_std = new ImageStack(wM, hM);
+        ImagePlus impSRRF = new ImagePlus(imp.getTitle()+" - SRRF2");
+        impSRRF.copyScale(imp); // make sure we copy the pixel sizes correctly accross
+        Calibration cal = impSRRF.getCalibration();
+        cal.pixelWidth /= magnification;
+        cal.pixelHeight /= magnification;
+
+        imsSRRF = new ImageStack(wM, hM);
+        //impSRRF.setStack(imsSRRF);
+        ImageStack imsRawDataBuffer = new ImageStack(w, h);
+        boolean firstTime = true;
 
         ImageProcessor ipRef = null; // reference slide for Cross-Correlation and vibration correction
-        float[][] pixelsGRCBuffer = null; // buffer containing time-points for reconstructions
 
-        RadialGradientConvergenceCL rCL = new RadialGradientConvergenceCL(w, h, magnification, fwhm);
-        ThreadedCalculateReconstructions t = null; // calculates reconstructions in parallel
+        SRRF2CL srrf2CL = new SRRF2CL(w, h, nFrames, magnification, fwhm);
 
-        float shiftX = 0;
-        float shiftY = 0;
+        float[] shiftX = new float[nFrames];
+        float[] shiftY = new float[nFrames];
         int counter = 0;
+        int nReconstructions = 1;
+
+        //////////////////////////////////////
+        // !!! MAIN LOOP THROUGH FRAMES !!! //
+        //////////////////////////////////////
 
         for (int s=1; s<=nSlices; s++) {
             // Check if user is cancelling calculation
             IJ.showProgress(s, nSlices);
             if (IJ.escapePressed()) {
                 IJ.resetEscape();
-                rCL.release();
+                srrf2CL.release();
                 return;
             }
 
             // Grab the new frame from the list
             imp.setSlice(s);
             ImageProcessor ip = imp.getProcessor();
+            imsRawDataBuffer.addSlice(ip);
 
             // Estimate vibrations
             if (correctVibration) {
@@ -130,43 +138,98 @@ public class LiveSRRF_ implements PlugIn {
                 int id = prof.startTimer();
                 if (counter == 0) {
                     ipRef = ip.duplicate();
-                    shiftX = 0;
-                    shiftY = 0;
+                    shiftX[counter] = 0;
+                    shiftY[counter] = 0;
                 }
                 else {
                     float[] shift = calculateShift(ipRef, ip, 5);
-                    shiftX = shift[0];
-                    shiftY = shift[1];
+                    shiftX[counter] = shift[0];
+                    shiftY[counter] = shift[1];
                 }
-                System.out.println("Frame="+s+" shiftX="+shiftX+" shiftY="+shiftY);
+                System.out.println("Frame="+s+" shiftX="+shiftX[counter]+" shiftY="+shiftY[counter]);
                 prof.recordTime("Drift Estimation", prof.endTimer(id));
             }
 
-            // Calculate actual Radial-Gradient-Convergence
-            FloatProcessor fpRGC = rCL.calculateRGC(ip, shiftX, shiftY);
-            float[] pixelsRGC = (float[]) fpRGC.getPixels();
-
-            // Update buffer
-            if (s == 1 || counter == 0) pixelsGRCBuffer = new float[min(nFrames, nSlices-s+1)][];
-            pixelsGRCBuffer[counter] = pixelsRGC;
-
             if (counter == nFrames-1 || s == nSlices) {
-                // process buffer
-                if (t != null) t.finalise();
-                t = new ThreadedCalculateReconstructions(pixelsGRCBuffer);
-                t.start();
+                int id = prof.startTimer();
+                ImageStack imsResults = srrf2CL.calculateSRRF(imsRawDataBuffer, shiftX, shiftY);
+                nReconstructions = imsResults.getSize();
+                if (!showAllReconstructions) {
+                    imsSRRF.addSlice(imsResults.getProcessor(nReconstructions));
+                    imsSRRF.setSliceLabel(srrf2CL.reconstructionLabel[nReconstructions-1], imsSRRF.getSize());
+                }
+                else {
+                    for (int r = 1; r <= imsResults.getSize(); r++) {
+                        imsSRRF.addSlice(imsResults.getProcessor(r));
+                        imsSRRF.setSliceLabel(srrf2CL.reconstructionLabel[r - 1], imsSRRF.getSize());
+                    }
+                }
+                if (firstTime) {
+                    impSRRF.setStack(imsSRRF);
+                    impSRRF.show();
+                    impSRRF.setSlice(imsSRRF.getSize());
+                    IJ.run(impSRRF, "Enhance Contrast", "saturated=0.35");
+                    firstTime = false;
+                }
+                else {
+                    impSRRF.setSlice(imsSRRF.getSize());
+                }
+
+                // reset buffers
+                imsRawDataBuffer = new ImageStack(w, h);
                 counter = 0;
+                prof.recordTime("full SRRF-frame calculation", prof.endTimer(id));
             }
             else counter++;
         }
 
-        t.finalise();
-        if (showMAX) new ImagePlus(imp.getTitle()+" - SRRF MAX", imsSRRF_max).show();
-        if (showAVG) new ImagePlus(imp.getTitle()+" - SRRF AVG", imsSRRF_avg).show();
-        if (showSTD) new ImagePlus(imp.getTitle()+" - SRRF STD", imsSRRF_std).show();
-
-        rCL.release();
+        srrf2CL.release(); // Release the GPU!!!
         IJ.log(prof.report());
+
+        // Show final rendering...
+        impSRRF.setStack(imsSRRF);
+        IJ.run(impSRRF, "Enhance Contrast", "saturated=0.5");
+        impSRRF.setTitle(imp.getTitle()+" - SRRF2");
+
+        if (showAllReconstructions) {
+            int nSRRFFrames = imsSRRF.getSize() / nReconstructions;
+            IJ.run(impSRRF, "Stack to Hyperstack...", "order=xyczt(default) channels="+nReconstructions+" slices=1 frames="+nSRRFFrames+" display=Grayscale");
+        }
+    }
+
+    private void grabSettings(GenericDialog gd) {
+        magnification = (int) gd.getNextNumber();
+        fwhm = (float) gd.getNextNumber();
+        nFrames = (int) gd.getNextNumber();
+        correctVibration = gd.getNextBoolean();
+        correctSCMOS = gd.getNextBoolean();
+        showAllReconstructions = gd.getNextBoolean();
+
+        prefs.set("magnification", (float) magnification);
+        prefs.set("fwhm", fwhm);
+        prefs.set("nFrames", nFrames);
+        prefs.set("correctVibration", correctVibration);
+        prefs.set("correctSCMOS", correctSCMOS);
+
+        prefs.set("showAllReconstructions", showAllReconstructions);
+        prefs.save();
+
+        if (nFrames == 0) nFrames = imp.getImageStack().getSize();
+        nFrames = min(imp.getImageStack().getSize(), nFrames);
+    }
+
+    class MyDialogListener implements DialogListener {
+        @Override
+        public boolean dialogItemChanged(GenericDialog gd, AWTEvent awtEvent) {
+
+            grabSettings(gd);
+            ImageStack ims = imp.getImageStack();
+
+            double memUsed = predictMemoryUsed(ims.getWidth(), ims.getHeight(), nFrames, magnification);
+            IJ.showStatus("SRRF2 - Predicted used GPU memory: "+Math.round(memUsed)+"MB");
+
+            return true;
+        }
     }
 
     private float[] calculateShift(ImageProcessor ipRef, ImageProcessor ip, int radius) {
@@ -226,71 +289,5 @@ public class LiveSRRF_ implements PlugIn {
         return new float[] {shiftX, shiftY};
     }
 
-    class ThreadedCalculateReconstructions extends Thread {
 
-        private float[][] pixelsRGCBuffer;
-
-        public ThreadedCalculateReconstructions(float[][] pixelsRGCBuffer) {
-            this.pixelsRGCBuffer = pixelsRGCBuffer;
-        }
-
-        public void run() {
-            int nSlices = pixelsRGCBuffer.length;
-            int nPixels = pixelsRGCBuffer[0].length;
-            float[] pixelsMax = new float[nPixels];
-            float[] pixelsAvg = new float[nPixels];
-            float[] pixelsStd = new float[nPixels];
-
-            for (int s=0; s<nSlices; s++) {
-                for (int p=0; p<nPixels; p++) {
-                    pixelsMax[p] = max(pixelsRGCBuffer[s][p], pixelsMax[p]);
-                    pixelsAvg[p] += pixelsRGCBuffer[s][p] / nPixels;
-                }
-            }
-
-            if (showSTD) {
-                for (int s = 1; s < nSlices; s++) {
-                    for (int p = 0; p < nPixels; p++) {
-                        pixelsStd[p] += pow(pixelsRGCBuffer[s][p] - pixelsAvg[p], 2) / (nSlices-1);
-                    }
-                }
-                for (int p = 0; p < nPixels; p++) pixelsStd[p] = (float) sqrt(pixelsStd[p]);
-
-//                for (int p = 0; p < nPixels; p++) {
-//
-//                    int counter = 0;
-//                    double pps = 0;
-//
-//                    for (int t0 = 1; t0 < nSlices; t0++) {
-//                        double v0 = abs(pixelsRGCBuffer[t0][p] - pixelsAvg[p]);
-//
-//                        for (int t1 = t0; t1 < nSlices; t1++) {
-//                            double v1 = abs(pixelsRGCBuffer[t1][p] - pixelsAvg[p]);
-//                            pps += v0 * v1;
-//                            counter++;
-//                        }
-//                    }
-//
-//                    pps /= counter;
-//                    pixelsStd[p] = (float) pps;
-//                }
-            }
-
-            int w = imsSRRF_max.getWidth();
-            int h = imsSRRF_max.getHeight();
-            if (showMAX) imsSRRF_max.addSlice(new FloatProcessor(w, h, pixelsMax));
-            if (showAVG) imsSRRF_avg.addSlice(new FloatProcessor(w, h, pixelsAvg));
-            if (showSTD) imsSRRF_std.addSlice(new FloatProcessor(w, h, pixelsStd));
-        }
-
-        public void finalise() {
-            try {
-                this.join();
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-        }
-    }
 }
-
-
