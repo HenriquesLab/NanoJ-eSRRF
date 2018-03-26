@@ -186,10 +186,10 @@ public class LiveSRRF2_ implements PlugIn {
         IJ.run(impSRRF, "Enhance Contrast", "saturated=0.5");
         impSRRF.setTitle(imp.getTitle()+" - SRRF2");
 
-//        if (showAllReconstructions) {
-//            int nSRRFFrames = imsSRRF.getSize() / nReconstructions;
-//            IJ.run(impSRRF, "Stack to Hyperstack...", "order=xyczt(default) channels="+nReconstructions+" slices=1 frames="+nSRRFFrames+" display=Grayscale");
-//        }
+        if (showAllReconstructions) {
+            int nSRRFFrames = imsSRRF.getSize() / nReconstructions;
+            IJ.run(impSRRF, "Stack to Hyperstack...", "order=xyczt(default) channels="+nReconstructions+" slices=1 frames="+nSRRFFrames+" display=Grayscale");
+        }
     }
 
     private void grabSettings(GenericDialog gd) {
