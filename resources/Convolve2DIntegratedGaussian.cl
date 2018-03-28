@@ -14,8 +14,7 @@ static float getIntegratedGaussian(float dx, float dy, float sigma2) {
 __kernel void convolveHorizontal(
     __global float* pixels,
     __global float* pixelsConvolvedH,
-    int const frameStart,
-    int const frameStop,
+    int const frameNumber,
     float const sigma) {
 
     const int x = get_global_id(0);
@@ -27,28 +26,24 @@ __kernel void convolveHorizontal(
     const int radius = max(((int) sigma) * 3, 1);
     const float sigma2 = ROOT2*fabs(sigma); // 2 * pow(sigma, 2);
 
-    for (int f=frameStart; f<frameStop; f++) {
-        int fOffset = f * wh;
-        float vKernelSum = 0;
-        float v = 0;
+    int fOffset = frameNumber * wh;
+    float vKernelSum = 0;
+    float v = 0;
 
-        for (int dx = -radius; dx <= radius; dx++) {
-            float vKernel = 0.5f * (erf((dx + 0.5f) / sigma2) - erf((dx - 0.5f) / sigma2));
-            int xp = min(max(x+dx, 0), w-1);
-            v += pixels[fOffset + y * w + xp] * vKernel;
-            vKernelSum += vKernel;
-        }
-
-        v /= vKernelSum;
-        pixelsConvolvedH[fOffset + y * w + x] = v;
+    for (int dx = -radius; dx <= radius; dx++) {
+        float vKernel = 0.5f * (erf((dx + 0.5f) / sigma2) - erf((dx - 0.5f) / sigma2));
+        int xp = min(max(x+dx, 0), w-1);
+        v += pixels[fOffset + y * w + xp] * vKernel;
+        vKernelSum += vKernel;
     }
+
+    v /= vKernelSum;
+    pixelsConvolvedH[y * w + x] = v;
 }
 
 __kernel void convolveVertical(
     __global float* pixelsConvolvedH,
     __global float* pixelsConvolved,
-    int const frameStart,
-    int const frameStop,
     float const sigma) {
 
     const int x = get_global_id(0);
@@ -60,20 +55,17 @@ __kernel void convolveVertical(
     const int radius = max(((int) sigma) * 3, 1);
     const float sigma2 = ROOT2*fabs(sigma); // 2 * pow(sigma, 2);
 
-    for (int f=frameStart; f<frameStop; f++) {
-        int fOffset = f * wh;
-        float vKernelSum = 0;
-        float v = 0;
+    float vKernelSum = 0;
+    float v = 0;
 
-        for (int dy = -radius; dy <= radius; dy++) {
-            float vKernel = 0.5f * (erf((dy + 0.5f) / sigma2) - erf((dy - 0.5f) / sigma2));
-            int yp = min(max(y+dy, 0), h-1);
-            v += pixelsConvolvedH[fOffset + yp * w + x] * vKernel;
-            vKernelSum += vKernel;
-        }
-
-        v /= vKernelSum;
-        pixelsConvolved[fOffset + y * w + x] = v;
+    for (int dy = -radius; dy <= radius; dy++) {
+        float vKernel = 0.5f * (erf((dy + 0.5f) / sigma2) - erf((dy - 0.5f) / sigma2));
+        int yp = min(max(y+dy, 0), h-1);
+        v += pixelsConvolvedH[yp * w + x] * vKernel;
+        vKernelSum += vKernel;
     }
+
+    v /= vKernelSum;
+    pixelsConvolved[y * w + x] = v;
 }
 
