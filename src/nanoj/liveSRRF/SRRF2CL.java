@@ -145,7 +145,6 @@ public class SRRF2CL {
         assert (ims.getWidth() == width && ims.getHeight() == height);
         assert (ims.getSize() <= nFrames);
 
-        float[] dataPx = ImageStackToFloatArray(ims);
         int nFrames = ims.getSize();
         int argn;
 
@@ -159,7 +158,7 @@ public class SRRF2CL {
         // prepare and upload CL buffers
         showStatus("Uploading data to GPU...");
         int id = prof.startTimer();
-        fillBuffer(clBufferPx, dataPx);
+        fillBuffer(clBufferPx, ims);
         fillBuffer(clBufferShiftX, shiftX);
         fillBuffer(clBufferShiftY, shiftY);
         queue.putWriteBuffer( clBufferPx, false );
@@ -234,7 +233,6 @@ public class SRRF2CL {
         // grab data from convolved frames
         NanoJThreadExecutor NTE = new NanoJThreadExecutor(false);
         for (int r=1; r<nGPUReconstructions; r++) {
-            int offset = whM * r;
             // this thread will read the buffer for SRRF and SRRF_CV plus rescale their intensity to match RAW_AVE
             ThreadedNormaliseAndCalculateErrorMap t = new ThreadedNormaliseAndCalculateErrorMap(RAW_AVE, dataSRRF[r], dataSRRFConvolved[r], dataErrorMap[r]);
             NTE.execute(t);
