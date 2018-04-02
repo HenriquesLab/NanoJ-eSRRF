@@ -21,6 +21,7 @@ import java.awt.*;
 
 import static java.lang.Math.*;
 import static nanoj.core2.NanoJCrossCorrelation.calculateCrossCorrelationMap;
+import static nanoj.liveSRRF.SRRF2CL.BIN_4;
 import static nanoj.liveSRRF.SRRF2CL.predictMemoryUsed;
 
 public class LiveSRRF_ implements PlugIn {
@@ -41,10 +42,9 @@ public class LiveSRRF_ implements PlugIn {
     private ImagePlus impCCM = null;
 
     private ImagePlus imp;
-    private int magnification, nFrames;
+    private int magnification, nFrames, nTimeLags;
     private float fwhm;
-    private boolean correctVibration, correctSCMOS;
-    private boolean showAllReconstructions;
+    private boolean correctVibration, correctSCMOS, showAllReconstructions, doBin2, doBin4;
 
     @Override
     public void run(String arg) {
@@ -62,6 +62,9 @@ public class LiveSRRF_ implements PlugIn {
         gd.addCheckbox("Correct sCMOS patterning", prefs.get("correctSCMOS", false));
         gd.addMessage("-=-= Reconstructions =-=-\n", headerFont);
         gd.addCheckbox("Show_all reconstruction", prefs.get("showAllReconstructions", false));
+        gd.addNumericField("Accumulative_timelags (default: 5)", prefs.get("nTimeLags", 5), 0);
+        gd.addCheckbox("Calculate for bin 2 (default: off)", prefs.get("doBin2", false));
+        gd.addCheckbox("Calculate for bin 4 (default: off)", prefs.get("doBin4", false));
         gd.addMessage("-=-= Advice =-=-\n", headerFont);
         gd.addMessage(
                 "SRRF2 is a GPU resources-hog, if it fails to run consider\n" +
@@ -107,7 +110,7 @@ public class LiveSRRF_ implements PlugIn {
 
         ImageProcessor ipRef = null; // reference slide for Cross-Correlation and vibration correction
 
-        SRRF2CL srrf2CL = new SRRF2CL(w, h, nFrames, magnification, fwhm);
+        SRRF2CL srrf2CL = new SRRF2CL(w, h, nFrames, magnification, fwhm, nTimeLags, BIN_4);
 
         float[] shiftX = new float[nFrames];
         float[] shiftY = new float[nFrames];
@@ -156,12 +159,12 @@ public class LiveSRRF_ implements PlugIn {
                 nReconstructions = imsResults.getSize();
                 if (!showAllReconstructions) {
                     imsSRRF.addSlice(imsResults.getProcessor(nReconstructions));
-                    imsSRRF.setSliceLabel(srrf2CL.reconstructionLabel[nReconstructions-1], imsSRRF.getSize());
+                    imsSRRF.setSliceLabel(srrf2CL.reconstructionLabel.get(nReconstructions-1), imsSRRF.getSize());
                 }
                 else {
                     for (int r = 1; r <= imsResults.getSize(); r++) {
                         imsSRRF.addSlice(imsResults.getProcessor(r));
-                        imsSRRF.setSliceLabel(srrf2CL.reconstructionLabel[r - 1], imsSRRF.getSize());
+                        imsSRRF.setSliceLabel(srrf2CL.reconstructionLabel.get(r - 1), imsSRRF.getSize());
                     }
                 }
                 if (firstTime) {
@@ -197,13 +200,18 @@ public class LiveSRRF_ implements PlugIn {
         }
     }
 
-    private void grabSettings(GenericDialog gd) {
+    private boolean grabSettings(GenericDialog gd) {
         magnification = (int) gd.getNextNumber();
         fwhm = (float) gd.getNextNumber();
         nFrames = (int) gd.getNextNumber();
         correctVibration = gd.getNextBoolean();
         correctSCMOS = gd.getNextBoolean();
         showAllReconstructions = gd.getNextBoolean();
+        nTimeLags = (int) gd.getNextNumber();
+        doBin2 = gd.getNextBoolean();
+        doBin4 = gd.getNextBoolean();
+
+        if (nTimeLags<1) return false;
 
         prefs.set("magnification", (float) magnification);
         prefs.set("fwhm", fwhm);
@@ -212,23 +220,28 @@ public class LiveSRRF_ implements PlugIn {
         prefs.set("correctSCMOS", correctSCMOS);
 
         prefs.set("showAllReconstructions", showAllReconstructions);
+        prefs.set("nTimeLags", nTimeLags);
+        prefs.set("doBin2", doBin2);
+        prefs.set("doBin4", doBin4);
         prefs.save();
 
         if (nFrames == 0) nFrames = imp.getImageStack().getSize();
         nFrames = min(imp.getImageStack().getSize(), nFrames);
+
+        return true;
     }
 
     class MyDialogListener implements DialogListener {
         @Override
         public boolean dialogItemChanged(GenericDialog gd, AWTEvent awtEvent) {
 
-            grabSettings(gd);
+            boolean goodToGo = grabSettings(gd);
             ImageStack ims = imp.getImageStack();
 
-            double memUsed = predictMemoryUsed(ims.getWidth(), ims.getHeight(), nFrames, magnification);
+            double memUsed = predictMemoryUsed(ims.getWidth(), ims.getHeight(), nFrames, magnification, nTimeLags, BIN_4);
             IJ.showStatus("SRRF2 - Predicted used GPU memory: "+Math.round(memUsed)+"MB");
 
-            return true;
+            return goodToGo;
         }
     }
 

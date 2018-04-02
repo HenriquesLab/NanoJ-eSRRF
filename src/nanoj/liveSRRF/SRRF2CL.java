@@ -9,6 +9,7 @@ import nanoj.core2.NanoJThreadExecutor;
 
 import java.io.IOException;
 import java.nio.FloatBuffer;
+import java.util.ArrayList;
 
 import static com.jogamp.opencl.CLMemory.Mem.READ_ONLY;
 import static com.jogamp.opencl.CLMemory.Mem.READ_WRITE;
@@ -20,24 +21,16 @@ import static nanoj.core2.NanoJImageStackArrayConvertion.ImageStackToFloatArray;
 
 public class SRRF2CL {
 
+
     public boolean DEBUG = false;
     private NanoJProfiler prof = new NanoJProfiler();
 
-    public static String[] reconstructionLabel = new String[]{
-            "Raw Average",
-            "SRRF2 Maximum",
-            "SRRF2 Average",
-            "SRRF2 StdDev",
-            "SRRF2 Accum. TL1",
-            "SRRF2 Accum. TL2",
-            "SRRF2 Accum. TL3",
-            "SRRF2 Accum. TL4",
-            "SRRF2 Accum. TL5",
-            "SRRF2 Accum. TL6",
-            "SRRF2 Accum. TL7",
-            "SRRF2 Accum. TL8",
-            "SRRF2 Fusion"
-    };
+    private final int nGPUReconstructions;
+    public final static int BIN_1 = 1;
+    public final static int BIN_2 = 2;
+    public final static int BIN_4 = 4;
+
+    public ArrayList<String> reconstructionLabel = new ArrayList<String>();
 
     static CLContext context;
     static CLProgram programSRRF2, programConvolve2DIntegratedGaussian;
@@ -46,7 +39,6 @@ public class SRRF2CL {
 
     private final int width, height, widthM, heightM, nFrames, magnification, whM;
     private final float fwhm;
-    private static int nGPUReconstructions = reconstructionLabel.length-1;
 
     private CLBuffer<FloatBuffer>
             clBufferPx,
@@ -56,8 +48,17 @@ public class SRRF2CL {
 
     public ImageStack imsSRRF, imsErrorMap;
 
+    private static int getNGPUReconstructions(int nTimeLags, int doBinFlag) {
+        int nReconstructions = 3 + nTimeLags;
+        if (doBinFlag == BIN_2) nReconstructions += nTimeLags;
+        else if (doBinFlag == BIN_4) nReconstructions += 2*nTimeLags;
+        return nReconstructions;
+    }
+
     // return predicted memory usage in MB
-    public static double predictMemoryUsed(int width, int height, int nFrames, int magnification) {
+    public static double predictMemoryUsed(int width, int height, int nFrames, int magnification, int nTimeLags, int doBinFlag) {
+        int nGPUReconstructions = getNGPUReconstructions(nTimeLags, doBinFlag);
+
         double memUsed = 0;
         memUsed += width * height * nFrames; // clBufferPx
         memUsed += nFrames; // clBufferShiftX
@@ -72,7 +73,9 @@ public class SRRF2CL {
         return memUsed;
     }
 
-    public SRRF2CL(int width, int height, int nFrames, int magnification, float fwhm) {
+    public SRRF2CL(int width, int height, int nFrames, int magnification, float fwhm, int nTimeLags, int doBinFlag) {
+        nGPUReconstructions = getNGPUReconstructions(nTimeLags, doBinFlag);
+
         this.nFrames = nFrames;
         this.width = width;
         this.height = height;
@@ -100,6 +103,9 @@ public class SRRF2CL {
             String programString = getResourceAsString(RadialGradientConvergenceCL.class, "SRRF2.cl");
             programString = replaceFirst(programString,"$MAX_FRAMES$", ""+nFrames);
             programString = replaceFirst(programString,"$MAGNIFICATION$", ""+magnification);
+            programString = replaceFirst(programString,"$NTIMELAGS$", ""+nTimeLags);
+            programString = replaceFirst(programString,"$DOBIN2$", ""+(doBinFlag == BIN_2 || doBinFlag == BIN_4));
+            programString = replaceFirst(programString,"$DOBIN4$", ""+(doBinFlag == BIN_4));
             programString = replaceFirst(programString,"$FWHM$", ""+fwhm);
             programString = replaceFirst(programString,"$SIGMA$", ""+sigma);
             programString = replaceFirst(programString,"$RADIUS$", ""+((int) (sigma * 2) + 1));
@@ -139,6 +145,19 @@ public class SRRF2CL {
                         clBufferSRRF_CVH.getCLSize() +
                         clBufferSRRF_CV.getCLSize())
                 / 1000000d + "MB");
+
+        reconstructionLabel.clear();
+        reconstructionLabel.add("Raw Average");
+        reconstructionLabel.add("SRRF2 Maximum");
+        reconstructionLabel.add("SRRF2 Average");
+
+        for (int n=0; n<nTimeLags; n++) reconstructionLabel.add("SRRF2 Accum. TL"+n);
+        if (doBinFlag == BIN_2 || doBinFlag == BIN_4)
+            for (int n=0; n<nTimeLags; n++) reconstructionLabel.add("SRRF2 Accum. TL"+n+" Bin2");
+        if (doBinFlag == BIN_4)
+            for (int n=0; n<nTimeLags; n++) reconstructionLabel.add("SRRF2 Accum. TL"+n+" Bin4");
+
+        reconstructionLabel.add("SRRF2 Fusion");
     }
 
     public synchronized ImageStack calculateSRRF(ImageStack ims, float[] shiftX, float[] shiftY) {

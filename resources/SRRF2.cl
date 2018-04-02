@@ -1,8 +1,12 @@
 //#pragma OPENCL EXTENSION cl_khr_fp64: enable
+#define MAX_FRAMES $MAX_FRAMES$
 #define FWHM $FWHM$
 #define RADIUS $RADIUS$
 #define SIGMA $SIGMA$
 #define MAGNIFICATION $MAGNIFICATION$
+#define NTIMELAGS $NTIMELAGS$
+#define DOBIN2 $DOBIN2$
+#define DOBIN4 $DOBIN4$
 #define w $WIDTH$
 #define h $HEIGHT$
 #define wh $WH$
@@ -109,7 +113,7 @@ __kernel void calculateSRRF(
     int yM = get_global_id(1);
     int xyMOffset = yM * wM + xM;
 
-    float CGLH[$MAX_FRAMES$]; // note, MAX_FRAMES is passed before compile
+    float CGLH[MAX_FRAMES]; // note, MAX_FRAMES is passed before compile
     float vRAW_AVE = 0;
     float vSRRF_AVE = 0;
     float vSRRF_MAX = 0;
@@ -179,42 +183,87 @@ __kernel void calculateSRRF(
         vSRRF_AVE += (CGLH[f] - vSRRF_AVE) / f1;
     }
 
-    // CALCULATE SRRF TEMPORAL CORRELATIONS
-
-    // mean subtract first
-    for (int f=0; f<nFrames; f++) CGLH[f] = fabs(CGLH[f] - vSRRF_AVE);
-
-    // calculate auto-correlation
-    float SRRFCumTimeLags[9]; // cumulative timelags
-    for (int tl = 0; tl<9; tl++) SRRFCumTimeLags[tl] = 0; // initialise SRRFCumTimeLags at 0
-    int nFrames1 = nFrames-1;
-
-    for (int f=0; f<nFrames; f++) {
-        int f1 = f+1;
-
-        SRRFCumTimeLags[0] += (CGLH[f] * CGLH[f] - SRRFCumTimeLags[0]) / f1;
-        for (int n=1; n<9; n++) {
-            if (f < nFrames - n) SRRFCumTimeLags[n] += (product(CGLH, f, f+n) - SRRFCumTimeLags[n]) / f1;
-        }
-    }
-
+    // CALCULATE SRRF BASIC TEMPORAL ANALYSIS
     SRRFArray[0 * whM + xyMOffset]  = vRAW_AVE;
     SRRFArray[1 * whM + xyMOffset]  = vSRRF_MAX * vRAW_AVE;
     SRRFArray[2 * whM + xyMOffset]  = vSRRF_AVE * vRAW_AVE;
-    SRRFArray[3 * whM + xyMOffset]  = rootn(SRRFCumTimeLags[0], 2) * vRAW_AVE;
-    for (int n=1; n<=8; n++) {
-        SRRFArray[(3+n) * whM + xyMOffset] = rootn(SRRFCumTimeLags[n], 1+n) * vRAW_AVE;
+
+    // CALCULATE SRRF TEMPORAL CORRELATIONS
+
+    // mean subtract first
+    for (int f=0; f<nFrames; f++) CGLH[f] = CGLH[f] - vSRRF_AVE;
+
+    // initialize correlation array
+    float SRRFCumTimeLags[NTIMELAGS]; // cumulative timelags
+    for (int tl = 0; tl<NTIMELAGS; tl++) SRRFCumTimeLags[tl] = 0; // initialise SRRFCumTimeLags at 0
+
+    ////////////////////////////////////////////////
+    // CALCULATE SRRF TEMPORAL CORRELATIONS BIN 1 //
+    ////////////////////////////////////////////////
+    for (int f=0; f<nFrames; f++) {
+        int f1 = f+1;
+        SRRFCumTimeLags[0] += (CGLH[f] * CGLH[f] - SRRFCumTimeLags[0]) / f1;
+        for (int n=1; n<NTIMELAGS; n++) {
+            if (f < nFrames - n) SRRFCumTimeLags[n] += (fabs(product(CGLH, f, f+n)) - SRRFCumTimeLags[n]) / f1;
+        }
     }
 
-//    SRRFArray[4 * whM + xyMOffset]  = rootn(SRRFCumTimeLags[1], 2) * vRAW_AVE;
-//    SRRFArray[5 * whM + xyMOffset]  = rootn(SRRFCumTimeLags[2], 3) * vRAW_AVE;
-//    SRRFArray[6 * whM + xyMOffset]  = rootn(SRRFCumTimeLags[3], 4) * vRAW_AVE;
-//    SRRFArray[7 * whM + xyMOffset]  = rootn(SRRFCumTimeLags[4], 5) * vRAW_AVE;
-//    SRRFArray[8 * whM + xyMOffset]  = rootn(SRRFCumTimeLags[5], 6) * vRAW_AVE;
-//    SRRFArray[9 * whM + xyMOffset]  = rootn(SRRFCumTimeLags[6], 7) * vRAW_AVE;
-//    SRRFArray[10 * whM + xyMOffset] = rootn(SRRFCumTimeLags[7], 8) * vRAW_AVE;
-//    SRRFArray[11 * whM + xyMOffset] = rootn(SRRFCumTimeLags[8], 9) * vRAW_AVE;
+    int recOffset = 3;
+    SRRFArray[recOffset * whM + xyMOffset]  = sqrt(SRRFCumTimeLags[0]) * vRAW_AVE;
+    for (int n=1; n<NTIMELAGS; n++) {
+        SRRFArray[(recOffset+n) * whM + xyMOffset] = rootn(SRRFCumTimeLags[n], 1+n) * vRAW_AVE;
+    }
 
+    ////////////////////////////////////////////////
+    // CALCULATE SRRF TEMPORAL CORRELATIONS BIN 2 //
+    ////////////////////////////////////////////////
+    if (!DOBIN2) return; // if we don't want to calculate BIN 2, then return
 
+    int nFrames2 = nFrames / 2;
+
+    // bin data by 2 first
+    for (int f=0; f<nFrames2; f++) CGLH[f] = CGLH[f*2] + CGLH[f*2+1];
+
+    for (int tl = 0; tl<NTIMELAGS; tl++) SRRFCumTimeLags[tl] = 0; // initialise SRRFCumTimeLags at 0
+
+    for (int f=0; f<nFrames2; f++) {
+        int f1 = f+1;
+        SRRFCumTimeLags[0] += (CGLH[f] * CGLH[f] - SRRFCumTimeLags[0]) / f1;
+        for (int n=1; n<NTIMELAGS; n++) {
+            if (f < nFrames - n) SRRFCumTimeLags[n] += (fabs(product(CGLH, f, f+n)) - SRRFCumTimeLags[n]) / f1;
+        }
+    }
+
+    recOffset += NTIMELAGS;
+    SRRFArray[(recOffset) * whM + xyMOffset]  = sqrt(SRRFCumTimeLags[0]) * vRAW_AVE;
+    for (int n=1; n<NTIMELAGS; n++) {
+        SRRFArray[(recOffset+n) * whM + xyMOffset] = rootn(SRRFCumTimeLags[n], 1+n) * vRAW_AVE;
+    }
+
+    ////////////////////////////////////////////////
+    // CALCULATE SRRF TEMPORAL CORRELATIONS BIN 4 //
+    ////////////////////////////////////////////////
+    if (!DOBIN4) return; // if we don't want to calculate BIN 2, then return
+
+    int nFrames4 = nFrames / 4;
+
+    // bin data by 4 first
+    for (int f=0; f<nFrames4; f++) CGLH[f] = CGLH[f*2] + CGLH[f*2+1];
+
+    for (int tl = 0; tl<NTIMELAGS; tl++) SRRFCumTimeLags[tl] = 0; // initialise SRRFCumTimeLags at 0
+
+    for (int f=0; f<nFrames4; f++) {
+        int f1 = f+1;
+        SRRFCumTimeLags[0] += (CGLH[f] * CGLH[f] - SRRFCumTimeLags[0]) / f1;
+        for (int n=1; n<NTIMELAGS; n++) {
+            if (f < nFrames - n) SRRFCumTimeLags[n] += (fabs(product(CGLH, f, f+n)) - SRRFCumTimeLags[n]) / f1;
+        }
+    }
+
+    recOffset += NTIMELAGS;
+    SRRFArray[recOffset * whM + xyMOffset]  = sqrt(SRRFCumTimeLags[0]) * vRAW_AVE;
+    for (int n=1; n<NTIMELAGS; n++) {
+        SRRFArray[(recOffset+n) * whM + xyMOffset] = rootn(SRRFCumTimeLags[n], 1+n) * vRAW_AVE;
+    }
 }
 
