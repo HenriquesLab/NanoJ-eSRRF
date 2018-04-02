@@ -253,7 +253,7 @@ public class SRRF2CL {
         NanoJThreadExecutor NTE = new NanoJThreadExecutor(false);
         for (int r=1; r<nGPUReconstructions; r++) {
             // this thread will read the buffer for SRRF and SRRF_CV plus rescale their intensity to match RAW_AVE
-            ThreadedNormaliseAndCalculateErrorMap t = new ThreadedNormaliseAndCalculateErrorMap(RAW_AVE, dataSRRF[r], dataSRRFConvolved[r], dataErrorMap[r]);
+            ThreadedNormaliseAndCalculateErrorMap t = new ThreadedNormaliseAndCalculateErrorMap(RAW_AVE, dataSRRF[r], dataSRRFConvolved[r], dataErrorMap[r], widthM, heightM);
             NTE.execute(t);
         }
         NTE.finish();
@@ -299,14 +299,18 @@ public class SRRF2CL {
         private final float[] dataSRRF;
         private final float[] dataSRRFConvolved;
         private final float[] dataErrorMap;
+        private final int width;
+        private final int height;
 
         public float g, o;
 
-        public ThreadedNormaliseAndCalculateErrorMap(float[] dataRef, float dataSRRF[], float[] dataSRRFConvolved, float[] dataErrorMap) {
+        public ThreadedNormaliseAndCalculateErrorMap(float[] dataRef, float dataSRRF[], float[] dataSRRFConvolved, float[] dataErrorMap, int width, int height) {
             this.dataRef = dataRef;
             this.dataSRRF = dataSRRF;
             this.dataSRRFConvolved = dataSRRFConvolved;
             this.dataErrorMap = dataErrorMap;
+            this.width = width;
+            this.height = height;
         }
 
         @Override
@@ -344,6 +348,31 @@ public class SRRF2CL {
                 dataSRRFConvolved[n] = dataSRRFConvolved[n] * g + o;
                 dataErrorMap[n] = abs(dataRef[n] - dataSRRFConvolved[n]);
             }
+
+            float[] dataErrorMapSmooth = dataErrorMap.clone();
+
+            // smooth error map, to minimize corruption by noise
+            for (int j=1; j<height-1; j++) {
+                int l0 = (j-1) * width;
+                int l1 = j * width;
+                int l2 = (j+1) * width;
+
+                for (int i=1; i<width-1; i++) {
+                    float vMean = 0;
+                    vMean += dataErrorMap[l0 + i-1];
+                    vMean += dataErrorMap[l0 + i];
+                    vMean += dataErrorMap[l0 + i+1];
+                    vMean += dataErrorMap[l1 + i-1];
+                    vMean += dataErrorMap[l1 + i];
+                    vMean += dataErrorMap[l1 + i+1];
+                    vMean += dataErrorMap[l2 + i-1];
+                    vMean += dataErrorMap[l2 + i];
+                    vMean += dataErrorMap[l2 + i+1];
+                    vMean /= 9;
+                    dataErrorMapSmooth[l1 + i] = vMean;
+                }
+            }
+            System.arraycopy(dataErrorMapSmooth, 0, dataErrorMap, 0, dataErrorMap.length);
         }
     }
 }
