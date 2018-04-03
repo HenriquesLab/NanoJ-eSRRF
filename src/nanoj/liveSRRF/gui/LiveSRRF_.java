@@ -21,17 +21,13 @@ import java.awt.*;
 
 import static java.lang.Math.*;
 import static nanoj.core2.NanoJCrossCorrelation.calculateCrossCorrelationMap;
-import static nanoj.liveSRRF.SRRF2CL.BIN_4;
-import static nanoj.liveSRRF.SRRF2CL.predictMemoryUsed;
+import static nanoj.liveSRRF.SRRF2CL.*;
 
 public class LiveSRRF_ implements PlugIn {
 
     private Font headerFont = new Font("Arial", Font.BOLD, 16);
 
-    private String user = "HenriquesLab";
-    //private String user = "AudreySalles";
-    //private String user = "PaulReynolds";
-    //private String user = "GrahamDellaire";
+    private String user = "FijiUpdater";
     private String version = "20180418-"+user;
 
     private NanoJPrefs prefs = new NanoJPrefs(this.getClass().getName());
@@ -42,9 +38,9 @@ public class LiveSRRF_ implements PlugIn {
     private ImagePlus impCCM = null;
 
     private ImagePlus imp;
-    private int magnification, nFrames, nTimeLags;
+    private int magnification, nFrames, nTimeLags, doBin;
     private float fwhm;
-    private boolean correctVibration, correctSCMOS, showAllReconstructions, doBin2, doBin4;
+    private boolean correctVibration, correctSCMOS, showAllReconstructions;
 
     @Override
     public void run(String arg) {
@@ -54,14 +50,14 @@ public class LiveSRRF_ implements PlugIn {
         if (imp == null) imp = IJ.openImage();
         imp.show();
 
-        NonBlockingGenericDialog gd = new NonBlockingGenericDialog("Live SRRF (aka SRRF2) - In Development (for "+user+")");
+        NonBlockingGenericDialog gd = new NonBlockingGenericDialog("LiveSRRF (aka SRRF2) - Unfinished...");
         gd.addNumericField("Magnification (default: 4)", prefs.get("magnification", 4), 0);
         gd.addNumericField("FWHM (pixels, default: 3)", prefs.get("fwhm", 3), 2);
         gd.addNumericField("Frames_per_time-point (0 - auto)", prefs.get("nFrames", 0), 0);
         gd.addCheckbox("Correct vibration", prefs.get("correctVibration", false));
         gd.addCheckbox("Correct sCMOS patterning", prefs.get("correctSCMOS", false));
         gd.addMessage("-=-= Reconstructions =-=-\n", headerFont);
-        gd.addCheckbox("Show_all reconstruction", prefs.get("showAllReconstructions", false));
+        gd.addCheckbox("Show_all reconstruction (default: off)", prefs.get("showAllReconstructions", false));
         gd.addNumericField("Accumulative_timelags (default: 5)", prefs.get("nTimeLags", 5), 0);
         gd.addCheckbox("Calculate for bin 2 (default: off)", prefs.get("doBin2", false));
         gd.addCheckbox("Calculate for bin 4 (default: off)", prefs.get("doBin4", false));
@@ -110,7 +106,7 @@ public class LiveSRRF_ implements PlugIn {
 
         ImageProcessor ipRef = null; // reference slide for Cross-Correlation and vibration correction
 
-        SRRF2CL srrf2CL = new SRRF2CL(w, h, nFrames, magnification, fwhm, nTimeLags, BIN_4);
+        SRRF2CL srrf2CL = new SRRF2CL(w, h, nFrames, magnification, fwhm, nTimeLags, doBin);
 
         float[] shiftX = new float[nFrames];
         float[] shiftY = new float[nFrames];
@@ -208,8 +204,8 @@ public class LiveSRRF_ implements PlugIn {
         correctSCMOS = gd.getNextBoolean();
         showAllReconstructions = gd.getNextBoolean();
         nTimeLags = (int) gd.getNextNumber();
-        doBin2 = gd.getNextBoolean();
-        doBin4 = gd.getNextBoolean();
+        boolean doBin2 = gd.getNextBoolean();
+        boolean doBin4 = gd.getNextBoolean();
 
         if (nTimeLags<1) return false;
 
@@ -228,6 +224,10 @@ public class LiveSRRF_ implements PlugIn {
         if (nFrames == 0) nFrames = imp.getImageStack().getSize();
         nFrames = min(imp.getImageStack().getSize(), nFrames);
 
+        if (doBin4) doBin = BIN_4;
+        else if (doBin2) doBin = BIN_2;
+        else doBin = BIN_1;
+
         return true;
     }
 
@@ -238,7 +238,7 @@ public class LiveSRRF_ implements PlugIn {
             boolean goodToGo = grabSettings(gd);
             ImageStack ims = imp.getImageStack();
 
-            double memUsed = predictMemoryUsed(ims.getWidth(), ims.getHeight(), nFrames, magnification, nTimeLags, BIN_4);
+            double memUsed = predictMemoryUsed(ims.getWidth(), ims.getHeight(), nFrames, magnification, nTimeLags, doBin);
             IJ.showStatus("SRRF2 - Predicted used GPU memory: "+Math.round(memUsed)+"MB");
 
             return goodToGo;
