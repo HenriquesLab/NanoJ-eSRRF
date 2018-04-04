@@ -128,6 +128,7 @@ __kernel void calculateSRRF(
         float xc = (xM + 0.5f) / MAGNIFICATION + ShiftXArray[f] + 1; // continuous space position at the centre of magnified pixel
         float yc = (yM + 0.5f) / MAGNIFICATION + ShiftYArray[f] + 1; // this last +1 sum align the RGC to the interpolated magnified image - don't know why... but works
 
+        CGLH[f] = 0;
         float distanceWeightSum = 0;
 
         for (int j=-RADIUS; j<=RADIUS; j++) {
@@ -142,40 +143,45 @@ __kernel void calculateSRRF(
                 float dy = vyPixelCentred - yc;
                 float distance = sqrt(dx * dx + dy * dy);
 
-                if (distance != 0 && vxPixelCentred >=0 && vxPixelCentred < w && vyPixelCentred >=0 && vyPixelCentred < h) {
-                    int p = fOffset + vyPixelOrigin * w + vxPixelOrigin;
-                    Gx = GxArray[p];
-                    Gy = GyArray[p];
+                if (distance == 0 ||
+                    vxPixelCentred < 0 || vxPixelCentred >= w ||
+                    vyPixelCentred < 0 || vyPixelCentred >= h)
+                    continue;
 
-                    float GMag = sqrt(Gx * Gx + Gy * Gy);
+                int p = fOffset + vyPixelOrigin * w + vxPixelOrigin;
+                Gx = GxArray[p];
+                Gy = GyArray[p];
 
-                    //float distanceWeight = exp(-0.5f*pow((float) (distanceWeight/SIGMA),2)); // gaussian weight
-                    //float distanceWeight = exp(-0.5f*pow((float) (distanceWeight/(2*SIGMA)),4)); // gaussian flat top weight
-                    float distanceWeight = distance*exp(-(distance*distance)/sigma22);  // TODO: dGauss: can use Taylor expansion there
-                    distanceWeight = pow(distanceWeight, 2);
+                //float distanceWeight = exp(-0.5f*pow((float) (distanceWeight/SIGMA),2)); // gaussian weight
+                //float distanceWeight = exp(-0.5f*pow((float) (distanceWeight/(2*SIGMA)),4)); // gaussian flat top weight
+                float distanceWeight = distance*exp(-(distance*distance)/sigma22);  // TODO: dGauss: can use Taylor expansion there
+                distanceWeight = pow(distanceWeight, 2);
+                distanceWeightSum += distanceWeight;
 
-                    // Calculate perpendicular distance from (xc,yc) to gradient line through (vx,vy)
-                    float Dk = fabs(Gy * (xc - vxPixelCentred) - Gx * (yc - vyPixelCentred)) / GMag;    // Dk = D*sin(theta)
-                    if (isnan(Dk)) Dk = distance; // this makes Dk = 0 in the next line
+                // Calculate vector direction, inward or outward (negative is inwards, positive outwards)
+                float GdotR = (Gx * i * MAGNIFICATION + Gy * j * MAGNIFICATION); // tells you if vector was pointing inward or outward
+                if (GdotR > 0) continue; // pointing outward
 
-                    Dk = 1 - Dk / distance; // Dk is now between 0 to 1, 1 if vector points precisely to (xc, yx), Dk = 1-sin(theta)
-                    //Dk = fmax(Dk - 0.5f, 0)*2;
+                // Calculate gradient magnitude
+                float GMag = sqrt(Gx * Gx + Gy * Gy);
 
-                    Dk *= distanceWeight;
-                    distanceWeightSum += distanceWeight;
+                // Calculate perpendicular distance from (xc,yc) to gradient line through (vx,vy)
+                float Dk = fabs(Gy * (xc - vxPixelCentred) - Gx * (yc - vyPixelCentred)) / GMag;    // Dk = D*sin(theta)
+                if (isnan(Dk)) continue;
 
-                    // Accumulate Variables
-                    float GdotR = (Gx * i * MAGNIFICATION + Gy * j * MAGNIFICATION); // tells you if vector was pointing inward or outward
-                    if (GdotR <= 0) CGLH[f] += Dk; // vector was pointing inwards
-                    //else CGLH[f] -= Dk; // vector was pointing outwards
-                }
+                //Dk =  exp(-0.5f*pow((float) (4*Dk/distance),2));
+                Dk = 1 - Dk / distance; // Dk is now between 0 to 1, 1 if vector points precisely to (xc, yx), Dk = 1-sin(theta)
+                Dk *= distanceWeight;
+
+                // Accumulate Variables
+                CGLH[f] += Dk; // vector was pointing inwards
             }
         }
 
+        if (distanceWeightSum != 0) CGLH[f] /= distanceWeightSum; // weighted average
+        else CGLH[f] = 0;
+
         float v = getInterpolatedValue(pixels, w, h, ((float) xM)/MAGNIFICATION + ShiftXArray[f], ((float) yM)/MAGNIFICATION + ShiftYArray[f], f);
-        CGLH[f] /= distanceWeightSum;
-        //CGLH[f] = fmax(CGLH[f] - 0.2f, 0) * 1.2;
-        //CGLH[f] = pow(CGLH[f],2);
 
         // CALCULATE SRRF AVERAGE AND MAXIMUM
         int f1 = f+1;
