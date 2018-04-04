@@ -186,8 +186,8 @@ __kernel void calculateSRRF(
 
     // CALCULATE SRRF BASIC TEMPORAL ANALYSIS
     SRRFArray[0 * whM + xyMOffset]  = vRAW_AVE;
-    SRRFArray[1 * whM + xyMOffset]  = vSRRF_MAX * vRAW_AVE;
-    SRRFArray[2 * whM + xyMOffset]  = vSRRF_AVE * vRAW_AVE;
+    SRRFArray[1 * whM + xyMOffset]  = vSRRF_AVE * vRAW_AVE;
+    SRRFArray[2 * whM + xyMOffset]  = vSRRF_MAX * vRAW_AVE;
 
     // CALCULATE SRRF TEMPORAL CORRELATIONS
 

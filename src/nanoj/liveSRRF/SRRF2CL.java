@@ -16,8 +16,8 @@ import static com.jogamp.opencl.CLMemory.Mem.READ_WRITE;
 import static com.jogamp.opencl.CLMemory.Mem.WRITE_ONLY;
 import static java.lang.Math.abs;
 import static java.lang.Math.max;
+import static java.lang.Math.min;
 import static nanoj.core2.NanoJCL.*;
-import static nanoj.core2.NanoJImageStackArrayConvertion.ImageStackToFloatArray;
 
 public class SRRF2CL {
 
@@ -148,8 +148,8 @@ public class SRRF2CL {
 
         reconstructionLabel.clear();
         reconstructionLabel.add("Raw Average");
-        reconstructionLabel.add("SRRF2 Maximum");
         reconstructionLabel.add("SRRF2 Average");
+        reconstructionLabel.add("SRRF2 Maximum");
 
         for (int n=0; n<nTimeLags; n++) reconstructionLabel.add("SRRF2 Accum. TL"+n);
         if (doBinFlag == BIN_2 || doBinFlag == BIN_4)
@@ -207,7 +207,17 @@ public class SRRF2CL {
         kernelCalculateSRRF.setArg( argn++, clBufferShiftY ); // make sure type is the same !!
         kernelCalculateSRRF.setArg( argn++, clBufferSRRF); // make sure type is the same !!
         kernelCalculateSRRF.setArg( argn++, nFrames); // make sure type is the same !!
-        queue.put2DRangeKernel(kernelCalculateSRRF, 0, 0, widthM, heightM, 0, 0);
+        // break calculation into 128x128 blocks to make them more stable
+        int nXBlocks = widthM/128 + ((widthM%128==0)?0:1);
+        int nYBlocks = heightM/128 + ((widthM%128==0)?0:1);
+        for (int nYB = 0; nYB<nYBlocks; nYB++) {
+            int yWorkSize = min(128, heightM-nYB*128);
+            for (int nXB = 0; nXB<nXBlocks; nXB++) {
+                showStatus("Calculating SRRF... blockX="+nXB+"/"+nXBlocks+"  blockY="+nYB+"/"+nYBlocks);
+                int xWorkSize = min(128, widthM -nXB*128);
+                queue.put2DRangeKernel(kernelCalculateSRRF, nXB*128, nYB*128, xWorkSize, yWorkSize, 0, 0);
+            }
+        }
         // grab frames
         queue.putReadBuffer(clBufferSRRF, true);
         FloatBuffer bufferSRRF = clBufferSRRF.getBuffer();
