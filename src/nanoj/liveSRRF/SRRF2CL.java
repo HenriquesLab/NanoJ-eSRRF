@@ -208,8 +208,8 @@ public class SRRF2CL {
         kernelCalculateSRRF.setArg( argn++, clBufferSRRF); // make sure type is the same !!
         kernelCalculateSRRF.setArg( argn++, nFrames); // make sure type is the same !!
         // break calculation into 128x128 blocks to make them more stable
-        int nXBlocks = widthM/128 + ((widthM%128==0)?0:1);
-        int nYBlocks = heightM/128 + ((widthM%128==0)?0:1);
+        int nXBlocks = widthM/128  + ((widthM %128==0)?0:1);
+        int nYBlocks = heightM/128 + ((heightM%128==0)?0:1);
         for (int nYB = 0; nYB<nYBlocks; nYB++) {
             int yWorkSize = min(128, heightM-nYB*128);
             for (int nXB = 0; nXB<nXBlocks; nXB++) {
