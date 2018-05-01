@@ -14,17 +14,17 @@ static float cubic(float x) {
 
 // interpolation function: interpolate in continuous space with respect to the reference of the array
 static float getInterpolatedValue(__global float* array, int const width, int const height, float const x, float const y) { // TODO: review the grid position in the interpolation (seems offset)
-    int u0 = (int) floor(x - 0.5f);
-    int v0 = (int) floor(y - 0.5f);
+    int u0 = (int) floor(x);
+    int v0 = (int) floor(y);
     float q = 0.0f;
     for (int j = 0; j <= 3; j++) {
         int v = min(max(v0 - 1 + j, 0), height-1);
         float p = 0.0f;
         for (int i = 0; i <= 3; i++) {
             int u = min(max(u0 - 1 + i, 0), width-1);
-            p = p + array[v*width+u] * cubic(x - (u + 0.5f));
+            p = p + array[v*width+u] * cubic(x - (float) (u));
         }
-        q = q + p * cubic(y - (v + 0.5f));
+        q = q + p * cubic(y - (float) (v));
     }
     return q;
 }
