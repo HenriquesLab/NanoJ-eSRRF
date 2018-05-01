@@ -21,7 +21,7 @@ public class RadialGradientConvergenceCL {
 
     static CLContext context;
     static CLProgram program;
-    static CLKernel kernelCalculateRGC, kernelCalculateGradient, kernelInterpolateGradient;
+    static CLKernel kernelCalculateRGC, kernelCalculateGradient, kernelInterpolateGradient, kernelCalculateInterpolatedIntensity;
     static CLCommandQueue queue;
 
     private final int width, height, widthM, heightM, magnification, GxGyMagnification;
@@ -33,12 +33,12 @@ public class RadialGradientConvergenceCL {
 
 
     private CLBuffer<FloatBuffer>
-            clBufferPx,
+            clBufferPx, clBufferPxInt,
             clBufferGx, clBufferGy,
             clBufferGxInt, clBufferGyInt,
             clBufferRGC;
 
-
+    // Method: -------------------------- Initialization ------------------------------
     public RadialGradientConvergenceCL(int width, int height, int magnification, float fwhm, String GradMethod, boolean intWeighting) {
         this.width = width;
         this.height = height;
@@ -105,17 +105,20 @@ public class RadialGradientConvergenceCL {
 
         // Prepare kernel for GRC calculation
         kernelCalculateRGC = program.createCLKernel("calculateRadialGradientConvergence");
+        kernelCalculateInterpolatedIntensity = program.createCLKernel("kernelCalculateInterpolatedIntensity");
 
         clBufferPx = context.createFloatBuffer(width * height, READ_ONLY);
         clBufferGx = context.createFloatBuffer(width * height, READ_WRITE);
         clBufferGy = context.createFloatBuffer(width * height, READ_WRITE);
         clBufferRGC = context.createFloatBuffer(widthM * heightM, WRITE_ONLY);
+        clBufferPxInt = context.createFloatBuffer(widthM * heightM, WRITE_ONLY);
 
         // estimating the memory necessary for running this instance of SRRF
         double MemorySize = (clBufferPx.getCLSize() +
                 clBufferGx.getCLSize() +
                 clBufferGy.getCLSize() +
-                clBufferRGC.getCLSize());
+                clBufferRGC.getCLSize() +
+                clBufferPxInt.getCLSize());
 
         if (GradMethod.equals("2-point local + interpolation")){
             MemorySize += clBufferGxInt.getCLSize() + clBufferGyInt.getCLSize();
@@ -124,13 +127,13 @@ public class RadialGradientConvergenceCL {
         System.out.println("used device memory: " + MemorySize + "MB");
     }
 
+
+    // Method: -------------------------- calculate RGC ------------------------------
     public synchronized FloatProcessor calculateRGC(ImageProcessor ip, float shiftX, float shiftY, String GradChosenMethod) {
         assert (ip.getWidth() == width && ip.getHeight() == height);
 
         FloatProcessor fpPx = ip.convertToFloatProcessor();
-
         FloatProcessor fpRGC = new FloatProcessor(widthM, heightM);
-        FloatProcessor fpInterpolated = new FloatProcessor(widthM, heightM);
 
         // prepare CL buffers
         fillBuffer(clBufferPx, fpPx);
@@ -195,6 +198,42 @@ public class RadialGradientConvergenceCL {
         return fpRGC;
     }
 
+    // Method: -------------------------- calculate Interpolated intensity ------------------------------
+    public synchronized FloatProcessor calculateInt(ImageProcessor ip, float shiftX, float shiftY) {
+        assert (ip.getWidth() == width && ip.getHeight() == height);
+
+        FloatProcessor fpPx = ip.convertToFloatProcessor();
+        FloatProcessor fpInt = new FloatProcessor(widthM, heightM);
+
+        // prepare CL buffers
+        fillBuffer(clBufferPx, fpPx);
+
+        int argn;
+
+        // make kernelCalculateInterpolatedIntensity assignment
+        argn = 0;
+        kernelCalculateInterpolatedIntensity.setArg( argn++, clBufferPx ); // make sure type is the same !!
+        kernelCalculateInterpolatedIntensity.setArg( argn++, clBufferPxInt ); // make sure type is the same !!
+        kernelCalculateInterpolatedIntensity.setArg( argn++, magnification ); // make sure type is the same !!
+        kernelCalculateInterpolatedIntensity.setArg( argn++, shiftX ); // make sure type is the same !!
+        kernelCalculateInterpolatedIntensity.setArg( argn++, shiftY ); // make sure type is the same !!
+
+
+        // asynchronous write of data to GPU device,
+        // followed by blocking read to get the computed results back.
+        int id = prof.startTimer();
+        queue.putWriteBuffer( clBufferPx, false );
+        queue.put2DRangeKernel(kernelCalculateInterpolatedIntensity, 0, 0, widthM, heightM, 0, 0);
+        queue.finish();
+        queue.putReadBuffer(clBufferPxInt, true);
+        prof.recordTime("RadialGradientConvergence.cl", prof.endTimer(id));
+
+        grabBuffer(clBufferPxInt, fpInt);
+
+        return fpInt;
+    }
+
+    // Method: -------------------------- Release ------------------------------
     public void release() {
         context.release();
     }

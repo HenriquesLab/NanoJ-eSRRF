@@ -29,6 +29,7 @@ public class RadialGradientConvergence_ implements PlugIn {
         gd.addNumericField("FWHM (pixels)", prefs.get("fwhm", 3), 2);
         gd.addChoice("Gradient estimation method", GradMethods, GradMethods[0]);
         gd.addCheckbox("Intensity weighting", prefs.get("intWeighting", false));
+        gd.addCheckbox("Show interpolated intensity", prefs.get("showInt", false));
 
         gd.showDialog();
         if (gd.wasCanceled()) return;
@@ -37,13 +38,15 @@ public class RadialGradientConvergence_ implements PlugIn {
         float fwhm = (float) gd.getNextNumber();
         String GradChosenMethod = gd.getNextChoice();
         boolean intWeighting = gd.getNextBoolean();
+        boolean showInt = gd.getNextBoolean();
 
 
-        IJ.log("Gradient method chosen: "+GradChosenMethod);
+        IJ.log("Gradient method chosen: " + GradChosenMethod);
 
         prefs.set("magnification", (float) magnification);
         prefs.set("fwhm", fwhm);
         prefs.set("intWeighting", intWeighting);
+        prefs.set("showInt", showInt);
         prefs.save();
 
         ImageStack ims = imp.getImageStack();
@@ -55,19 +58,34 @@ public class RadialGradientConvergence_ implements PlugIn {
         ImageStack imsRGC = new ImageStack(w * magnification, h * magnification);
         RadialGradientConvergenceCL rCL = new RadialGradientConvergenceCL(w, h, magnification, fwhm, GradChosenMethod, intWeighting);
 
-        for (int n=1; n<=nSlices; n++) {
+        for (int n = 1; n <= nSlices; n++) {
             IJ.showProgress(n, nSlices);
             FloatProcessor fpRGC = rCL.calculateRGC(ims.getProcessor(n), 0, 0, GradChosenMethod);
-
             imsRGC.addSlice(fpRGC);
-
             if (IJ.escapePressed()) {
                 IJ.resetEscape();
                 return;
             }
         }
 
-        new ImagePlus(imp.getTitle()+" - Radial-Gradient-Convergence", imsRGC).show();
+        new ImagePlus(imp.getTitle() + " - Radial-Gradient-Convergence", imsRGC).show();
+
+
+        if (showInt) {
+            ImageStack imsInt = new ImageStack(w * magnification, h * magnification);
+            for (int n = 1; n <= nSlices; n++) {
+                IJ.showProgress(n, nSlices);
+                FloatProcessor fpInt = rCL.calculateInt(ims.getProcessor(n), 0, 0);
+                imsInt.addSlice(fpInt);
+
+                if (IJ.escapePressed()) {
+                    IJ.resetEscape();
+                    return;
+                }
+            }
+            new ImagePlus(imp.getTitle() + " - Interpolated intensity", imsInt).show();
+        }
+
 
         //rCL.showPlatforms();
         rCL.release();

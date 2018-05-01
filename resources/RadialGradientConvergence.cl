@@ -196,9 +196,30 @@ __kernel void calculateRadialGradientConvergence(
 //    else CGLH = 0;
 
     if (intWeighting == 1) {
-        float v = getInterpolatedValue(pixels, w, h, ((float) xM)/magnification + shiftX, ((float) yM)/magnification + shiftY);
+        float v = getInterpolatedValue(pixels, w, h, ((float) xM)/magnification + shiftX - 0.5f, ((float) yM)/magnification + shiftY - 0.5f);
         RGCArray[offset] = v * CGLH;}
     else RGCArray[offset] = CGLH;
 }
 
 
+// Third kernel: calculating the interpolated intensity image -----------------------------------------------------------------
+__kernel void kernelCalculateInterpolatedIntensity(
+    __global float* pixels,
+    __global float* intArray,
+    int const magnification,
+    float const shiftX,
+    float const shiftY
+    ){
+
+    int xM = get_global_id(0);
+    int yM = get_global_id(1);
+    int wM = get_global_size(0);
+    int hM = get_global_size(1);
+    int w = wM / magnification;
+    int h = hM / magnification;
+    int offset = yM * wM + xM;
+
+    float v = getInterpolatedValue(pixels, w, h, ((float) xM)/magnification + shiftX - 0.5f, ((float) yM)/magnification + shiftY - 0.5f);
+    intArray[offset] = v;
+
+}
