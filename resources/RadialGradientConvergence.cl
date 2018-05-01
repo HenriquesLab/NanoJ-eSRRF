@@ -163,7 +163,7 @@ __kernel void calculateRadialGradientConvergence(
             vx = ((int) (GxGyMagnification*(xc - vxy_PixelShift)) + i)/GxGyMagnification + vxy_PixelShift; // position in continuous space
             float distance = sqrt(pow(vx - xc, 2) + pow(vy - yc, 2));    // Distance D
 
-            if (distance != 0) {
+            if (distance != 0 && distance <= (2*sigma+1)) {
                 Gx = getVBoundaryCheck(GxArray, GxGyMagnification*w, GxGyMagnification*h, GxGyMagnification*(vx - vxy_offset) + vxy_ArrayShift, GxGyMagnification*(vy - vxy_offset));
                 Gy = getVBoundaryCheck(GyArray, GxGyMagnification*w, GxGyMagnification*h, GxGyMagnification*(vx - vxy_offset), GxGyMagnification*(vy - vxy_offset) + vxy_ArrayShift);
 
