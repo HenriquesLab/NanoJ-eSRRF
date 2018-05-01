@@ -5,11 +5,14 @@ import ij.gui.NonBlockingGenericDialog;
 import ij.plugin.PlugIn;
 import ij.process.FloatProcessor;
 import nanoj.core2.NanoJPrefs;
+import nanoj.core2.NanoJProfiler;
 import nanoj.liveSRRF.RadialGradientConvergenceCL;
 
 public class RadialGradientConvergence_ implements PlugIn {
 
     private NanoJPrefs prefs = new NanoJPrefs(this.getClass().getName());
+    private NanoJProfiler prof = new NanoJProfiler();
+
 
     @Override
     public void run(String arg) {
@@ -86,8 +89,11 @@ public class RadialGradientConvergence_ implements PlugIn {
             new ImagePlus(imp.getTitle() + " - Interpolated intensity", imsInt).show();
         }
 
+        prof = rCL.prof;
 
         //rCL.showPlatforms();
         rCL.release();
+        IJ.log(prof.report()); // TODO: look into profiler since iterations add up between consective runs (by design?)
+
     }
 }
