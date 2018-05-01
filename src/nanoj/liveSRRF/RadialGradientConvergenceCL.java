@@ -11,7 +11,6 @@ import java.nio.FloatBuffer;
 import static com.jogamp.opencl.CLMemory.Mem.READ_ONLY;
 import static com.jogamp.opencl.CLMemory.Mem.READ_WRITE;
 import static com.jogamp.opencl.CLMemory.Mem.WRITE_ONLY;
-import static java.lang.System.nanoTime;
 import static nanoj.core2.NanoJCL.fillBuffer;
 import static nanoj.core2.NanoJCL.grabBuffer;
 
@@ -28,8 +27,9 @@ public class RadialGradientConvergenceCL {
     private final int width, height, widthM, heightM, magnification, GxGyMagnification;
     private final float fwhm;
     private float vxy_offset;
-    private int vx_shift;
-    private int vy_shift;
+    private int vxy_ArrayShift;
+    private float vxy_PixelShift;
+    private int intWeighting;
 
 
     private CLBuffer<FloatBuffer>
@@ -39,13 +39,16 @@ public class RadialGradientConvergenceCL {
             clBufferRGC;
 
 
-    public RadialGradientConvergenceCL(int width, int height, int magnification, float fwhm, String GradMethod) {
+    public RadialGradientConvergenceCL(int width, int height, int magnification, float fwhm, String GradMethod, boolean intWeighting) {
         this.width = width;
         this.height = height;
         this.widthM = width * magnification;
         this.heightM = height * magnification;
         this.magnification = magnification;
         this.fwhm = fwhm;
+
+        if (intWeighting) this.intWeighting = 1;
+        else this.intWeighting = 0;
 
         if (GradMethod.equals("2-point local + interpolation")) this.GxGyMagnification = 2;
         else this.GxGyMagnification = 1;
@@ -74,16 +77,16 @@ public class RadialGradientConvergenceCL {
             kernelCalculateGradient = program.createCLKernel("calculateGradient");
             // in this method the gradient is calculated in the centre of the designated pixel
             this.vxy_offset = 0.5f; // signed distance between the (0,0) continuous space position and the position at which the vector in the (0,0) position in the Gradient image is calculated
-            this.vx_shift = 0;
-            this.vy_shift = 0;
+            this.vxy_ArrayShift = 0;
+            this.vxy_PixelShift = 0.5f;
         }
 
         else if (GradMethod.equals("Robert's cross local gradient")){
             kernelCalculateGradient = program.createCLKernel("calculateGradientRobX");
             // in this method the gradient is estimated at the crossing of the pixels, therefore at an offset of 0.5 with respect to the pixel centre
             this.vxy_offset = 0.0f; // signed distance between the (0,0) continuous space position and the position at which the vector in the (0,0) position in the Gradient image is calculated
-            this.vx_shift = 0;
-            this.vy_shift = 0;
+            this.vxy_ArrayShift = 0;
+            this.vxy_PixelShift = 0.0f;
         }
 
         else if (GradMethod.equals("2-point local + interpolation")){
@@ -92,8 +95,8 @@ public class RadialGradientConvergenceCL {
 
             // this method currently wrecks havock on your data (now a bit less)
             this.vxy_offset = 0.5f; // signed distance between the (0,0) continuous space position and the position at which the vector in the (0,0) position in the Gradient image is calculated
-            this.vx_shift = 1;
-            this.vy_shift = 1;
+            this.vxy_ArrayShift = 1; // number of pixels to shift the Gx and Gy arrays by (to get rid of columns or rows)
+            this.vxy_PixelShift = 0.0f; // offset of the sampling with respect to the integer continuous space
 
             clBufferGxInt = context.createFloatBuffer(4*width * height, READ_WRITE);
             clBufferGyInt = context.createFloatBuffer(4*width * height, READ_WRITE);
@@ -167,8 +170,9 @@ public class RadialGradientConvergenceCL {
         kernelCalculateRGC.setArg( argn++, shiftX ); // make sure type is the same !!
         kernelCalculateRGC.setArg( argn++, shiftY ); // make sure type is the same !!
         kernelCalculateRGC.setArg( argn++, vxy_offset ); // make sure type is the same !!
-        kernelCalculateRGC.setArg( argn++, vx_shift ); // make sure type is the same !!,
-        kernelCalculateRGC.setArg( argn++, vy_shift ); // make sure type is the same !!
+        kernelCalculateRGC.setArg( argn++, vxy_ArrayShift); // make sure type is the same !!,
+        kernelCalculateRGC.setArg( argn++, vxy_PixelShift); // make sure type is the same !!
+        kernelCalculateRGC.setArg( argn++, intWeighting ); // make sure type is the same !!
 
 
         // asynchronous write of data to GPU device,

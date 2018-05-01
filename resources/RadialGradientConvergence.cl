@@ -131,8 +131,9 @@ __kernel void calculateRadialGradientConvergence(
     float const shiftX,
     float const shiftY,
     float const vxy_offset,
-    int const vx_shift,
-    int const vy_shift
+    int const vxy_ArrayShift,
+    float const vxy_PixelShift,
+    int const intWeighting
 
     ) {
 
@@ -155,16 +156,16 @@ __kernel void calculateRadialGradientConvergence(
     float fradius = sigma * 2;
     int radius = (int) fradius + 1;    // radius can be set to something sensible like 3*Sigma
 
-    for (int j=-radius; j<=(radius+1); j++) {
-        for (int i=-radius; i<=radius; i++) {
-            vx = (int) (xc - vxy_offset) + i + vxy_offset; // position in continuous space
-            vy = (int) (yc - vxy_offset) + j + vxy_offset; // position in continuous space
+    for (int j=-GxGyMagnification*radius; j<=(GxGyMagnification*radius+1); j++) {
+        vy = ((int) (GxGyMagnification*(yc - vxy_PixelShift)) + j)/GxGyMagnification + vxy_PixelShift; // position in continuous space
 
-            float distance = sqrt(pow(vx - xc, 2)+pow(vy - yc, 2));    // Distance D
+        for (int i=-GxGyMagnification*radius; i<=(GxGyMagnification*radius+1); i++) {
+            vx = ((int) (GxGyMagnification*(xc - vxy_PixelShift)) + i)/GxGyMagnification + vxy_PixelShift; // position in continuous space
+            float distance = sqrt(pow(vx - xc, 2) + pow(vy - yc, 2));    // Distance D
 
             if (distance != 0) {
-                Gx = getVBoundaryCheck(GxArray, GxGyMagnification*w, GxGyMagnification*h, GxGyMagnification*(vx - vxy_offset) + vx_shift, GxGyMagnification*(vy - vxy_offset));
-                Gy = getVBoundaryCheck(GyArray, GxGyMagnification*w, GxGyMagnification*h, GxGyMagnification*(vx - vxy_offset), GxGyMagnification*(vy - vxy_offset) + vy_shift);
+                Gx = getVBoundaryCheck(GxArray, GxGyMagnification*w, GxGyMagnification*h, GxGyMagnification*(vx - vxy_offset) + vxy_ArrayShift, GxGyMagnification*(vy - vxy_offset));
+                Gy = getVBoundaryCheck(GyArray, GxGyMagnification*w, GxGyMagnification*h, GxGyMagnification*(vx - vxy_offset), GxGyMagnification*(vy - vxy_offset) + vxy_ArrayShift);
 
                 float GMag = sqrt(Gx * Gx + Gy * Gy);
 
@@ -176,7 +177,7 @@ __kernel void calculateRadialGradientConvergence(
                 if (isnan(Dk)) Dk = distance; // this makes Dk = 0 in the next line
 
                 Dk = 1 - Dk / distance; // Dk is now between 0 to 1, 1 if vector points precisely to (xc, yx), Dk = 1-sin(theta)
-                Dk = fmax(Dk - 0.5f, 0)*2;
+//                Dk = fmax(Dk - 0.5f, 0)*2;
                 //Dk = Dk*Dk*Dk*Dk;   // i think it's better to apply non-linear functions at the CGH level
 //                if (Dk >= 0.75) Dk = 1;
 //                else Dk = 0;
@@ -194,8 +195,10 @@ __kernel void calculateRadialGradientConvergence(
 //    if (CGLH >= 0) CGLH = pow(CGLH, radialitySensitivity);
 //    else CGLH = 0;
 
-    float v = getInterpolatedValue(pixels, w, h, ((float) xM)/magnification + shiftX, ((float) yM)/magnification + shiftY);
-    RGCArray[offset] = v * CGLH;
+    if (intWeighting == 1) {
+        float v = getInterpolatedValue(pixels, w, h, ((float) xM)/magnification + shiftX, ((float) yM)/magnification + shiftY);
+        RGCArray[offset] = v * CGLH;}
+    else RGCArray[offset] = CGLH;
 }
 
 

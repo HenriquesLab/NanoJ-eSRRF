@@ -28,6 +28,7 @@ public class RadialGradientConvergence_ implements PlugIn {
         gd.addNumericField("Magnification", prefs.get("magnification", 4), 0);
         gd.addNumericField("FWHM (pixels)", prefs.get("fwhm", 3), 2);
         gd.addChoice("Gradient estimation method", GradMethods, GradMethods[0]);
+        gd.addCheckbox("Intensity weighting", prefs.get("intWeighting", false));
 
         gd.showDialog();
         if (gd.wasCanceled()) return;
@@ -35,11 +36,14 @@ public class RadialGradientConvergence_ implements PlugIn {
         int magnification = (int) gd.getNextNumber();
         float fwhm = (float) gd.getNextNumber();
         String GradChosenMethod = gd.getNextChoice();
+        boolean intWeighting = gd.getNextBoolean();
+
 
         IJ.log("Gradient method chosen: "+GradChosenMethod);
 
         prefs.set("magnification", (float) magnification);
-        prefs.set("fwhm", (float) fwhm);
+        prefs.set("fwhm", fwhm);
+        prefs.set("intWeighting", intWeighting);
         prefs.save();
 
         ImageStack ims = imp.getImageStack();
@@ -49,7 +53,7 @@ public class RadialGradientConvergence_ implements PlugIn {
 
 
         ImageStack imsRGC = new ImageStack(w * magnification, h * magnification);
-        RadialGradientConvergenceCL rCL = new RadialGradientConvergenceCL(w, h, magnification, fwhm, GradChosenMethod);
+        RadialGradientConvergenceCL rCL = new RadialGradientConvergenceCL(w, h, magnification, fwhm, GradChosenMethod, intWeighting);
 
         for (int n=1; n<=nSlices; n++) {
             IJ.showProgress(n, nSlices);

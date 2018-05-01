@@ -48,6 +48,7 @@ public class LiveSRRF_ implements PlugIn {
         gd.addCheckbox("Show AVG reconstruction", prefs.get("showAVG", false));
         gd.addCheckbox("Show STD reconstruction", prefs.get("showSTD", true));
         gd.addCheckbox("Show MAX reconstruction", prefs.get("showMAX", false));
+        gd.addCheckbox("Intensity weighting", prefs.get("intWeighting", false));
 
         gd.showDialog();
         if (gd.wasCanceled()) return;
@@ -62,6 +63,8 @@ public class LiveSRRF_ implements PlugIn {
         showAVG = gd.getNextBoolean();
         showSTD = gd.getNextBoolean();
         showMAX = gd.getNextBoolean();
+        boolean intWeighting = gd.getNextBoolean();
+
 
         prefs.set("magnification", (float) magnification);
         prefs.set("fwhm", fwhm);
@@ -72,6 +75,7 @@ public class LiveSRRF_ implements PlugIn {
         prefs.set("showAVG", showAVG);
         prefs.set("showSTD", showSTD);
         prefs.set("showMAX", showMAX);
+        prefs.set("intWeighting", intWeighting);
         prefs.save();
 
         if (nFrames == 0) nFrames = imp.getImageStack().getSize();
@@ -91,7 +95,7 @@ public class LiveSRRF_ implements PlugIn {
         ImageProcessor ipRef = null; // reference slide for Cross-Correlation and vibration correction
         float[][] pixelsGRCBuffer = null; // buffer containing time-points for reconstructions
 
-        RadialGradientConvergenceCL rCL = new RadialGradientConvergenceCL(w, h, magnification, fwhm, GradChosenMethod);
+        RadialGradientConvergenceCL rCL = new RadialGradientConvergenceCL(w, h, magnification, fwhm, GradChosenMethod, intWeighting);
         ThreadedCalculateReconstructions t = null; // calculates reconstructions in parallel
 
         float shiftX = 0;
