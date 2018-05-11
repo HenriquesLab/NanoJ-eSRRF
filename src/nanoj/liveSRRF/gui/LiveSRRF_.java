@@ -41,7 +41,7 @@ public class LiveSRRF_ implements PlugIn {
         gd.addNumericField("Magnification", prefs.get("magnification", 4), 0);
         gd.addNumericField("FWHM (pixels)", prefs.get("fwhm", 3), 2);
         gd.addNumericField("Frames per SR image", prefs.get("nFrames", 0), 0);
-        gd.addChoice("Gradient estimation method", GradMethods, GradMethods[0]);
+        gd.addChoice("Gradient estimation method", GradMethods, GradMethods[2]);
         gd.addCheckbox("Correct vibration", prefs.get("correctVibration", false));
         gd.addCheckbox("Correct sCMOS patterning", prefs.get("correctSCMOS", false));
         gd.addMessage("-=-= Reconstructions =-=-");
@@ -86,7 +86,11 @@ public class LiveSRRF_ implements PlugIn {
         int h = ims.getHeight();
         int wM = ims.getWidth() * magnification;
         int hM = ims.getHeight() * magnification;
-        int nPixelsM = wM * hM;
+
+        IJ.log("----------------------------------------------------");
+        IJ.log("Gradient method chosen: " + GradChosenMethod);
+        if (intWeighting) IJ.log("Intensity weighting ON");
+        else IJ.log("Intensity weighting OFF");
 
         imsSRRF_max = new ImageStack(wM, hM);
         imsSRRF_avg = new ImageStack(wM, hM);
@@ -102,7 +106,7 @@ public class LiveSRRF_ implements PlugIn {
         float shiftY = 0;
         int counter = 0;
 
-        for (int s=1; s<=nSlices; s++) {
+        for (int s = 1; s <= nSlices; s++) {
             // Check if user is cancelling calculation
             IJ.showProgress(s, nSlices);
             if (IJ.escapePressed()) {
@@ -117,19 +121,18 @@ public class LiveSRRF_ implements PlugIn {
 
             // Estimate vibrations
             if (correctVibration) {
-                System.out.println("New reference..."+counter);
+                System.out.println("New reference..." + counter);
                 int id = prof.startTimer();
                 if (counter == 0) {
                     ipRef = ip.duplicate();
                     shiftX = 0;
                     shiftY = 0;
-                }
-                else {
+                } else {
                     float[] shift = calculateShift(ipRef, ip, 5);
                     shiftX = shift[0];
                     shiftY = shift[1];
                 }
-                System.out.println("Frame="+s+" shiftX="+shiftX+" shiftY="+shiftY);
+                System.out.println("Frame=" + s + " shiftX=" + shiftX + " shiftY=" + shiftY);
                 prof.recordTime("Drift Estimation", prof.endTimer(id));
             }
 
@@ -138,28 +141,29 @@ public class LiveSRRF_ implements PlugIn {
             float[] pixelsRGC = (float[]) fpRGC.getPixels();
 
             // Update buffer
-            if (s == 1 || counter == 0) pixelsGRCBuffer = new float[min(nFrames, nSlices-s+1)][];
+            if (s == 1 || counter == 0) pixelsGRCBuffer = new float[min(nFrames, nSlices - s + 1)][];
             pixelsGRCBuffer[counter] = pixelsRGC;
 
-            if (counter == nFrames-1 || s == nSlices) {
+            if (counter == nFrames - 1 || s == nSlices) {
                 // process buffer
                 if (t != null) t.finalise();
                 t = new ThreadedCalculateReconstructions(pixelsGRCBuffer);
                 t.start();
                 counter = 0;
-            }
-            else counter++;
+            } else counter++;
         }
 
         t.finalise();
-        if (showMAX) new ImagePlus(imp.getTitle()+" - SRRF AVG", imsSRRF_max).show();
-        if (showAVG) new ImagePlus(imp.getTitle()+" - SRRF MAX", imsSRRF_avg).show();
-        if (showSTD) new ImagePlus(imp.getTitle()+" - SRRF STD", imsSRRF_std).show();
+        if (showMAX) new ImagePlus(imp.getTitle() + " - SRRF AVG", imsSRRF_max).show();
+        if (showAVG) new ImagePlus(imp.getTitle() + " - SRRF MAX", imsSRRF_avg).show();
+        if (showSTD) new ImagePlus(imp.getTitle() + " - SRRF STD", imsSRRF_std).show();
 
         rCL.release();
         IJ.log(prof.report()); // TODO: look into profiler since iterations add up between consective runs (by design?)
     }
 
+
+    // Method ------------------------------- Calculate the shift using cross-correlation ---------------------------------
     private float[] calculateShift(ImageProcessor ipRef, ImageProcessor ip, int radius) {
 
         FloatProcessor fpCCM = (FloatProcessor) calculateCrossCorrelationMap(ipRef, ip, false);
@@ -176,9 +180,9 @@ public class LiveSRRF_ implements PlugIn {
         double yMax = 0;
 
         // first do coarse search for max
-        for (int y = 1; y<windowSize-1; y++){
-            for (int x = 1; x<windowSize-1; x++) {
-                double v = fpCCM.getf(x,y);
+        for (int y = 1; y < windowSize - 1; y++) {
+            for (int x = 1; x < windowSize - 1; x++) {
+                double v = fpCCM.getf(x, y);
                 if (v > vMax) {
                     vMax = v;
                     xMax = x;
@@ -191,8 +195,8 @@ public class LiveSRRF_ implements PlugIn {
 
         //vMax = -Double.MAX_VALUE;
         // do fine search for max
-        for (double y = yMax; y<yMax+1; y+=0.01){
-            for (double x = xMax; x<xMax+1; x+=0.01) {
+        for (double y = yMax; y < yMax + 1; y += 0.01) {
+            for (double x = xMax; x < xMax + 1; x += 0.01) {
                 double v = fpCCM.getBicubicInterpolatedPixel(x, y, fpCCM);
                 if (v > vMax) {
                     vMax = v;
@@ -211,12 +215,14 @@ public class LiveSRRF_ implements PlugIn {
             impCCM.show();
         }
         impCCM.setProcessor(fpCCM);
-        impCCM.setRoi(new PointRoi(xMax+.5, yMax+.5));
+        impCCM.setRoi(new PointRoi(xMax + .5, yMax + .5));
         impCCM.setDisplayRange(vMin, vMax);
 
-        return new float[] {shiftX, shiftY};
+        return new float[]{shiftX, shiftY};
     }
 
+
+    // Class -------------------------------- Threaded projection calculations -----------------------------------------
     class ThreadedCalculateReconstructions extends Thread {
 
         private float[][] pixelsRGCBuffer;
@@ -232,8 +238,8 @@ public class LiveSRRF_ implements PlugIn {
             float[] pixelsAvg = new float[nPixels];
             float[] pixelsStd = new float[nPixels];
 
-            for (int s=0; s<nSlices; s++) {
-                for (int p=0; p<nPixels; p++) {
+            for (int s = 0; s < nSlices; s++) {
+                for (int p = 0; p < nPixels; p++) {
                     pixelsMax[p] = max(pixelsRGCBuffer[s][p], pixelsMax[p]);
                     pixelsAvg[p] += pixelsRGCBuffer[s][p] / nPixels;
                 }

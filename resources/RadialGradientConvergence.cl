@@ -170,17 +170,41 @@ __kernel void calculateRadialGradientConvergence(
                 float GMag = sqrt(Gx * Gx + Gy * Gy);
 
                 float distanceWeight = distance*exp(-(distance*distance)/(2*sigma*sigma));  // TODO: dGauss: can use Taylor expansion there
-                distanceWeight = distanceWeight * distanceWeight;  // TODO: dGauss: what power is best? Let's FRC !
+                distanceWeight = distanceWeight * distanceWeight * distanceWeight * distanceWeight ;  // TODO: dGauss: what power is best? Let's FRC !
 
                 // Calculate perpendicular distance from (xc,yc) to gradient line through (vx,vy)
                 float Dk = fabs(Gy * (xc - vx) - Gx * (yc - vy)) / GMag;    // Dk = D*sin(theta)
                 if (isnan(Dk)) Dk = distance; // this makes Dk = 0 in the next line
 
+                // Linear function ----------------------
                 Dk = 1 - Dk / distance; // Dk is now between 0 to 1, 1 if vector points precisely to (xc, yx), Dk = 1-sin(theta)
+
+                //Linear truncated ----------------------
+//                Dk = 1 - Dk / distance; // Dk is now between 0 to 1, 1 if vector points precisely to (xc, yx), Dk = 1-sin(theta)
 //                Dk = fmax(Dk - 0.5f, 0)*2;
-                //Dk = Dk*Dk*Dk*Dk;   // i think it's better to apply non-linear functions at the CGH level
-//                if (Dk >= 0.75) Dk = 1;
+
+                // Higher order of Dk (quadratic and power 4) -------------------
+//                Dk = 1 - Dk / distance; // Dk is now between 0 to 1, 1 if vector points precisely to (xc, yx), Dk = 1-sin(theta)
+//                Dk = Dk*Dk*Dk*Dk;   // i think it's better to apply non-linear functions at the CGH level
+
+                // Hard edge function -----------------------
+//                Dk = 1 - Dk / distance; // Dk is now between 0 to 1, 1 if vector points precisely to (xc, yx), Dk = 1-sin(theta)
+//                float edgePos = 0.75;
+//                if (Dk >= edgePos) Dk = 1;
 //                else Dk = 0;
+
+                // Gaussian function --------------------------
+//                Dk = Dk / distance; // Dk is now between 0 to 1, Dk = sin(theta) ~ theta
+//                float SigmaTheta = 0.1;
+//                Dk = exp(-0.5f*pow((float) (Dk/SigmaTheta), 2));
+
+                // Rational function -------------------------
+//                float SigmaTheta = 0.1;
+//                float Power = 4;
+//                Dk = Dk / distance; // Dk is now between 0 to 1, Dk = sin(theta) ~ theta
+//                Dk = 1/(1+pow((float) (Dk/SigmaTheta), Power));
+
+
                 Dk *= distanceWeight;
                 distanceWeightSum += distanceWeight;
 
