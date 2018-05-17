@@ -24,7 +24,7 @@ public class RadialGradientConvergenceCL {
     static CLKernel kernelCalculateRGC, kernelCalculateGradient, kernelInterpolateGradient, kernelCalculateInterpolatedIntensity;
     static CLCommandQueue queue;
 
-    private final int width, height, widthM, heightM, magnification, GxGyMagnification;
+    private final int width, height, widthM, heightM, magnification, GxGyMagnification, sensitivity;
     private final float fwhm;
     private float vxy_offset;
     private int vxy_ArrayShift;
@@ -39,13 +39,14 @@ public class RadialGradientConvergenceCL {
             clBufferRGC;
 
     // Method: -------------------------- Initialization ------------------------------
-    public RadialGradientConvergenceCL(int width, int height, int magnification, float fwhm, String GradMethod, boolean intWeighting) {
+    public RadialGradientConvergenceCL(int width, int height, int magnification, float fwhm, int sensitivity, String GradMethod, boolean intWeighting) {
         this.width = width;
         this.height = height;
         this.widthM = width * magnification;
         this.heightM = height * magnification;
         this.magnification = magnification;
         this.fwhm = fwhm;
+        this.sensitivity = sensitivity;
 
         if (intWeighting) this.intWeighting = 1;
         else this.intWeighting = 0;
@@ -170,6 +171,7 @@ public class RadialGradientConvergenceCL {
         kernelCalculateRGC.setArg( argn++, magnification ); // make sure type is the same !!
         kernelCalculateRGC.setArg( argn++, this.GxGyMagnification ); // make sure type is the same !!
         kernelCalculateRGC.setArg( argn++, fwhm ); // make sure type is the same !!
+        kernelCalculateRGC.setArg( argn++, sensitivity ); // make sure type is the same !!
         kernelCalculateRGC.setArg( argn++, shiftX ); // make sure type is the same !!
         kernelCalculateRGC.setArg( argn++, shiftY ); // make sure type is the same !!
         kernelCalculateRGC.setArg( argn++, vxy_offset ); // make sure type is the same !!

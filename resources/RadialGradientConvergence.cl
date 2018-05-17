@@ -128,6 +128,7 @@ __kernel void calculateRadialGradientConvergence(
     int const magnification,
     int const GxGyMagnification,
     float const fwhm,
+    int const sensitivity,
     float const shiftX,
     float const shiftY,
     float const vxy_offset,
@@ -154,70 +155,87 @@ __kernel void calculateRadialGradientConvergence(
     float vx, vy, Gx, Gy;
     float sigma = fwhm / 2.354f; // Sigma = 0.21 * lambda/NA in theory
     float fradius = sigma * 2;
-    int radius = (int) fradius + 1;    // radius can be set to something sensible like 3*Sigma
+    int radius = ((int) (GxGyMagnification*fradius))/GxGyMagnification + 1;    // radius can be set to something sensible like 3*Sigma
 
     for (int j=-GxGyMagnification*radius; j<=(GxGyMagnification*radius+1); j++) {
         vy = ((int) (GxGyMagnification*(yc - vxy_PixelShift)) + j)/GxGyMagnification + vxy_PixelShift; // position in continuous space
 
         for (int i=-GxGyMagnification*radius; i<=(GxGyMagnification*radius+1); i++) {
             vx = ((int) (GxGyMagnification*(xc - vxy_PixelShift)) + i)/GxGyMagnification + vxy_PixelShift; // position in continuous space
-            float distance = sqrt(pow(vx - xc, 2) + pow(vy - yc, 2));    // Distance D
+            float distance = sqrt((vx - xc)*(vx - xc) + (vy - yc)*(vy - yc));    // Distance D
 
+//            if (distance != 0 && distance <= (fwhm/2)) {
+//            if (distance != 0 && distance <= (2*sigma+1) && GdotR <= 0) {
             if (distance != 0 && distance <= (2*sigma+1)) {
+
                 Gx = getVBoundaryCheck(GxArray, GxGyMagnification*w, GxGyMagnification*h, GxGyMagnification*(vx - vxy_offset) + vxy_ArrayShift, GxGyMagnification*(vy - vxy_offset));
                 Gy = getVBoundaryCheck(GyArray, GxGyMagnification*w, GxGyMagnification*h, GxGyMagnification*(vx - vxy_offset), GxGyMagnification*(vy - vxy_offset) + vxy_ArrayShift);
 
-                float GMag = sqrt(Gx * Gx + Gy * Gy);
-
                 float distanceWeight = distance*exp(-(distance*distance)/(2*sigma*sigma));  // TODO: dGauss: can use Taylor expansion there
                 distanceWeight = distanceWeight * distanceWeight * distanceWeight * distanceWeight ;  // TODO: dGauss: what power is best? Let's FRC !
+//                float distanceWeight = 1;
 
-                // Calculate perpendicular distance from (xc,yc) to gradient line through (vx,vy)
-                float Dk = fabs(Gy * (xc - vx) - Gx * (yc - vy)) / GMag;    // Dk = D*sin(theta)
-                if (isnan(Dk)) Dk = distance; // this makes Dk = 0 in the next line
-
-                // Linear function ----------------------
-                Dk = 1 - Dk / distance; // Dk is now between 0 to 1, 1 if vector points precisely to (xc, yx), Dk = 1-sin(theta)
-
-                //Linear truncated ----------------------
-//                Dk = 1 - Dk / distance; // Dk is now between 0 to 1, 1 if vector points precisely to (xc, yx), Dk = 1-sin(theta)
-//                Dk = fmax(Dk - 0.5f, 0)*2;
-
-                // Higher order of Dk (quadratic and power 4) -------------------
-//                Dk = 1 - Dk / distance; // Dk is now between 0 to 1, 1 if vector points precisely to (xc, yx), Dk = 1-sin(theta)
-//                Dk = Dk*Dk*Dk*Dk;   // i think it's better to apply non-linear functions at the CGH level
-
-                // Hard edge function -----------------------
-//                Dk = 1 - Dk / distance; // Dk is now between 0 to 1, 1 if vector points precisely to (xc, yx), Dk = 1-sin(theta)
-//                float edgePos = 0.75;
-//                if (Dk >= edgePos) Dk = 1;
-//                else Dk = 0;
-
-                // Gaussian function --------------------------
-//                Dk = Dk / distance; // Dk is now between 0 to 1, Dk = sin(theta) ~ theta
-//                float SigmaTheta = 0.1;
-//                Dk = exp(-0.5f*pow((float) (Dk/SigmaTheta), 2));
-
-                // Rational function -------------------------
-//                float SigmaTheta = 0.1;
-//                float Power = 4;
-//                Dk = Dk / distance; // Dk is now between 0 to 1, Dk = sin(theta) ~ theta
-//                Dk = 1/(1+pow((float) (Dk/SigmaTheta), Power));
-
-
-                Dk *= distanceWeight;
                 distanceWeightSum += distanceWeight;
+                float GdotR = (Gx * (vx - xc) + Gy * (vy - yc)); // tells you if vector was pointing inward or outward
 
-                // Accumulate Variables
-                float GdotR = (Gx * i * magnification + Gy * j * magnification); // tells you if vector was pointing inward or outward
-                if (GdotR <= 0) CGLH += Dk; // vector was pointing inwards
-                //else CGLH -= Dk; // vector was pointing outwards
+
+                if (GdotR < 0) {
+                    // Calculate perpendicular distance from (xc,yc) to gradient line through (vx,vy)
+                    float GMag = sqrt(Gx * Gx + Gy * Gy);
+                    float Dk = fabs(Gy * (xc - vx) - Gx * (yc - vy)) / GMag;    // Dk = D*sin(theta) obtained from cross-product
+                    if (isnan(Dk)) Dk = distance; // this makes Dk = 0 in the next line
+
+
+                    // Linear function ----------------------
+                    Dk = 1 - Dk / distance; // Dk is now between 0 to 1, 1 if vector points precisely to (xc, yx), Dk = 1-sin(theta)
+
+                    //Linear truncated ----------------------
+//                  Dk = 1 - Dk / distance; // Dk is now between 0 to 1, 1 if vector points precisely to (xc, yx), Dk = 1-sin(theta)
+//                  Dk = fmax(Dk - 0.5f, 0)*2;
+
+                    // Higher order of Dk (quadratic and power 4) -------------------
+//                  Dk = 1 - Dk / distance; // Dk is now between 0 to 1, 1 if vector points precisely to (xc, yx), Dk = 1-sin(theta)
+//                  Dk = Dk*Dk;   // i think it's better to apply non-linear functions at the CGH level
+
+                    // Hard edge function -----------------------
+//                  Dk = 1 - Dk / distance; // Dk is now between 0 to 1, 1 if vector points precisely to (xc, yx), Dk = 1-sin(theta)
+//                  float edgePos = 0.75;
+//                  if (Dk >= edgePos) Dk = 1;
+//                  else Dk = 0;
+
+                    // Gaussian function --------------------------
+//                  Dk = Dk / distance; // Dk is now between 0 to 1, Dk = sin(theta) ~ theta
+//                  float SigmaTheta = 0.3;
+//                  Dk = exp(-0.5f*pow((float) (Dk/SigmaTheta), 2));
+
+                    // Rational function -------------------------
+//                  float SigmaTheta = 0.1;
+//                  float Power = 4;
+//                  Dk = Dk / distance; // Dk is now between 0 to 1, Dk = sin(theta) ~ theta
+//                  Dk = 1/(1+pow((float) (Dk/SigmaTheta), Power));
+
+                    // Exponential function --------------------------
+//                  Dk = Dk / distance; // Dk is now between 0 to 1, Dk = sin(theta) ~ theta
+//                  float SigmaTheta = 0.25;
+//                  Dk = exp(-1.0f*(float) (Dk/SigmaTheta));
+
+                    CGLH += Dk*distanceWeight;
+                }
+
+
+//                Dk *= distanceWeight;
+//
+//                // Accumulate Variables
+//                float GdotR = (Gx * i + Gy * j); // tells you if vector was pointing inward or outward
+//                if (GdotR <= 0) CGLH += Dk; // vector was pointing inwards
+//                //else CGLH -= Dk; // vector was pointing outwards
             }
         }
     }
+
     CGLH /= distanceWeightSum;
-//    if (CGLH >= 0) CGLH = pow(CGLH, radialitySensitivity);
-//    else CGLH = 0;
+    if (CGLH >= 0) CGLH = pow(CGLH, sensitivity);
+    else CGLH = 0;
 
     if (intWeighting == 1) {
         float v = getInterpolatedValue(pixels, w, h, ((float) xM)/magnification + shiftX - 0.5f, ((float) yM)/magnification + shiftY - 0.5f);

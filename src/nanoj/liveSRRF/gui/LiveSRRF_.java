@@ -40,6 +40,7 @@ public class LiveSRRF_ implements PlugIn {
         NonBlockingGenericDialog gd = new NonBlockingGenericDialog("Radial Gradient Convergence");
         gd.addNumericField("Magnification", prefs.get("magnification", 4), 0);
         gd.addNumericField("FWHM (pixels)", prefs.get("fwhm", 3), 2);
+        gd.addNumericField("Sensitivity", prefs.get("sensitivity", 5), 0);
         gd.addNumericField("Frames per SR image", prefs.get("nFrames", 0), 0);
         gd.addChoice("Gradient estimation method", GradMethods, GradMethods[2]);
         gd.addCheckbox("Correct vibration", prefs.get("correctVibration", false));
@@ -55,6 +56,7 @@ public class LiveSRRF_ implements PlugIn {
 
         int magnification = (int) gd.getNextNumber();
         float fwhm = (float) gd.getNextNumber();
+        int sensitivity = (int) gd.getNextNumber();
         int nFrames = (int) gd.getNextNumber();
         String GradChosenMethod = gd.getNextChoice();
         boolean correctVibration = gd.getNextBoolean();
@@ -68,6 +70,7 @@ public class LiveSRRF_ implements PlugIn {
 
         prefs.set("magnification", (float) magnification);
         prefs.set("fwhm", fwhm);
+        prefs.set("sensitivity", sensitivity);
         prefs.set("nFrames", nFrames);
         prefs.set("correctVibration", correctVibration);
         prefs.set("correctSCMOS", correctSCMOS);
@@ -99,7 +102,7 @@ public class LiveSRRF_ implements PlugIn {
         ImageProcessor ipRef = null; // reference slide for Cross-Correlation and vibration correction
         float[][] pixelsGRCBuffer = null; // buffer containing time-points for reconstructions
 
-        RadialGradientConvergenceCL rCL = new RadialGradientConvergenceCL(w, h, magnification, fwhm, GradChosenMethod, intWeighting);
+        RadialGradientConvergenceCL rCL = new RadialGradientConvergenceCL(w, h, magnification, fwhm, sensitivity, GradChosenMethod, intWeighting);
         ThreadedCalculateReconstructions t = null; // calculates reconstructions in parallel
 
         float shiftX = 0;

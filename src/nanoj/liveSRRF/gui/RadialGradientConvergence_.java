@@ -30,6 +30,7 @@ public class RadialGradientConvergence_ implements PlugIn {
         NonBlockingGenericDialog gd = new NonBlockingGenericDialog("Radial Gradient Convergence");
         gd.addNumericField("Magnification", prefs.get("magnification", 4), 0);
         gd.addNumericField("FWHM (pixels)", prefs.get("fwhm", 3), 2);
+        gd.addNumericField("Sensitivity", prefs.get("sensitivity", 5), 0);
         gd.addChoice("Gradient estimation method", GradMethods, GradMethods[0]);
         gd.addCheckbox("Intensity weighting", prefs.get("intWeighting", false));
         gd.addCheckbox("Show interpolated intensity", prefs.get("showInt", false));
@@ -39,6 +40,7 @@ public class RadialGradientConvergence_ implements PlugIn {
 
         int magnification = (int) gd.getNextNumber();
         float fwhm = (float) gd.getNextNumber();
+        int sensitivity = (int) gd.getNextNumber();
         String GradChosenMethod = gd.getNextChoice();
         boolean intWeighting = gd.getNextBoolean();
         boolean showInt = gd.getNextBoolean();
@@ -48,6 +50,7 @@ public class RadialGradientConvergence_ implements PlugIn {
 
         prefs.set("magnification", (float) magnification);
         prefs.set("fwhm", fwhm);
+        prefs.set("sensitivity", sensitivity);
         prefs.set("intWeighting", intWeighting);
         prefs.set("showInt", showInt);
         prefs.save();
@@ -59,7 +62,7 @@ public class RadialGradientConvergence_ implements PlugIn {
 
 
         ImageStack imsRGC = new ImageStack(w * magnification, h * magnification);
-        RadialGradientConvergenceCL rCL = new RadialGradientConvergenceCL(w, h, magnification, fwhm, GradChosenMethod, intWeighting);
+        RadialGradientConvergenceCL rCL = new RadialGradientConvergenceCL(w, h, magnification, fwhm, sensitivity, GradChosenMethod, intWeighting);
 
         for (int n = 1; n <= nSlices; n++) {
             IJ.showProgress(n, nSlices);
