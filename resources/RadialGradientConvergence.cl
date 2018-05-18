@@ -125,6 +125,10 @@ __kernel void calculateRadialGradientConvergence(
     __global float* GxArray,
     __global float* GyArray,
     __global float* RGCArray,
+
+//    __global float* wSumArray,
+//    __global float* debugFunArray,
+
     int const magnification,
     int const GxGyMagnification,
     float const fwhm,
@@ -152,29 +156,39 @@ __kernel void calculateRadialGradientConvergence(
     float CGLH = 0; // CGLH stands for Radiality original name - Culley-Gustafsson-Laine-Henriques transform
     float distanceWeightSum = 0;
 
+//    int countdebugFun = 0;
+
     float vx, vy, Gx, Gy;
     float sigma = fwhm / 2.354f; // Sigma = 0.21 * lambda/NA in theory
     float fradius = sigma * 2;
-    int radius = ((int) (GxGyMagnification*fradius))/GxGyMagnification + 1;    // radius can be set to something sensible like 3*Sigma
+    float radius = ((float) ((int) (GxGyMagnification*fradius)))/GxGyMagnification + 1;    // this reduces the radius for speed, works when using dGauss^4 and 2p+I
+//    int radius = (int) (fradius) + 1;    // this should be used otherwise
+
 
     for (int j=-GxGyMagnification*radius; j<=(GxGyMagnification*radius+1); j++) {
-        vy = ((int) (GxGyMagnification*(yc - vxy_PixelShift)) + j)/GxGyMagnification + vxy_PixelShift; // position in continuous space
+//        vy = ((int) (GxGyMagnification*(yc - vxy_PixelShift)) + j)/GxGyMagnification + vxy_PixelShift; // position in continuous space TODO: problems with negative values and (int)?
+        vy = ((float) ((int) (GxGyMagnification*(yc - vxy_PixelShift))) + j)/GxGyMagnification + vxy_PixelShift; // position in continuous space TODO: problems with negative values and (int)?
+
 
         for (int i=-GxGyMagnification*radius; i<=(GxGyMagnification*radius+1); i++) {
-            vx = ((int) (GxGyMagnification*(xc - vxy_PixelShift)) + i)/GxGyMagnification + vxy_PixelShift; // position in continuous space
+//            vx = ((int) (GxGyMagnification*(xc - vxy_PixelShift)) + i)/GxGyMagnification + vxy_PixelShift; // position in continuous space TODO: problems with negative values and (int)?
+            vx = ((float) ((int) (GxGyMagnification*(xc - vxy_PixelShift))) + i)/GxGyMagnification + vxy_PixelShift; // position in continuous space TODO: problems with negative values and (int)?
+
             float distance = sqrt((vx - xc)*(vx - xc) + (vy - yc)*(vy - yc));    // Distance D
+
+//            if (j<countdebugFun) countdebugFun = j;
 
 //            if (distance != 0 && distance <= (fwhm/2)) {
 //            if (distance != 0 && distance <= (2*sigma+1) && GdotR <= 0) {
             if (distance != 0 && distance <= (2*sigma+1)) {
+//            countdebugFun +=1;
+
 
                 Gx = getVBoundaryCheck(GxArray, GxGyMagnification*w, GxGyMagnification*h, GxGyMagnification*(vx - vxy_offset) + vxy_ArrayShift, GxGyMagnification*(vy - vxy_offset));
                 Gy = getVBoundaryCheck(GyArray, GxGyMagnification*w, GxGyMagnification*h, GxGyMagnification*(vx - vxy_offset), GxGyMagnification*(vy - vxy_offset) + vxy_ArrayShift);
 
                 float distanceWeight = distance*exp(-(distance*distance)/(2*sigma*sigma));  // TODO: dGauss: can use Taylor expansion there
                 distanceWeight = distanceWeight * distanceWeight * distanceWeight * distanceWeight ;  // TODO: dGauss: what power is best? Let's FRC !
-//                float distanceWeight = 1;
-
                 distanceWeightSum += distanceWeight;
                 float GdotR = (Gx * (vx - xc) + Gy * (vy - yc)); // tells you if vector was pointing inward or outward
 
@@ -232,6 +246,9 @@ __kernel void calculateRadialGradientConvergence(
             }
         }
     }
+
+//    debugFunArray[offset] = countdebugFun;
+//    wSumArray[offset] = distanceWeightSum;
 
     CGLH /= distanceWeightSum;
     if (CGLH >= 0) CGLH = pow(CGLH, sensitivity);

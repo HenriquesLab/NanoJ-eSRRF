@@ -36,6 +36,7 @@ public class RadialGradientConvergenceCL {
             clBufferPx, clBufferPxInt,
             clBufferGx, clBufferGy,
             clBufferGxInt, clBufferGyInt,
+//            clBufferWeightSum, clBufferDebugFun,
             clBufferRGC;
 
     // Method: -------------------------- Initialization ------------------------------
@@ -74,33 +75,28 @@ public class RadialGradientConvergenceCL {
         }
 
         // Choose gradient kernel
-        if      (GradMethod.equals("3-point gradient (classic)")){
+        if (GradMethod.equals("3-point gradient (classic)")) {
             kernelCalculateGradient = program.createCLKernel("calculateGradient");
             // in this method the gradient is calculated in the centre of the designated pixel
             this.vxy_offset = 0.5f; // signed distance between the (0,0) continuous space position and the position at which the vector in the (0,0) position in the Gradient image is calculated
             this.vxy_ArrayShift = 0;
             this.vxy_PixelShift = 0.5f;
-        }
-
-        else if (GradMethod.equals("Robert's cross local gradient")){
+        } else if (GradMethod.equals("Robert's cross local gradient")) {
             kernelCalculateGradient = program.createCLKernel("calculateGradientRobX");
             // in this method the gradient is estimated at the crossing of the pixels, therefore at an offset of 0.5 with respect to the pixel centre
             this.vxy_offset = 0.0f; // signed distance between the (0,0) continuous space position and the position at which the vector in the (0,0) position in the Gradient image is calculated
             this.vxy_ArrayShift = 0;
             this.vxy_PixelShift = 0.0f;
-        }
-
-        else if (GradMethod.equals("2-point local + interpolation")){
+        } else if (GradMethod.equals("2-point local + interpolation")) {
             kernelCalculateGradient = program.createCLKernel("calculateGradient_2point");
             kernelInterpolateGradient = program.createCLKernel("calculateGradient2p_Interpolation");
 
-            // this method currently wrecks havock on your data (now a bit less)
             this.vxy_offset = 0.5f; // signed distance between the (0,0) continuous space position and the position at which the vector in the (0,0) position in the Gradient image is calculated
             this.vxy_ArrayShift = 1; // number of pixels to shift the Gx and Gy arrays by (to get rid of columns or rows)
             this.vxy_PixelShift = 0.0f; // offset of the sampling with respect to the integer continuous space
 
-            clBufferGxInt = context.createFloatBuffer(4*width * height, READ_WRITE);
-            clBufferGyInt = context.createFloatBuffer(4*width * height, READ_WRITE);
+            clBufferGxInt = context.createFloatBuffer(4 * width * height, READ_WRITE);
+            clBufferGyInt = context.createFloatBuffer(4 * width * height, READ_WRITE);
         }
 
 
@@ -112,7 +108,12 @@ public class RadialGradientConvergenceCL {
         clBufferGx = context.createFloatBuffer(width * height, READ_WRITE);
         clBufferGy = context.createFloatBuffer(width * height, READ_WRITE);
         clBufferRGC = context.createFloatBuffer(widthM * heightM, WRITE_ONLY);
-        clBufferPxInt = context.createFloatBuffer(widthM * heightM, WRITE_ONLY);
+        clBufferPxInt = context.createFloatBuffer(widthM * heightM, WRITE_ONLY);  // TODO: consider not using this when not displaying intperpolated image
+
+
+//        clBufferWeightSum = context.createFloatBuffer(widthM * heightM, WRITE_ONLY);
+//        clBufferDebugFun = context.createFloatBuffer(widthM * heightM, WRITE_ONLY);
+
 
         // estimating the memory necessary for running this instance of SRRF
         double MemorySize = (clBufferPx.getCLSize() +
@@ -121,7 +122,7 @@ public class RadialGradientConvergenceCL {
                 clBufferRGC.getCLSize() +
                 clBufferPxInt.getCLSize());
 
-        if (GradMethod.equals("2-point local + interpolation")){
+        if (GradMethod.equals("2-point local + interpolation")) {
             MemorySize += clBufferGxInt.getCLSize() + clBufferGyInt.getCLSize();
         }
         MemorySize /= 1000000d;
@@ -143,59 +144,63 @@ public class RadialGradientConvergenceCL {
 
         // make kernelCalculateRGC assignment
         argn = 0;
-        kernelCalculateGradient.setArg( argn++, clBufferPx ); // make sure type is the same !!
-        kernelCalculateGradient.setArg( argn++, clBufferGx ); // make sure type is the same !!
-        kernelCalculateGradient.setArg( argn++, clBufferGy ); // make sure type is the same !!
+        kernelCalculateGradient.setArg(argn++, clBufferPx); // make sure type is the same !!
+        kernelCalculateGradient.setArg(argn++, clBufferGx); // make sure type is the same !!
+        kernelCalculateGradient.setArg(argn++, clBufferGy); // make sure type is the same !!
 
         argn = 0;
-        if (GradChosenMethod.equals("2-point local + interpolation")){
-            kernelInterpolateGradient.setArg( argn++, clBufferGx ); // make sure type is the same !!
-            kernelInterpolateGradient.setArg( argn++, clBufferGy ); // make sure type is the same !!
-            kernelInterpolateGradient.setArg( argn++, clBufferGxInt ); // make sure type is the same !!
-            kernelInterpolateGradient.setArg( argn++, clBufferGyInt ); // make sure type is the same !!
+        if (GradChosenMethod.equals("2-point local + interpolation")) {
+            kernelInterpolateGradient.setArg(argn++, clBufferGx); // make sure type is the same !!
+            kernelInterpolateGradient.setArg(argn++, clBufferGy); // make sure type is the same !!
+            kernelInterpolateGradient.setArg(argn++, clBufferGxInt); // make sure type is the same !!
+            kernelInterpolateGradient.setArg(argn++, clBufferGyInt); // make sure type is the same !!
         }
 
         // make kernelCalculateRGC assignment
         argn = 0;
-        kernelCalculateRGC.setArg( argn++, clBufferPx ); // make sure type is the same !!
-        if (GradChosenMethod.equals("2-point local + interpolation")){
-            kernelCalculateRGC.setArg( argn++, clBufferGxInt ); // make sure type is the same !!
-            kernelCalculateRGC.setArg( argn++, clBufferGyInt ); // make sure type is the same !!
-        }
-        else {
-            kernelCalculateRGC.setArg( argn++, clBufferGx ); // make sure type is the same !!
-            kernelCalculateRGC.setArg( argn++, clBufferGy ); // make sure type is the same !!
+        kernelCalculateRGC.setArg(argn++, clBufferPx); // make sure type is the same !!
+        if (GradChosenMethod.equals("2-point local + interpolation")) {
+            kernelCalculateRGC.setArg(argn++, clBufferGxInt); // make sure type is the same !!
+            kernelCalculateRGC.setArg(argn++, clBufferGyInt); // make sure type is the same !!
+        } else {
+            kernelCalculateRGC.setArg(argn++, clBufferGx); // make sure type is the same !!
+            kernelCalculateRGC.setArg(argn++, clBufferGy); // make sure type is the same !!
         }
 
-        kernelCalculateRGC.setArg( argn++, clBufferRGC); // make sure type is the same !!
-        kernelCalculateRGC.setArg( argn++, magnification ); // make sure type is the same !!
-        kernelCalculateRGC.setArg( argn++, this.GxGyMagnification ); // make sure type is the same !!
-        kernelCalculateRGC.setArg( argn++, fwhm ); // make sure type is the same !!
-        kernelCalculateRGC.setArg( argn++, sensitivity ); // make sure type is the same !!
-        kernelCalculateRGC.setArg( argn++, shiftX ); // make sure type is the same !!
-        kernelCalculateRGC.setArg( argn++, shiftY ); // make sure type is the same !!
-        kernelCalculateRGC.setArg( argn++, vxy_offset ); // make sure type is the same !!
-        kernelCalculateRGC.setArg( argn++, vxy_ArrayShift); // make sure type is the same !!,
-        kernelCalculateRGC.setArg( argn++, vxy_PixelShift); // make sure type is the same !!
-        kernelCalculateRGC.setArg( argn++, intWeighting ); // make sure type is the same !!
+        kernelCalculateRGC.setArg(argn++, clBufferRGC); // make sure type is the same !!
+
+//        kernelCalculateRGC.setArg(argn++, clBufferWeightSum); // make sure type is the same !!
+//        kernelCalculateRGC.setArg(argn++, clBufferDebugFun); // make sure type is the same !!
+
+        kernelCalculateRGC.setArg(argn++, magnification); // make sure type is the same !!
+        kernelCalculateRGC.setArg(argn++, GxGyMagnification); // make sure type is the same !!
+        kernelCalculateRGC.setArg(argn++, fwhm); // make sure type is the same !!
+        kernelCalculateRGC.setArg(argn++, sensitivity); // make sure type is the same !!
+        kernelCalculateRGC.setArg(argn++, shiftX); // make sure type is the same !!
+        kernelCalculateRGC.setArg(argn++, shiftY); // make sure type is the same !!
+        kernelCalculateRGC.setArg(argn++, vxy_offset); // make sure type is the same !!
+        kernelCalculateRGC.setArg(argn++, vxy_ArrayShift); // make sure type is the same !!,
+        kernelCalculateRGC.setArg(argn++, vxy_PixelShift); // make sure type is the same !!
+        kernelCalculateRGC.setArg(argn++, intWeighting); // make sure type is the same !!
 
 
         // asynchronous write of data to GPU device,
         // followed by blocking read to get the computed results back.
         int id = prof.startTimer();
-        queue.putWriteBuffer( clBufferPx, false );
+        queue.putWriteBuffer(clBufferPx, false);
         queue.put2DRangeKernel(kernelCalculateGradient, 0, 0, width, height, 0, 0);
 
-        if (GradChosenMethod.equals("2-point local + interpolation")){
-            queue.put2DRangeKernel(kernelInterpolateGradient, 0, 0, 2*width, 2*height, 0, 0);
+        if (GradChosenMethod.equals("2-point local + interpolation")) {
+            queue.put2DRangeKernel(kernelInterpolateGradient, 0, 0, 2 * width, 2 * height, 0, 0);
         }
 
         queue.put2DRangeKernel(kernelCalculateRGC, 0, 0, widthM, heightM, 0, 0);
         queue.finish();
-        queue.putReadBuffer(clBufferRGC, true);
+        queue.putReadBuffer(clBufferRGC,true);
         prof.recordTime("RadialGradientConvergence.cl", prof.endTimer(id));
 
         grabBuffer(clBufferRGC, fpRGC);
+//        fpRGC.multiply(1/2.86944e-6);  // output scaled to this value (??)
 
         return fpRGC;
     }
@@ -214,17 +219,17 @@ public class RadialGradientConvergenceCL {
 
         // make kernelCalculateInterpolatedIntensity assignment
         argn = 0;
-        kernelCalculateInterpolatedIntensity.setArg( argn++, clBufferPx ); // make sure type is the same !!
-        kernelCalculateInterpolatedIntensity.setArg( argn++, clBufferPxInt ); // make sure type is the same !!
-        kernelCalculateInterpolatedIntensity.setArg( argn++, magnification ); // make sure type is the same !!
-        kernelCalculateInterpolatedIntensity.setArg( argn++, shiftX ); // make sure type is the same !!
-        kernelCalculateInterpolatedIntensity.setArg( argn++, shiftY ); // make sure type is the same !!
+        kernelCalculateInterpolatedIntensity.setArg(argn++, clBufferPx); // make sure type is the same !!
+        kernelCalculateInterpolatedIntensity.setArg(argn++, clBufferPxInt); // make sure type is the same !!
+        kernelCalculateInterpolatedIntensity.setArg(argn++, magnification); // make sure type is the same !!
+        kernelCalculateInterpolatedIntensity.setArg(argn++, shiftX); // make sure type is the same !!
+        kernelCalculateInterpolatedIntensity.setArg(argn++, shiftY); // make sure type is the same !!
 
 
         // asynchronous write of data to GPU device,
         // followed by blocking read to get the computed results back.
         int id = prof.startTimer();
-        queue.putWriteBuffer( clBufferPx, false );
+        queue.putWriteBuffer(clBufferPx, false);
         queue.put2DRangeKernel(kernelCalculateInterpolatedIntensity, 0, 0, widthM, heightM, 0, 0);
         queue.finish();
         queue.putReadBuffer(clBufferPxInt, true);
