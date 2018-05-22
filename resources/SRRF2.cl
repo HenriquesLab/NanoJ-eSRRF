@@ -182,6 +182,7 @@ __kernel void calculateSRRF(
         else CGLH[f] = 0;
 
         float v = getInterpolatedValue(pixels, w, h, ((float) xM)/MAGNIFICATION + ShiftXArray[f], ((float) yM)/MAGNIFICATION + ShiftYArray[f], f);
+        //CGLH[f] *= v;
 
         // CALCULATE SRRF AVERAGE AND MAXIMUM
         int f1 = f+1;
@@ -218,7 +219,7 @@ __kernel void calculateSRRF(
     int recOffset = 3;
     SRRFArray[recOffset * whM + xyMOffset]  = sqrt(SRRFCumTimeLags[0]) * vRAW_AVE;
     for (int n=1; n<NTIMELAGS; n++) {
-        SRRFArray[(recOffset+n) * whM + xyMOffset] = rootn(SRRFCumTimeLags[n], 1+n) * vRAW_AVE;
+        SRRFArray[(recOffset+n) * whM + xyMOffset] = rootn(SRRFCumTimeLags[n], 1+n) * vRAW_AVE; //todo: is this wrong?
     }
 
     ////////////////////////////////////////////////
@@ -244,7 +245,7 @@ __kernel void calculateSRRF(
     recOffset += NTIMELAGS;
     SRRFArray[(recOffset) * whM + xyMOffset]  = sqrt(SRRFCumTimeLags[0]) * vRAW_AVE;
     for (int n=1; n<NTIMELAGS; n++) {
-        SRRFArray[(recOffset+n) * whM + xyMOffset] = rootn(SRRFCumTimeLags[n], 1+n) * vRAW_AVE;
+        SRRFArray[(recOffset+n) * whM + xyMOffset] = rootn(SRRFCumTimeLags[n], 1+n) * vRAW_AVE; //todo: is this wrong?
     }
 
     ////////////////////////////////////////////////
