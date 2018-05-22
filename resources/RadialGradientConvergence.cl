@@ -223,7 +223,7 @@ __kernel void calculateRadialGradientConvergence(
 //                  Dk = exp(-0.5f*pow((float) (Dk/SigmaTheta), 2));
 
                     // Rational function -------------------------
-//                  float SigmaTheta = 0.1;
+//                  float SigmaTheta = 0.3;
 //                  float Power = 4;
 //                  Dk = Dk / distance; // Dk is now between 0 to 1, Dk = sin(theta) ~ theta
 //                  Dk = 1/(1+pow((float) (Dk/SigmaTheta), Power));

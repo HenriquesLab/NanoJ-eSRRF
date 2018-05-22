@@ -108,12 +108,10 @@ public class RadialGradientConvergenceCL {
         clBufferGx = context.createFloatBuffer(width * height, READ_WRITE);
         clBufferGy = context.createFloatBuffer(width * height, READ_WRITE);
         clBufferRGC = context.createFloatBuffer(widthM * heightM, WRITE_ONLY);
-        clBufferPxInt = context.createFloatBuffer(widthM * heightM, WRITE_ONLY);  // TODO: consider not using this when not displaying intperpolated image
-
+        clBufferPxInt = context.createFloatBuffer(widthM * heightM, WRITE_ONLY);  // TODO: consider not using this when not displaying interpolated image
 
 //        clBufferWeightSum = context.createFloatBuffer(widthM * heightM, WRITE_ONLY);
 //        clBufferDebugFun = context.createFloatBuffer(widthM * heightM, WRITE_ONLY);
-
 
         // estimating the memory necessary for running this instance of SRRF
         double MemorySize = (clBufferPx.getCLSize() +
@@ -200,7 +198,7 @@ public class RadialGradientConvergenceCL {
         prof.recordTime("RadialGradientConvergence.cl", prof.endTimer(id));
 
         grabBuffer(clBufferRGC, fpRGC);
-//        fpRGC.multiply(1/2.86944e-6);  // output scaled to this value (??)
+        fpRGC.multiply(1/2.86944e-6);  // output scaled to this value (??)
 
         return fpRGC;
     }
