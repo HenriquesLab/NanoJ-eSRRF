@@ -19,16 +19,11 @@ import static java.lang.Math.max;
 import static java.lang.Math.min;
 import static nanoj.core2.NanoJCL.*;
 
-public class SRRF2CL {
+public class liveSRRF_CL {
 
 
     public boolean DEBUG = false;
     private NanoJProfiler prof = new NanoJProfiler();
-
-    private final int nGPUReconstructions;
-    public final static int BIN_1 = 1;
-    public final static int BIN_2 = 2;
-    public final static int BIN_4 = 4;
 
     public ArrayList<String> reconstructionLabel = new ArrayList<String>();
 
@@ -37,7 +32,7 @@ public class SRRF2CL {
     static CLKernel kernelCalculateGradient, kernelCalculateSRRF, kernelConvolveH, kernelConvolveV;
     static CLCommandQueue queue;
 
-    private final int width, height, widthM, heightM, nFrames, magnification, whM;
+    private final int width, height, widthM, heightM, nFrameOnGPU, magnification, whM;
     private final float fwhm;
 
     private CLBuffer<FloatBuffer>
@@ -48,35 +43,12 @@ public class SRRF2CL {
 
     public ImageStack imsSRRF, imsErrorMap;
 
-    private static int getNGPUReconstructions(int nTimeLags, int doBinFlag) {
-        int nReconstructions = 3 + nTimeLags;
-        if (doBinFlag == BIN_2) nReconstructions += nTimeLags;
-        else if (doBinFlag == BIN_4) nReconstructions += 2*nTimeLags;
-        return nReconstructions;
-    }
 
-    // return predicted memory usage in MB
-    public static double predictMemoryUsed(int width, int height, int nFrames, int magnification, int nTimeLags, int doBinFlag) {
-        int nGPUReconstructions = getNGPUReconstructions(nTimeLags, doBinFlag);
 
-        double memUsed = 0;
-        memUsed += width * height * nFrames; // clBufferPx
-        memUsed += nFrames; // clBufferShiftX
-        memUsed += nFrames; // clBufferShiftY
-        memUsed += width * height * nFrames; // clBufferGx
-        memUsed += width * height * nFrames; // clBufferGy
-        memUsed += width * height * magnification * magnification * nGPUReconstructions; // clBufferSRRF
-        memUsed += width * height * magnification * magnification; // clBufferSRRF_CVH
-        memUsed += width * height * magnification * magnification; // clBufferSRRF_CV
 
-        memUsed *= Float.SIZE / 8000000d;
-        return memUsed;
-    }
+    public liveSRRF_CL(int width, int height, int nFrames, int magnification, float fwhm, int sensitivity) {
 
-    public SRRF2CL(int width, int height, int nFrames, int magnification, float fwhm, int nTimeLags, int doBinFlag) {
-        nGPUReconstructions = getNGPUReconstructions(nTimeLags, doBinFlag);
-
-        this.nFrames = nFrames;
+        this.nFrameOnGPU = nFrames;
         this.width = width;
         this.height = height;
         this.widthM = width * magnification;
@@ -103,10 +75,10 @@ public class SRRF2CL {
             String programString = getResourceAsString(RadialGradientConvergenceCL.class, "SRRF2.cl");
             programString = replaceFirst(programString,"$MAX_FRAMES$", ""+nFrames);
             programString = replaceFirst(programString,"$MAGNIFICATION$", ""+magnification);
-            programString = replaceFirst(programString,"$NTIMELAGS$", ""+nTimeLags);
-            programString = replaceFirst(programString,"$DOBIN2$", ""+(doBinFlag == BIN_2 || doBinFlag == BIN_4));
-            programString = replaceFirst(programString,"$DOBIN4$", ""+(doBinFlag == BIN_4));
             programString = replaceFirst(programString,"$FWHM$", ""+fwhm);
+            programString = replaceFirst(programString,"$SENSITIVITY$", ""+sensitivity);
+
+
             programString = replaceFirst(programString,"$SIGMA$", ""+sigma);
             programString = replaceFirst(programString,"$RADIUS$", ""+((int) (sigma * 2) + 1));
             programString = replaceFirst(programString,"$WIDTH$", ""+width);
@@ -131,7 +103,7 @@ public class SRRF2CL {
         clBufferShiftY = context.createFloatBuffer(nFrames, READ_ONLY);
         clBufferGx = context.createFloatBuffer(width * height * nFrames, READ_WRITE);
         clBufferGy = context.createFloatBuffer(width * height * nFrames, READ_WRITE);
-        clBufferSRRF = context.createFloatBuffer(widthM * heightM * nGPUReconstructions, READ_WRITE);
+        clBufferSRRF = context.createFloatBuffer(widthM * heightM, READ_WRITE);
         clBufferSRRF_CVH = context.createFloatBuffer(widthM * heightM, READ_WRITE);
         clBufferSRRF_CV  = context.createFloatBuffer(widthM * heightM, WRITE_ONLY);
 
@@ -148,28 +120,20 @@ public class SRRF2CL {
 
         reconstructionLabel.clear();
         reconstructionLabel.add("Raw Average");
-        reconstructionLabel.add("SRRF2 Average");
-        reconstructionLabel.add("SRRF2 Maximum");
-
-        for (int n=0; n<nTimeLags; n++) reconstructionLabel.add("SRRF2 Accum. TL"+n);
-        if (doBinFlag == BIN_2 || doBinFlag == BIN_4)
-            for (int n=0; n<nTimeLags; n++) reconstructionLabel.add("SRRF2 Accum. TL"+n+" Bin2");
-        if (doBinFlag == BIN_4)
-            for (int n=0; n<nTimeLags; n++) reconstructionLabel.add("SRRF2 Accum. TL"+n+" Bin4");
-
-        reconstructionLabel.add("SRRF2 Fusion");
+        reconstructionLabel.add("liveSRRF Average");
+        reconstructionLabel.add("liveSRRF Fusion");
     }
 
     public synchronized ImageStack calculateSRRF(ImageStack ims, float[] shiftX, float[] shiftY) {
         assert (ims.getWidth() == width && ims.getHeight() == height);
-        assert (ims.getSize() <= nFrames);
+        assert (ims.getSize() <= nFrameOnGPU);
 
         int nFrames = ims.getSize();
         int argn;
 
-        float[][] dataSRRF          = new float[nGPUReconstructions][whM];
-        float[][] dataSRRFConvolved = new float[nGPUReconstructions][whM];
-        float[][] dataErrorMap      = new float[nGPUReconstructions][whM];
+        float[] dataSRRF          = new float[whM];
+        float[] dataSRRFConvolved = new float[whM];
+        float[] dataErrorMap      = new float[whM];
 
         imsSRRF     = new ImageStack(widthM, heightM);
         imsErrorMap = new ImageStack(widthM, heightM);
@@ -221,23 +185,20 @@ public class SRRF2CL {
         // grab frames
         queue.putReadBuffer(clBufferSRRF, true);
         FloatBuffer bufferSRRF = clBufferSRRF.getBuffer();
-        for (int r=0; r<nGPUReconstructions; r++) {
-            int fOffset = r * whM;
+
             for (int n=0; n<whM; n++) {
-                dataSRRF[r][n] = bufferSRRF.get(fOffset+n);
-                if (Float.isNaN(dataSRRF[r][n])) dataSRRF[r][n] = 0; // make sure we dont get any weirdness
+                dataSRRF[n] = bufferSRRF.get(whM+n);
+                if (Float.isNaN(dataSRRF[n])) dataSRRF[n] = 0; // make sure we dont get any weirdness
             }
-        }
+
         prof.recordTime("kernelCalculateSRRF", prof.endTimer(id));
         
         showStatus("Convolving SRRF...");
         float sigmaM = magnification * fwhm / 2.354f;
         id = prof.startTimer();
-        for (int r=1; r<nGPUReconstructions; r++) { // note we are ignoring the 0th frame, which is just the interpolated diffraction average
             argn = 0;
             kernelConvolveH.setArg(argn++, clBufferSRRF); // make sure type is the same !!
             kernelConvolveH.setArg(argn++, clBufferSRRF_CVH); // make sure type is the same !!
-            kernelConvolveH.setArg(argn++, r); // make sure type is the same !!
             kernelConvolveH.setArg(argn++, sigmaM); // make sure type is the same !!
             queue.put2DRangeKernel(kernelConvolveH, 0, 0, widthM, heightM, 0, 0);
             argn = 0;
@@ -247,8 +208,8 @@ public class SRRF2CL {
             queue.put2DRangeKernel(kernelConvolveV, 0, 0, widthM, heightM, 0, 0);
             // grab convolved frame
             queue.putReadBuffer(clBufferSRRF_CV, true);
-            grabBuffer(clBufferSRRF_CV, dataSRRFConvolved[r], true);
-        }
+            grabBuffer(clBufferSRRF_CV, dataSRRFConvolved, true);
+
         prof.recordTime("kernelConvolveH & kernelConvolveV", prof.endTimer(id));
 
         id = prof.startTimer();
@@ -257,22 +218,20 @@ public class SRRF2CL {
 
         // grab interpolated data frame
         showStatus("Preparing data...");
-        float[] RAW_AVE = dataSRRF[0];
+        float[] RAW_AVE = dataSRRF;
 
         // grab data from convolved frames
         NanoJThreadExecutor NTE = new NanoJThreadExecutor(false);
-        for (int r=1; r<nGPUReconstructions; r++) {
             // this thread will read the buffer for SRRF and SRRF_CV plus rescale their intensity to match RAW_AVE
-            ThreadedNormaliseAndCalculateErrorMap t = new ThreadedNormaliseAndCalculateErrorMap(RAW_AVE, dataSRRF[r], dataSRRFConvolved[r], dataErrorMap[r], widthM, heightM);
+            ThreadedNormaliseAndCalculateErrorMap t = new ThreadedNormaliseAndCalculateErrorMap(RAW_AVE, dataSRRF, dataSRRFConvolved, dataErrorMap, widthM, heightM);
             NTE.execute(t);
-        }
+
         NTE.finish();
 
         // calculate the error map and send off each reconstruction to imsSRRF
-        for (int r=0; r<nGPUReconstructions; r++) {
-            imsSRRF.addSlice(new FloatProcessor(widthM, heightM, dataSRRF[r]));
-            imsErrorMap.addSlice(new FloatProcessor(widthM, heightM, dataErrorMap[r]));
-        }
+            imsSRRF.addSlice(new FloatProcessor(widthM, heightM, dataSRRF));
+            imsErrorMap.addSlice(new FloatProcessor(widthM, heightM, dataErrorMap));
+
 
         showStatus("Calculating SRRF Fusion...");
         float[] fusion = new float[whM];
@@ -280,16 +239,15 @@ public class SRRF2CL {
 
         for (int n = 0; n < whM; n++) {
             float errorMax = -Float.MAX_VALUE;
-            for (int r=1; r<nGPUReconstructions; r++) errorMax = max(dataErrorMap[r][n], errorMax);
+            errorMax = max(dataErrorMap[n], errorMax);
 
-            for (int r=1; r<nGPUReconstructions; r++) {
-                float v = dataSRRF[r][n];
-                double w = errorMax / max(dataErrorMap[r][n], 1);
+                float v = dataSRRF[n];
+                double w = errorMax / max(dataErrorMap[n], 1);
                 //double w = 1 / max(errorMap[r][n], 1);
                 fusion[n] += v * w;
                 weightSum[n] += w;
             }
-        }
+
         for (int n = 0; n < whM; n++) fusion[n] /= weightSum[n];
         imsSRRF.addSlice(new FloatProcessor(widthM, heightM, fusion));
 
