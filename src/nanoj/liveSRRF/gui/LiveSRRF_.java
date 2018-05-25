@@ -38,7 +38,7 @@ public class LiveSRRF_ implements PlugIn {
     private ImagePlus impCCM = null;
 
     private ImagePlus imp;
-    private int magnification, nFrames, nTimeLags, doBin;
+    private int magnification, nFrames, nTimeLags, doBin, sensitivity;
     private float fwhm;
     private boolean correctVibration, correctSCMOS, showAllReconstructions;
 
@@ -51,8 +51,10 @@ public class LiveSRRF_ implements PlugIn {
         imp.show();
 
         NonBlockingGenericDialog gd = new NonBlockingGenericDialog("LiveSRRF (aka SRRF2) - Unfinished...");
-        gd.addNumericField("Magnification (default: 4)", prefs.get("magnification", 4), 0);
-        gd.addNumericField("FWHM (pixels, default: 3)", prefs.get("fwhm", 3), 2);
+        gd.addNumericField("Magnification (default: 5)", prefs.get("magnification", 5), 0);
+        gd.addNumericField("FWHM (pixels, default: 2)", prefs.get("fwhm", 2), 2);
+        gd.addNumericField("Sensitivity (default: 3)", prefs.get("fwhm", 3), 0);
+
         gd.addNumericField("Frames_per_time-point (0 - auto)", prefs.get("nFrames", 0), 0);
         gd.addCheckbox("Correct vibration", prefs.get("correctVibration", false));
         gd.addCheckbox("Correct sCMOS patterning", prefs.get("correctSCMOS", false));
@@ -106,7 +108,7 @@ public class LiveSRRF_ implements PlugIn {
 
         ImageProcessor ipRef = null; // reference slide for Cross-Correlation and vibration correction
 
-        SRRF2CL srrf2CL = new SRRF2CL(w, h, nFrames, magnification, fwhm, nTimeLags, doBin);
+        SRRF2CL srrf2CL = new SRRF2CL(w, h, nFrames, magnification, fwhm, sensitivity, nTimeLags, doBin);
 
         float[] shiftX = new float[nFrames];
         float[] shiftY = new float[nFrames];
@@ -199,6 +201,7 @@ public class LiveSRRF_ implements PlugIn {
     private boolean grabSettings(GenericDialog gd) {
         magnification = (int) gd.getNextNumber();
         fwhm = (float) gd.getNextNumber();
+        sensitivity = (int) gd.getNextNumber();
         nFrames = (int) gd.getNextNumber();
         correctVibration = gd.getNextBoolean();
         correctSCMOS = gd.getNextBoolean();
