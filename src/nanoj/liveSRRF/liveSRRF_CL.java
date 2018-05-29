@@ -78,7 +78,6 @@ public class liveSRRF_CL {
             programString = replaceFirst(programString,"$FWHM$", ""+fwhm);
             programString = replaceFirst(programString,"$SENSITIVITY$", ""+sensitivity);
 
-
             programString = replaceFirst(programString,"$SIGMA$", ""+sigma);
             programString = replaceFirst(programString,"$RADIUS$", ""+((int) (sigma * 2) + 1));
             programString = replaceFirst(programString,"$WIDTH$", ""+width);
