@@ -115,8 +115,8 @@ public class LiveSRRF_ implements PlugIn {
         ImageProcessor ipRef = null; // reference slide for Cross-Correlation and vibration correction
         liveSRRF_CL liveSRRF = new liveSRRF_CL(w, h, nFrameOnGPU, magnification, fwhm, sensitivity);
 
-        float[] shiftX = new float[nFrameSRRF];
-        float[] shiftY = new float[nFrameSRRF];
+        float[] shiftX = new float[nFrameOnGPU];
+        float[] shiftY = new float[nFrameOnGPU];
 
         int nFrameOnGPUcounter = 0;
 
@@ -124,7 +124,7 @@ public class LiveSRRF_ implements PlugIn {
 //        // !!! MAIN LOOP THROUGH FRAMES !!! //
 //        //////////////////////////////////////
 //
-        for (int s = 1; s <= nSlices; s++) {
+        for (int s = 1; s <= nFrameOnGPU; s++) {
             // Check if user is cancelling calculation
             IJ.showProgress(s, nSlices);
             if (IJ.escapePressed()) {
@@ -140,20 +140,17 @@ public class LiveSRRF_ implements PlugIn {
 
             // Estimate vibrations
             if (correctVibration) {
-                System.out.println("New reference..." + nFrameOnGPUcounter);
                 int id = prof.startTimer();
-                if (nFrameOnGPUcounter == 0) {
-                    ipRef = ip.duplicate();
-                    shiftX[nFrameOnGPUcounter] = 0;
-                    shiftY[nFrameOnGPUcounter] = 0;
-                } else {
-                    float[] shift = calculateShift(ipRef, ip, 5);
-                    shiftX[nFrameOnGPUcounter] = shift[0];
-                    shiftY[nFrameOnGPUcounter] = shift[1];
-                }
-                System.out.println("Frame=" + s + " shiftX=" + shiftX[nFrameOnGPUcounter] + " shiftY=" + shiftY[nFrameOnGPUcounter]);
+                float[] shift = calculateShift(ipRef, ip, 5);
+                shiftX[s] = shift[0];
+                shiftY[s] = shift[1];
+
+                System.out.println("Frame=" + s + " shiftX=" + shiftX[s] + " shiftY=" + shiftY[s]);
                 prof.recordTime("Drift Estimation", prof.endTimer(id));
             }
+        }
+
+
 
 //            if (counter == nFrameSRRF - 1 || s == nSlices) {
 //                int id = prof.startTimer();
@@ -183,18 +180,18 @@ public class LiveSRRF_ implements PlugIn {
 //                counter = 0;
 //                prof.recordTime("full SRRF-frame calculation", prof.endTimer(id));
 //            } else counter++;
-        }
-
-        liveSRRF.release(); // Release the GPU!!!
-        IJ.log(prof.report());
-
-        // Show final rendering...
-        impSRRF.setStack(imsSRRF);
-        IJ.run(impSRRF, "Enhance Contrast", "saturated=0.5");
-        impSRRF.setTitle(imp.getTitle() + " - liveSRRF");
-
-
     }
+
+//        liveSRRF.release(); // Release the GPU!!!
+//        IJ.log(prof.report());
+//
+//        // Show final rendering...
+//        impSRRF.setStack(imsSRRF);
+//        IJ.run(impSRRF, "Enhance Contrast", "saturated=0.5");
+//        impSRRF.setTitle(imp.getTitle() + " - liveSRRF");
+
+
+//    }
 
 
 //    -------------------------------------------------------------------------------------
@@ -251,7 +248,7 @@ public class LiveSRRF_ implements PlugIn {
         if (nFrameOnGPU > 0) goodToGo = true;
         else {
             memUsed = predictMemoryUsed(frameGap);
-            IJ.showStatus("liveSRRF - Minimum GPU memory: " + Math.round(memUsed[1]) + "MB");
+            IJ.showStatus("liveSRRF - Minimum GPU memory: " + Math.round(memUsed[frameGap]) + "MB");
         }
 
 
@@ -344,8 +341,7 @@ public class LiveSRRF_ implements PlugIn {
         memUsed[0] += nFrameOnGPU; // clBufferShiftY
         memUsed[0] += 4 * width * height * nFrameOnGPU; // clBufferGx
         memUsed[0] += 4 * width * height * nFrameOnGPU; // clBufferGy
-        memUsed[0] += width * height * magnification * magnification; // clBufferSRRF_AVG
-        memUsed[0] += width * height * magnification * magnification; // clBufferSRRF_VAR
+        memUsed[0] += width * height * magnification * magnification; // clBufferRGC
 
         // Memory on CPU ----
         memUsed[1] = 0;

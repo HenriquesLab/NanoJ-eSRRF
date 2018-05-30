@@ -28,8 +28,6 @@ public class RadialGradientConvergenceCL {
     private final int width, height, widthM, heightM, magnification;
     private final float fwhm;
 
-    public int nVectors = 12;
-
     private CLBuffer<FloatBuffer>
             clBufferPx,
             clBufferGx, clBufferGy,

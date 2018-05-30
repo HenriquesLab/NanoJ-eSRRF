@@ -21,8 +21,6 @@ import static nanoj.core2.NanoJCL.*;
 
 public class liveSRRF_CL {
 
-
-    public boolean DEBUG = false;
     private NanoJProfiler prof = new NanoJProfiler();
 
     public ArrayList<String> reconstructionLabel = new ArrayList<String>();
@@ -42,7 +40,6 @@ public class liveSRRF_CL {
             clBufferSRRF;
 
     public ImageStack imsSRRF, imsErrorMap;
-
 
 
 
@@ -72,7 +69,7 @@ public class liveSRRF_CL {
         // create the program
         try {
             float sigma = fwhm/2.354f;
-            String programString = getResourceAsString(RadialGradientConvergenceCL.class, "SRRF2.cl");
+            String programString = getResourceAsString(liveSRRF_CL.class, "liveSRRF.cl");
             programString = replaceFirst(programString,"$MAX_FRAMES$", ""+nFramesOnGPU);
             programString = replaceFirst(programString,"$MAGNIFICATION$", ""+magnification);
             programString = replaceFirst(programString,"$FWHM$", ""+fwhm);
@@ -88,11 +85,11 @@ public class liveSRRF_CL {
             programString = replaceFirst(programString,"$WHM$", ""+(width*height*magnification*magnification));
             programLiveSRRF = context.createProgram(programString).build();
 
-            programConvolve2DIntegratedGaussian = context.createProgram(RadialGradientConvergenceCL.class.getResourceAsStream("/Convolve2DIntegratedGaussian.cl")).build();
+            programConvolve2DIntegratedGaussian = context.createProgram(liveSRRF_CL.class.getResourceAsStream("/Convolve2DIntegratedGaussian.cl")).build();
         } catch (IOException e) {
             e.printStackTrace();
         }
-        kernelCalculateGradient = programLiveSRRF.createCLKernel("calculateGradientRobX");
+        kernelCalculateGradient = programLiveSRRF.createCLKernel("calculateGradient_2point");
         kernelCalculateSRRF = programLiveSRRF.createCLKernel("calculateSRRF");
         kernelConvolveH = programConvolve2DIntegratedGaussian.createCLKernel("convolveHorizontal");
         kernelConvolveV = programConvolve2DIntegratedGaussian.createCLKernel("convolveVertical");
@@ -100,8 +97,8 @@ public class liveSRRF_CL {
         clBufferPx = context.createFloatBuffer(width * height * nFramesOnGPU, READ_ONLY);
         clBufferShiftX = context.createFloatBuffer(nFramesOnGPU, READ_ONLY);
         clBufferShiftY = context.createFloatBuffer(nFramesOnGPU, READ_ONLY);
-        clBufferGx = context.createFloatBuffer(width * height * nFramesOnGPU, READ_WRITE);
-        clBufferGy = context.createFloatBuffer(width * height * nFramesOnGPU, READ_WRITE);
+        clBufferGx = context.createFloatBuffer(4 * width * height * nFramesOnGPU, READ_WRITE);
+        clBufferGy = context.createFloatBuffer(4 * width * height * nFramesOnGPU, READ_WRITE);
         clBufferSRRF = context.createFloatBuffer(widthM * heightM, WRITE_ONLY);
 
         System.out.println("used device memory: " + (

@@ -1,12 +1,11 @@
 //#pragma OPENCL EXTENSION cl_khr_fp64: enable
 #define MAX_FRAMES $MAX_FRAMES$
-#define FWHM $FWHM$
-#define RADIUS $RADIUS$
-#define SIGMA $SIGMA$
 #define MAGNIFICATION $MAGNIFICATION$
-#define NTIMELAGS $NTIMELAGS$
-#define DOBIN2 $DOBIN2$
-#define DOBIN4 $DOBIN4$
+#define FWHM $FWHM$
+#define SENSITIVITY $SENSITIVITY$
+
+#define SIGMA $SIGMA$
+#define RADIUS $RADIUS$
 #define w $WIDTH$
 #define h $HEIGHT$
 #define wh $WH$
