@@ -108,7 +108,7 @@ public class LiveSRRF_ implements PlugIn {
         imsSRRF = new ImageStack(wM, hM);
 
         ImageStack imsRawDataBuffer = new ImageStack(w, h);
-        ImageProcessor ip; //
+        ImageProcessor ip;
 
         boolean firstTime = true;
 
@@ -118,8 +118,7 @@ public class LiveSRRF_ implements PlugIn {
         float[] shiftX = new float[nFrameSRRF];
         float[] shiftY = new float[nFrameSRRF];
 
-        int counter = 0;
-        int nReconstructions = 1;
+        int nFrameOnGPUcounter = 0;
 
 //        //////////////////////////////////////
 //        // !!! MAIN LOOP THROUGH FRAMES !!! //
@@ -141,49 +140,49 @@ public class LiveSRRF_ implements PlugIn {
 
             // Estimate vibrations
             if (correctVibration) {
-                System.out.println("New reference..." + counter);
+                System.out.println("New reference..." + nFrameOnGPUcounter);
                 int id = prof.startTimer();
-                if (counter == 0) {
+                if (nFrameOnGPUcounter == 0) {
                     ipRef = ip.duplicate();
-                    shiftX[counter] = 0;
-                    shiftY[counter] = 0;
+                    shiftX[nFrameOnGPUcounter] = 0;
+                    shiftY[nFrameOnGPUcounter] = 0;
                 } else {
                     float[] shift = calculateShift(ipRef, ip, 5);
-                    shiftX[counter] = shift[0];
-                    shiftY[counter] = shift[1];
+                    shiftX[nFrameOnGPUcounter] = shift[0];
+                    shiftY[nFrameOnGPUcounter] = shift[1];
                 }
-                System.out.println("Frame=" + s + " shiftX=" + shiftX[counter] + " shiftY=" + shiftY[counter]);
+                System.out.println("Frame=" + s + " shiftX=" + shiftX[nFrameOnGPUcounter] + " shiftY=" + shiftY[nFrameOnGPUcounter]);
                 prof.recordTime("Drift Estimation", prof.endTimer(id));
             }
 
-            if (counter == nFrameSRRF - 1 || s == nSlices) {
-                int id = prof.startTimer();
-                ImageStack imsResults = liveSRRF.calculateSRRF(imsRawDataBuffer, shiftX, shiftY);
-                nReconstructions = imsResults.getSize();
-                if (!showAllReconstructions) {
-                    imsSRRF.addSlice(imsResults.getProcessor(nReconstructions));
-                    imsSRRF.setSliceLabel(liveSRRF.reconstructionLabel.get(nReconstructions - 1), imsSRRF.getSize());
-                } else {
-                    for (int r = 1; r <= imsResults.getSize(); r++) {
-                        imsSRRF.addSlice(imsResults.getProcessor(r));
-                        imsSRRF.setSliceLabel(liveSRRF.reconstructionLabel.get(r - 1), imsSRRF.getSize());
-                    }
-                }
-                if (firstTime) {
-                    impSRRF.setStack(imsSRRF);
-                    impSRRF.show();
-                    impSRRF.setSlice(imsSRRF.getSize());
-                    IJ.run(impSRRF, "Enhance Contrast", "saturated=0.35");
-                    firstTime = false;
-                } else {
-                    impSRRF.setSlice(imsSRRF.getSize());
-                }
-
-                // reset buffers
-                imsRawDataBuffer = new ImageStack(w, h);
-                counter = 0;
-                prof.recordTime("full SRRF-frame calculation", prof.endTimer(id));
-            } else counter++;
+//            if (counter == nFrameSRRF - 1 || s == nSlices) {
+//                int id = prof.startTimer();
+//                ImageStack imsResults = liveSRRF.calculateSRRF(imsRawDataBuffer, shiftX, shiftY);
+//                nReconstructions = imsResults.getSize();
+//                if (!showAllReconstructions) {
+//                    imsSRRF.addSlice(imsResults.getProcessor(nReconstructions));
+//                    imsSRRF.setSliceLabel(liveSRRF.reconstructionLabel.get(nReconstructions - 1), imsSRRF.getSize());
+//                } else {
+//                    for (int r = 1; r <= imsResults.getSize(); r++) {
+//                        imsSRRF.addSlice(imsResults.getProcessor(r));
+//                        imsSRRF.setSliceLabel(liveSRRF.reconstructionLabel.get(r - 1), imsSRRF.getSize());
+//                    }
+//                }
+//                if (firstTime) {
+//                    impSRRF.setStack(imsSRRF);
+//                    impSRRF.show();
+//                    impSRRF.setSlice(imsSRRF.getSize());
+//                    IJ.run(impSRRF, "Enhance Contrast", "saturated=0.35");
+//                    firstTime = false;
+//                } else {
+//                    impSRRF.setSlice(imsSRRF.getSize());
+//                }
+//
+//                // reset buffers
+//                imsRawDataBuffer = new ImageStack(w, h);
+//                counter = 0;
+//                prof.recordTime("full SRRF-frame calculation", prof.endTimer(id));
+//            } else counter++;
         }
 
         liveSRRF.release(); // Release the GPU!!!
@@ -244,14 +243,14 @@ public class LiveSRRF_ implements PlugIn {
         double[] memUsed = new double[2];
         while (memUsed[0] < (double) maxMemoryGPU) {
             nFrameOnGPU = nFrameOnGPU + frameGap;
-            memUsed = predictMemoryUsed( nFrameOnGPU );
+            memUsed = predictMemoryUsed(nFrameOnGPU);
             IJ.showStatus("liveSRRF - Number of frames on GPU: " + (nFrameOnGPU - frameGap));
         }
 
         nFrameOnGPU = nFrameOnGPU - frameGap;
         if (nFrameOnGPU > 0) goodToGo = true;
         else {
-            memUsed = predictMemoryUsed( frameGap );
+            memUsed = predictMemoryUsed(frameGap);
             IJ.showStatus("liveSRRF - Minimum GPU memory: " + Math.round(memUsed[1]) + "MB");
         }
 

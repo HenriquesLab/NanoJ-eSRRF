@@ -28,7 +28,7 @@ public class liveSRRF_CL {
     public ArrayList<String> reconstructionLabel = new ArrayList<String>();
 
     static CLContext context;
-    static CLProgram programSRRF2, programConvolve2DIntegratedGaussian;
+    static CLProgram programLiveSRRF, programConvolve2DIntegratedGaussian;
     static CLKernel kernelCalculateGradient, kernelCalculateSRRF, kernelConvolveH, kernelConvolveV;
     static CLCommandQueue queue;
 
@@ -39,16 +39,16 @@ public class liveSRRF_CL {
             clBufferPx,
             clBufferGx, clBufferGy,
             clBufferShiftX, clBufferShiftY,
-            clBufferSRRF, clBufferSRRF_CVH, clBufferSRRF_CV;
+            clBufferSRRF;
 
     public ImageStack imsSRRF, imsErrorMap;
 
 
 
 
-    public liveSRRF_CL(int width, int height, int nFrames, int magnification, float fwhm, int sensitivity) {
+    public liveSRRF_CL(int width, int height, int nFramesOnGPU, int magnification, float fwhm, int sensitivity) {
 
-        this.nFrameOnGPU = nFrames;
+        this.nFrameOnGPU = nFramesOnGPU;
         this.width = width;
         this.height = height;
         this.widthM = width * magnification;
@@ -73,7 +73,7 @@ public class liveSRRF_CL {
         try {
             float sigma = fwhm/2.354f;
             String programString = getResourceAsString(RadialGradientConvergenceCL.class, "SRRF2.cl");
-            programString = replaceFirst(programString,"$MAX_FRAMES$", ""+nFrames);
+            programString = replaceFirst(programString,"$MAX_FRAMES$", ""+nFramesOnGPU);
             programString = replaceFirst(programString,"$MAGNIFICATION$", ""+magnification);
             programString = replaceFirst(programString,"$FWHM$", ""+fwhm);
             programString = replaceFirst(programString,"$SENSITIVITY$", ""+sensitivity);
@@ -86,25 +86,23 @@ public class liveSRRF_CL {
             programString = replaceFirst(programString,"$WM$", ""+(width*magnification));
             programString = replaceFirst(programString,"$HM$", ""+(height*magnification));
             programString = replaceFirst(programString,"$WHM$", ""+(width*height*magnification*magnification));
-            programSRRF2 = context.createProgram(programString).build();
+            programLiveSRRF = context.createProgram(programString).build();
 
             programConvolve2DIntegratedGaussian = context.createProgram(RadialGradientConvergenceCL.class.getResourceAsStream("/Convolve2DIntegratedGaussian.cl")).build();
         } catch (IOException e) {
             e.printStackTrace();
         }
-        kernelCalculateGradient = programSRRF2.createCLKernel("calculateGradientRobX");
-        kernelCalculateSRRF = programSRRF2.createCLKernel("calculateSRRF");
+        kernelCalculateGradient = programLiveSRRF.createCLKernel("calculateGradientRobX");
+        kernelCalculateSRRF = programLiveSRRF.createCLKernel("calculateSRRF");
         kernelConvolveH = programConvolve2DIntegratedGaussian.createCLKernel("convolveHorizontal");
         kernelConvolveV = programConvolve2DIntegratedGaussian.createCLKernel("convolveVertical");
 
-        clBufferPx = context.createFloatBuffer(width * height * nFrames, READ_ONLY);
-        clBufferShiftX = context.createFloatBuffer(nFrames, READ_ONLY);
-        clBufferShiftY = context.createFloatBuffer(nFrames, READ_ONLY);
-        clBufferGx = context.createFloatBuffer(width * height * nFrames, READ_WRITE);
-        clBufferGy = context.createFloatBuffer(width * height * nFrames, READ_WRITE);
-        clBufferSRRF = context.createFloatBuffer(widthM * heightM, READ_WRITE);
-        clBufferSRRF_CVH = context.createFloatBuffer(widthM * heightM, READ_WRITE);
-        clBufferSRRF_CV  = context.createFloatBuffer(widthM * heightM, WRITE_ONLY);
+        clBufferPx = context.createFloatBuffer(width * height * nFramesOnGPU, READ_ONLY);
+        clBufferShiftX = context.createFloatBuffer(nFramesOnGPU, READ_ONLY);
+        clBufferShiftY = context.createFloatBuffer(nFramesOnGPU, READ_ONLY);
+        clBufferGx = context.createFloatBuffer(width * height * nFramesOnGPU, READ_WRITE);
+        clBufferGy = context.createFloatBuffer(width * height * nFramesOnGPU, READ_WRITE);
+        clBufferSRRF = context.createFloatBuffer(widthM * heightM, WRITE_ONLY);
 
         System.out.println("used device memory: " + (
                 clBufferPx.getCLSize() +
@@ -112,9 +110,7 @@ public class liveSRRF_CL {
                         clBufferShiftY.getCLSize() +
                         clBufferGx.getCLSize() +
                         clBufferGy.getCLSize() +
-                        clBufferSRRF.getCLSize() +
-                        clBufferSRRF_CVH.getCLSize() +
-                        clBufferSRRF_CV.getCLSize())
+                        clBufferSRRF.getCLSize())
                 / 1000000d + "MB");
 
         reconstructionLabel.clear();
@@ -191,25 +187,7 @@ public class liveSRRF_CL {
             }
 
         prof.recordTime("kernelCalculateSRRF", prof.endTimer(id));
-        
-        showStatus("Convolving SRRF...");
-        float sigmaM = magnification * fwhm / 2.354f;
-        id = prof.startTimer();
-            argn = 0;
-            kernelConvolveH.setArg(argn++, clBufferSRRF); // make sure type is the same !!
-            kernelConvolveH.setArg(argn++, clBufferSRRF_CVH); // make sure type is the same !!
-            kernelConvolveH.setArg(argn++, sigmaM); // make sure type is the same !!
-            queue.put2DRangeKernel(kernelConvolveH, 0, 0, widthM, heightM, 0, 0);
-            argn = 0;
-            kernelConvolveV.setArg(argn++, clBufferSRRF_CVH); // make sure type is the same !!
-            kernelConvolveV.setArg(argn++, clBufferSRRF_CV); // make sure type is the same !!
-            kernelConvolveV.setArg(argn++, sigmaM); // make sure type is the same !!
-            queue.put2DRangeKernel(kernelConvolveV, 0, 0, widthM, heightM, 0, 0);
-            // grab convolved frame
-            queue.putReadBuffer(clBufferSRRF_CV, true);
-            grabBuffer(clBufferSRRF_CV, dataSRRFConvolved, true);
 
-        prof.recordTime("kernelConvolveH & kernelConvolveV", prof.endTimer(id));
 
         id = prof.startTimer();
         queue.finish(); // make sure everything is done...
@@ -254,7 +232,7 @@ public class liveSRRF_CL {
     }
 
     public void showStatus(String text) {
-        IJ.showStatus("SRRF2: "+text);
+        IJ.showStatus("liveSRRF: "+text);
     }
 
     public void release() {
@@ -342,4 +320,7 @@ public class liveSRRF_CL {
             System.arraycopy(dataErrorMapSmooth, 0, dataErrorMap, 0, dataErrorMap.length);
         }
     }
+
+
+
 }
