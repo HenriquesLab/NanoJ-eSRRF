@@ -15,13 +15,12 @@ import ij.process.ImageProcessor;
 import nanoj.core2.NanoJPrefs;
 import nanoj.core2.NanoJProfiler;
 import nanoj.core2.NanoJUsageTracker;
-import nanoj.liveSRRF.liveSRRF_CL;
+import nanoj.liveSRRF.SRRF2_CL;
 
 import java.awt.*;
 
 import static java.lang.Math.*;
 import static nanoj.core2.NanoJCrossCorrelation.calculateCrossCorrelationMap;
-import static nanoj.liveSRRF.liveSRRF_CL.*;
 
 public class LiveSRRF_ implements PlugIn {
 
@@ -113,7 +112,7 @@ public class LiveSRRF_ implements PlugIn {
         boolean firstTime = true;
 
         ImageProcessor ipRef = null; // reference slide for Cross-Correlation and vibration correction
-        liveSRRF_CL liveSRRF = new liveSRRF_CL(w, h, nFrameOnGPU, magnification, fwhm, sensitivity);
+        SRRF2_CL liveSRRF = new SRRF2_CL(w, h, nFrameOnGPU, magnification, fwhm, sensitivity);
 
         float[] shiftX = new float[nFrameOnGPU];
         float[] shiftY = new float[nFrameOnGPU];
