@@ -1,6 +1,9 @@
 package nanoj.liveSRRF;
 
 import com.jogamp.opencl.*;
+import ij.IJ;
+import ij.ImagePlus;
+import ij.ImageStack;
 import nanoj.core2.NanoJProfiler;
 import scala.Int;
 
@@ -10,6 +13,7 @@ import java.nio.IntBuffer;
 import static com.jogamp.opencl.CLMemory.Mem.READ_ONLY;
 import static com.jogamp.opencl.CLMemory.Mem.READ_WRITE;
 import static com.jogamp.opencl.CLMemory.Mem.WRITE_ONLY;
+import static nanoj.core2.NanoJCL.fillBuffer;
 import static nanoj.core2.NanoJCL.getResourceAsString;
 import static nanoj.core2.NanoJCL.replaceFirst;
 
@@ -91,6 +95,7 @@ public class liveSRRF_CL {
         kernelInterpolateGradient = programLiveSRRF.createCLKernel("calculateGradientInterpolation");
         kernelIncrementFramePosition = programLiveSRRF.createCLKernel("kernelIncrementFramePosition");
 
+        queue = device.createCommandQueue();
 
         System.out.println("used device memory: " + (
                 clBufferPx.getCLSize() +
@@ -105,6 +110,32 @@ public class liveSRRF_CL {
                         clBufferRawInterpolated.getCLSize() +
                         clBufferCurrentFrame.getCLSize())
                 / 1000000d + "MB");
+    }
+
+    public synchronized void loadRawDataGPUbuffer(ImagePlus imp, int indexStart, int nFrameOnGPU) {
+        assert (imp.getWidth() == width && imp.getHeight() == height);
+        ImageStack imsRawData = new ImageStack(width, height);
+
+        for (int f = 0; f < nFrameOnGPU; f++) {
+            imp.setSlice(indexStart + f);
+            imsRawData.addSlice(imp.getProcessor());
+        }
+
+        IJ.log("----------------------------");
+        IJ.log("Uploading raw data to GPU...");
+        int id = prof.startTimer();
+        fillBuffer(clBufferPx, imsRawData);
+        queue.putWriteBuffer( clBufferPx, false );
+        prof.recordTime("uploading data to GPU", prof.endTimer(id));
+
+    }
+
+//    public void loadShiftGPUbuffer(ImagePlus imp, int indexStart, int nFrameOnGPU) {
+//
+//    }
+
+    public void release() {
+        context.release();
     }
 
 

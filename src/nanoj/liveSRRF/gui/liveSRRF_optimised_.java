@@ -134,23 +134,29 @@ public class liveSRRF_optimised_ implements PlugIn {
         IJ.log("RAM usage: " + Math.round(predictMemoryUsed(nFrameOnGPU)[1]) + " MB");
         IJ.log("# reconstructed frames: " + nSRRFframe);
 
-        int indexStart;
+        int indexStartSRRFframe;
+        int indexStartGPUloadframe;
+        int nFrameToLoad = nFrameOnGPU;
         int counterGPUframe = 0;
+        int counterRawDataLoad = 0;
         liveSRRF_CL liveSRRF = new liveSRRF_CL(width, height, magnification, fwhm, sensitivity, nFrameOnGPU, nFrameForSRRF);
+        liveSRRF.loadRawDataGPUbuffer(imp, 0, nFrameOnGPU);
 
         for (int r = 1; r <= nSRRFframe; r++) {
             IJ.log("--------");
             IJ.log("SRRF frame: " + r);
-            indexStart = (r - 1) * frameGap + 1;
-            IJ.log("Stack index start: " + indexStart);
-            if (correctVibration) calculateShiftArray(indexStart);
+            indexStartSRRFframe = (r - 1) * frameGap + 1;
+            IJ.log("Stack index start: " + indexStartSRRFframe);
+            if (correctVibration) calculateShiftArray(indexStartSRRFframe);
 
             for (int s = 1; s <= nFrameForSRRF; s++) {
                 // calculateSRRF image
                 counterGPUframe++;
                 if (counterGPUframe > nFrameOnGPU) {
                     counterGPUframe = 0;
-                    //reload the GPU
+                    counterRawDataLoad++;
+                    nFrameToLoad = min(nFrameOnGPU, nSlices - nFrameOnGPU * counterRawDataLoad); //TODO: exclude the last few frames that are not analysed
+                    liveSRRF.loadRawDataGPUbuffer(imp, nFrameOnGPU * counterRawDataLoad, nFrameToLoad);
                 }
 
             }
@@ -158,6 +164,7 @@ public class liveSRRF_optimised_ implements PlugIn {
 
         }
 
+        liveSRRF.release(); // Release the GPU!!!
         IJ.log("-------------------------------------");
         IJ.log("Thank you for your custom on this beautiful day !");
 
