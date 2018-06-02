@@ -8,9 +8,12 @@
 #define w $WIDTH$
 #define h $HEIGHT$
 #define wh $WH$
+#define wInt $WINT$
+#define hInt $HINT$
 #define wM $WM$
 #define hM $HM$
 #define whM $WHM$
+#define nFrameOnGPU $NFRAMEONGPU$
 
 #define vxy_offset $VXY_OFFSET$
 #define vxy_ArrayShift $VXY_ARRAYSHIFT$
@@ -99,15 +102,16 @@ static float getVBoundaryCheck(__global float* array, int const width, int const
 __kernel void calculateGradient_2point(
     __global float* pixels,
     __global float* GxArray,
-    __global float* GyArray,
-    __global int* nCurrentFrame
+    __global float* GyArray
 
     ) {
     int x1 = get_global_id(0);
     int y1 = get_global_id(1);
+    int f = get_global_id(2);
+
 //    int w = get_global_size(0);
 //    int h = get_global_size(1);
-    int offset = y1 * w + x1 + w * h * nCurrentFrame[0];
+    int offset = y1 * w + x1 + w * h * f;
 
     int x0 = max(x1-1, 0);
     int y0 = max(y1-1, 0);
@@ -127,9 +131,11 @@ __kernel void calculateGradientInterpolation(
     ){
     int x = get_global_id(0);
     int y = get_global_id(1);
-    int wInt = get_global_size(0);
-    int hInt = get_global_size(1);
-    int offset = y * wInt + x;
+    int f = get_global_id(2);
+
+//    int wInt = get_global_size(0);
+//    int hInt = get_global_size(1);
+    int offset = y * wInt + x + f * wInt * hInt;
 
     // Two-fold interpolation of the gradients
     GxIntArray[offset] = getInterpolatedValue(GxArray, (int) (wInt/2), (int) (hInt/2), (float) (x)/2.0f, (float) (y)/2.0f);
@@ -166,14 +172,17 @@ __kernel void calculateRadialGradientConvergence(
 
     int xM = get_global_id(0);
     int yM = get_global_id(1);
+    int f = get_global_id(2);
+
 //    int wM = get_global_size(0);
 //    int hM = get_global_size(1);
 //    int w = wM / magnification;
 //    int h = hM / magnification;
+
     int offset = yM * wM + xM;
 
-    float xc = (xM + 0.5) / magnification + shiftX[nCurrentFrame[1]]; // continuous space position at the centre of magnified pixel
-    float yc = (yM + 0.5) / magnification + shiftY[nCurrentFrame[1]];
+    float xc = (xM + 0.5) / magnification + shiftX[nCurrentFrame[0] + f]; // continuous space position at the centre of magnified pixel
+    float yc = (yM + 0.5) / magnification + shiftY[nCurrentFrame[0] + f];
 
     float CGLH = 0; // CGLH stands for Radiality original name - Culley-Gustafsson-Laine-Henriques transform
     float distanceWeightSum = 0;
@@ -268,8 +277,8 @@ __kernel void calculateRadialGradientConvergence(
 
 //    if (intWeighting == 1) {
         float v = getInterpolatedValue(pixels, w, h, ((float) xM)/magnification + shiftX[nCurrentFrame[1]] - 0.5f, ((float) yM)/magnification + shiftY[nCurrentFrame[1]] - 0.5f);
-        OutArray[offset] = RGCArray[offset] + v * CGLH;
-        OutArray[offset + whM] = RGCArray[offset + whM] + OutArray[offset] * OutArray[offset];
+        OutArray[offset] = OutArray[offset] + v * CGLH;
+        OutArray[offset + whM] = OutArray[offset + whM] + OutArray[offset] * OutArray[offset];
         OutArray[offset + 2*whM] = OutArray[offset + 2*whM] + v;
 //        }
 //    else RGCArray[offset] = CGLH;
@@ -304,18 +313,11 @@ __kernel void kernelIncrementFramePosition(
     __global int* nCurrentFrame
     ){
     int i = get_global_id(0);
-    nCurrentFrame[i] = nCurrentFrame[i] + 1;
+    nCurrentFrame[i] = nCurrentFrame[i] + nFrameOnGPU;
 }
 
-// Fifth kernel: reset the SRRF frame number -----------------------------------------------------------------
-__kernel void kernelResetSRRFframePosition(
-    __global int* nCurrentFrame
-    ){
-    nCurrentFrame[1] = 0;
-}
-
-// Fifth kernel: reset the GPU frame number -----------------------------------------------------------------
-__kernel void kernelResetGPUframePosition(
+// Fifth kernel: reset the frame number -----------------------------------------------------------------
+__kernel void kernelResetFramePosition(
     __global int* nCurrentFrame
     ){
     nCurrentFrame[0] = 0;

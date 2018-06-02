@@ -47,6 +47,8 @@ public class liveSRRF_optimised_ implements PlugIn {
             getInterpolatedImage;
 
     private final int radiusCCM = 5;
+    private final String[] reconstructionLabels = {"AVG", "STD", "RawInt"};
+
     private float[] shiftX, shiftY;
 
     // Image formats
@@ -106,37 +108,6 @@ public class liveSRRF_optimised_ implements PlugIn {
         // Save last user entries
         savePreferences();
 
-        if (calculateAVG || doFusion) {
-            ImagePlus impSRRFavg = new ImagePlus(imp.getTitle() + " - liveSRRF (AVG projection)");
-            impSRRFavg.copyScale(imp); // make sure we copy the pixel sizes correctly across
-            Calibration cal = impSRRFavg.getCalibration();
-            cal.pixelWidth /= magnification;
-            cal.pixelHeight /= magnification;
-
-            ImageStack imsSRRFavg = new ImageStack(width * magnification, height * magnification);
-
-        }
-
-        if (calculateSTD || doFusion) {
-            ImagePlus impSRRFstd = new ImagePlus(imp.getTitle() + " - liveSRRF (STD projection)");
-            impSRRFstd.copyScale(imp); // make sure we copy the pixel sizes correctly across
-            Calibration cal = impSRRFstd.getCalibration();
-            cal.pixelWidth /= magnification;
-            cal.pixelHeight /= magnification;
-
-            ImageStack imsSRRFstd = new ImageStack(width * magnification, height * magnification);
-        }
-
-        if (doFusion) {
-            ImagePlus impSRRFfusion = new ImagePlus(imp.getTitle() + " - liveSRRF (fusion)");
-            impSRRFfusion.copyScale(imp); // make sure we copy the pixel sizes correctly across
-            Calibration cal = impSRRFfusion.getCalibration();
-            cal.pixelWidth /= magnification;
-            cal.pixelHeight /= magnification;
-
-            ImageStack imsSRRFfusion = new ImageStack(width * magnification, height * magnification);
-        }
-
 
         IJ.log("-------------------------------------");
         IJ.log("liveSRRF - SARF");
@@ -157,6 +128,12 @@ public class liveSRRF_optimised_ implements PlugIn {
         shiftX = new float[nFrameForSRRF];
         shiftY = new float[nFrameForSRRF];
 
+        ImageStack imsBuffer;
+
+        ImageStack imsSRRFavg = new ImageStack(width * magnification, height * magnification);
+        ImageStack imsSRRFstd = new ImageStack(width * magnification, height * magnification);
+
+
         for (int r = 1; r <= nSRRFframe; r++) {
 
             IJ.log("--------");
@@ -164,18 +141,62 @@ public class liveSRRF_optimised_ implements PlugIn {
             indexStartSRRFframe = (r - 1) * frameGap + 1;
             IJ.log("Stack index start: " + indexStartSRRFframe);
             if (correctVibration) calculateShiftArray(indexStartSRRFframe);
+
+            liveSRRF.resetFramePosition();
             liveSRRF.loadShiftXYGPUbuffer(shiftX, shiftY);
 
             for (int l = 0; l < nGPUloadPerSRRFframe; l++) {
-                liveSRRF.loadRawDataGPUbuffer(imp, nFrameOnGPU * l, nFrameToLoad);
-                liveSRRF.calculateSRRF();
-                nFrameToLoad = min(nFrameOnGPU, nSlices - nFrameOnGPU * l); // TODO: exclude the last few frames that are not analysed
+                liveSRRF.calculateSRRF(imp, nFrameOnGPU * l, nFrameToLoad);
+                nFrameToLoad = min(nFrameOnGPU, nFrameForSRRF - nFrameOnGPU * l);
             }
+            imsBuffer = liveSRRF.readSRRFbuffer();
 
-//            live.SRRF.readSRRFbuffer;
+            imsSRRFavg.addSlice(reconstructionLabels[0], imsBuffer.getProcessor(1));
+            imsSRRFstd.addSlice(reconstructionLabels[1], imsBuffer.getProcessor(2));
         }
 
         liveSRRF.release(); // Release the GPU!!!
+
+
+        if (calculateAVG || doFusion) {
+            ImagePlus impSRRFavg = new ImagePlus(imp.getTitle() + " - liveSRRF (AVG projection)");
+            impSRRFavg.copyScale(imp); // make sure we copy the pixel sizes correctly across
+            Calibration cal = impSRRFavg.getCalibration();
+            cal.pixelWidth /= magnification;
+            cal.pixelHeight /= magnification;
+
+            impSRRFavg.setStack(imsSRRFavg);
+            IJ.run(impSRRFavg, "Enhance Contrast", "saturated=0.5");
+            impSRRFavg.setTitle(imp.getTitle() + " - liveSRRF (AVG)");
+            impSRRFavg.show();
+
+        }
+
+        if (calculateSTD || doFusion) {
+            ImagePlus impSRRFstd = new ImagePlus(imp.getTitle() + " - liveSRRF (STD projection)");
+            impSRRFstd.copyScale(imp); // make sure we copy the pixel sizes correctly across
+            Calibration cal = impSRRFstd.getCalibration();
+            cal.pixelWidth /= magnification;
+            cal.pixelHeight /= magnification;
+
+            impSRRFstd.setStack(imsSRRFstd);
+            IJ.run(impSRRFstd, "Enhance Contrast", "saturated=0.5");
+            impSRRFstd.setTitle(imp.getTitle() + " - liveSRRF (STD)");
+            impSRRFstd.show();
+
+        }
+
+        if (doFusion) {
+            ImagePlus impSRRFfusion = new ImagePlus(imp.getTitle() + " - liveSRRF (fusion)");
+            impSRRFfusion.copyScale(imp); // make sure we copy the pixel sizes correctly across
+            Calibration cal = impSRRFfusion.getCalibration();
+            cal.pixelWidth /= magnification;
+            cal.pixelHeight /= magnification;
+
+            ImageStack imsSRRFfusion = new ImageStack(width * magnification, height * magnification);
+        }
+
+
         IJ.log("-------------------------------------");
         IJ.log("Thank you for your custom on this beautiful day !");
 
