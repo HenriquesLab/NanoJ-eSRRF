@@ -42,7 +42,6 @@ public class SRRF2_CL {
     public ImageStack imsSRRF, imsErrorMap;
 
 
-
     public SRRF2_CL(int width, int height, int nFramesOnGPU, int magnification, float fwhm, int sensitivity) {
 
         this.nFrameOnGPU = nFramesOnGPU;
@@ -68,21 +67,21 @@ public class SRRF2_CL {
 
         // create the program
         try {
-            float sigma = fwhm/2.354f;
+            float sigma = fwhm / 2.354f;
             String programString = getResourceAsString(SRRF2_CL.class, "liveSRRF.cl");
-            programString = replaceFirst(programString,"$MAX_FRAMES$", ""+nFramesOnGPU);
-            programString = replaceFirst(programString,"$MAGNIFICATION$", ""+magnification);
-            programString = replaceFirst(programString,"$FWHM$", ""+fwhm);
-            programString = replaceFirst(programString,"$SENSITIVITY$", ""+sensitivity);
+            programString = replaceFirst(programString, "$MAX_FRAMES$", "" + nFramesOnGPU);
+            programString = replaceFirst(programString, "$MAGNIFICATION$", "" + magnification);
+            programString = replaceFirst(programString, "$FWHM$", "" + fwhm);
+            programString = replaceFirst(programString, "$SENSITIVITY$", "" + sensitivity);
 
-            programString = replaceFirst(programString,"$SIGMA$", ""+sigma);
-            programString = replaceFirst(programString,"$RADIUS$", ""+((int) (sigma * 2) + 1));
-            programString = replaceFirst(programString,"$WIDTH$", ""+width);
-            programString = replaceFirst(programString,"$HEIGHT$", ""+height);
-            programString = replaceFirst(programString,"$WH$", ""+(width*height));
-            programString = replaceFirst(programString,"$WM$", ""+(width*magnification));
-            programString = replaceFirst(programString,"$HM$", ""+(height*magnification));
-            programString = replaceFirst(programString,"$WHM$", ""+(width*height*magnification*magnification));
+            programString = replaceFirst(programString, "$SIGMA$", "" + sigma);
+            programString = replaceFirst(programString, "$RADIUS$", "" + ((int) (sigma * 2) + 1));
+            programString = replaceFirst(programString, "$WIDTH$", "" + width);
+            programString = replaceFirst(programString, "$HEIGHT$", "" + height);
+            programString = replaceFirst(programString, "$WH$", "" + (width * height));
+            programString = replaceFirst(programString, "$WM$", "" + (width * magnification));
+            programString = replaceFirst(programString, "$HM$", "" + (height * magnification));
+            programString = replaceFirst(programString, "$WHM$", "" + (width * height * magnification * magnification));
             programLiveSRRF = context.createProgram(programString).build();
 
             programConvolve2DIntegratedGaussian = context.createProgram(SRRF2_CL.class.getResourceAsStream("/Convolve2DIntegratedGaussian.cl")).build();
@@ -123,11 +122,11 @@ public class SRRF2_CL {
         int nFrames = ims.getSize();
         int argn;
 
-        float[] dataSRRF          = new float[whM];
+        float[] dataSRRF = new float[whM];
         float[] dataSRRFConvolved = new float[whM];
-        float[] dataErrorMap      = new float[whM];
+        float[] dataErrorMap = new float[whM];
 
-        imsSRRF     = new ImageStack(widthM, heightM);
+        imsSRRF = new ImageStack(widthM, heightM);
         imsErrorMap = new ImageStack(widthM, heightM);
 
         // prepare and upload CL buffers
@@ -136,19 +135,19 @@ public class SRRF2_CL {
         fillBuffer(clBufferPx, ims);
         fillBuffer(clBufferShiftX, shiftX);
         fillBuffer(clBufferShiftY, shiftY);
-        queue.putWriteBuffer( clBufferPx, false );
-        queue.putWriteBuffer( clBufferShiftX, false );
-        queue.putWriteBuffer( clBufferShiftY, false );
+        queue.putWriteBuffer(clBufferPx, false);
+        queue.putWriteBuffer(clBufferShiftX, false);
+        queue.putWriteBuffer(clBufferShiftY, false);
         prof.recordTime("uploading data to GPU", prof.endTimer(id));
 
         // make kernelCalculateGradient assignment
         argn = 0;
         showStatus("Calculating gradient...");
         id = prof.startTimer();
-        kernelCalculateGradient.setArg( argn++, clBufferPx ); // make sure type is the same !!
-        kernelCalculateGradient.setArg( argn++, clBufferGx ); // make sure type is the same !!
-        kernelCalculateGradient.setArg( argn++, clBufferGy ); // make sure type is the same !!
-        kernelCalculateGradient.setArg( argn++, nFrames ); // make sure type is the same !!
+        kernelCalculateGradient.setArg(argn++, clBufferPx); // make sure type is the same !!
+        kernelCalculateGradient.setArg(argn++, clBufferGx); // make sure type is the same !!
+        kernelCalculateGradient.setArg(argn++, clBufferGy); // make sure type is the same !!
+        kernelCalculateGradient.setArg(argn++, nFrames); // make sure type is the same !!
         queue.put2DRangeKernel(kernelCalculateGradient, 0, 0, width, height, 0, 0);
         prof.recordTime("kernelCalculateGradient", prof.endTimer(id));
 
@@ -156,32 +155,32 @@ public class SRRF2_CL {
         argn = 0;
         showStatus("Calculating SRRF...");
         id = prof.startTimer();
-        kernelCalculateSRRF.setArg( argn++, clBufferPx ); // make sure type is the same !!
-        kernelCalculateSRRF.setArg( argn++, clBufferGx ); // make sure type is the same !!
-        kernelCalculateSRRF.setArg( argn++, clBufferGy ); // make sure type is the same !!
-        kernelCalculateSRRF.setArg( argn++, clBufferShiftX ); // make sure type is the same !!
-        kernelCalculateSRRF.setArg( argn++, clBufferShiftY ); // make sure type is the same !!
-        kernelCalculateSRRF.setArg( argn++, clBufferSRRF); // make sure type is the same !!
-        kernelCalculateSRRF.setArg( argn++, nFrames); // make sure type is the same !!
+        kernelCalculateSRRF.setArg(argn++, clBufferPx); // make sure type is the same !!
+        kernelCalculateSRRF.setArg(argn++, clBufferGx); // make sure type is the same !!
+        kernelCalculateSRRF.setArg(argn++, clBufferGy); // make sure type is the same !!
+        kernelCalculateSRRF.setArg(argn++, clBufferShiftX); // make sure type is the same !!
+        kernelCalculateSRRF.setArg(argn++, clBufferShiftY); // make sure type is the same !!
+        kernelCalculateSRRF.setArg(argn++, clBufferSRRF); // make sure type is the same !!
+        kernelCalculateSRRF.setArg(argn++, nFrames); // make sure type is the same !!
         // break calculation into 128x128 blocks to make them more stable
-        int nXBlocks = widthM/128  + ((widthM %128==0)?0:1);
-        int nYBlocks = heightM/128 + ((heightM%128==0)?0:1);
-        for (int nYB = 0; nYB<nYBlocks; nYB++) {
-            int yWorkSize = min(128, heightM-nYB*128);
-            for (int nXB = 0; nXB<nXBlocks; nXB++) {
-                showStatus("Calculating SRRF... blockX="+nXB+"/"+nXBlocks+"  blockY="+nYB+"/"+nYBlocks);
-                int xWorkSize = min(128, widthM -nXB*128);
-                queue.put2DRangeKernel(kernelCalculateSRRF, nXB*128, nYB*128, xWorkSize, yWorkSize, 0, 0);
+        int nXBlocks = widthM / 128 + ((widthM % 128 == 0) ? 0 : 1);
+        int nYBlocks = heightM / 128 + ((heightM % 128 == 0) ? 0 : 1);
+        for (int nYB = 0; nYB < nYBlocks; nYB++) {
+            int yWorkSize = min(128, heightM - nYB * 128);
+            for (int nXB = 0; nXB < nXBlocks; nXB++) {
+                showStatus("Calculating SRRF... blockX=" + nXB + "/" + nXBlocks + "  blockY=" + nYB + "/" + nYBlocks);
+                int xWorkSize = min(128, widthM - nXB * 128);
+                queue.put2DRangeKernel(kernelCalculateSRRF, nXB * 128, nYB * 128, xWorkSize, yWorkSize, 0, 0);
             }
         }
         // grab frames
         queue.putReadBuffer(clBufferSRRF, true);
         FloatBuffer bufferSRRF = clBufferSRRF.getBuffer();
 
-            for (int n=0; n<whM; n++) {
-                dataSRRF[n] = bufferSRRF.get(whM+n);
-                if (Float.isNaN(dataSRRF[n])) dataSRRF[n] = 0; // make sure we dont get any weirdness
-            }
+        for (int n = 0; n < whM; n++) {
+            dataSRRF[n] = bufferSRRF.get(whM + n);
+            if (Float.isNaN(dataSRRF[n])) dataSRRF[n] = 0; // make sure we dont get any weirdness
+        }
 
         prof.recordTime("kernelCalculateSRRF", prof.endTimer(id));
 
@@ -196,15 +195,15 @@ public class SRRF2_CL {
 
         // grab data from convolved frames
         NanoJThreadExecutor NTE = new NanoJThreadExecutor(false);
-            // this thread will read the buffer for SRRF and SRRF_CV plus rescale their intensity to match RAW_AVE
-            ThreadedNormaliseAndCalculateErrorMap t = new ThreadedNormaliseAndCalculateErrorMap(RAW_AVE, dataSRRF, dataSRRFConvolved, dataErrorMap, widthM, heightM);
-            NTE.execute(t);
+        // this thread will read the buffer for SRRF and SRRF_CV plus rescale their intensity to match RAW_AVE
+        ThreadedNormaliseAndCalculateErrorMap t = new ThreadedNormaliseAndCalculateErrorMap(RAW_AVE, dataSRRF, dataSRRFConvolved, dataErrorMap, widthM, heightM);
+        NTE.execute(t);
 
         NTE.finish();
 
         // calculate the error map and send off each reconstruction to imsSRRF
-            imsSRRF.addSlice(new FloatProcessor(widthM, heightM, dataSRRF));
-            imsErrorMap.addSlice(new FloatProcessor(widthM, heightM, dataErrorMap));
+        imsSRRF.addSlice(new FloatProcessor(widthM, heightM, dataSRRF));
+        imsErrorMap.addSlice(new FloatProcessor(widthM, heightM, dataErrorMap));
 
 
         showStatus("Calculating SRRF Fusion...");
@@ -215,12 +214,12 @@ public class SRRF2_CL {
             float errorMax = -Float.MAX_VALUE;
             errorMax = max(dataErrorMap[n], errorMax);
 
-                float v = dataSRRF[n];
-                double w = errorMax / max(dataErrorMap[n], 1);
-                //double w = 1 / max(errorMap[r][n], 1);
-                fusion[n] += v * w;
-                weightSum[n] += w;
-            }
+            float v = dataSRRF[n];
+            double w = errorMax / max(dataErrorMap[n], 1);
+            //double w = 1 / max(errorMap[r][n], 1);
+            fusion[n] += v * w;
+            weightSum[n] += w;
+        }
 
         for (int n = 0; n < whM; n++) fusion[n] /= weightSum[n];
         imsSRRF.addSlice(new FloatProcessor(widthM, heightM, fusion));
@@ -229,7 +228,7 @@ public class SRRF2_CL {
     }
 
     public void showStatus(String text) {
-        IJ.showStatus("liveSRRF: "+text);
+        IJ.showStatus("liveSRRF: " + text);
     }
 
     public void release() {
@@ -267,9 +266,9 @@ public class SRRF2_CL {
             double yMean = 0;
 
             // first pass: read in data, compute xbar and ybar
-            for (int i=0; i<nPixels; i++) {
-                xMean  += x[i] / nPixels;
-                yMean  += y[i] / nPixels;
+            for (int i = 0; i < nPixels; i++) {
+                xMean += x[i] / nPixels;
+                yMean += y[i] / nPixels;
             }
             double xbar = xMean / nPixels;
             double ybar = yMean / nPixels;
@@ -294,22 +293,22 @@ public class SRRF2_CL {
             float[] dataErrorMapSmooth = dataErrorMap.clone();
 
             // smooth error map, to minimize corruption by noise
-            for (int j=1; j<height-1; j++) {
-                int l0 = (j-1) * width;
+            for (int j = 1; j < height - 1; j++) {
+                int l0 = (j - 1) * width;
                 int l1 = j * width;
-                int l2 = (j+1) * width;
+                int l2 = (j + 1) * width;
 
-                for (int i=1; i<width-1; i++) {
+                for (int i = 1; i < width - 1; i++) {
                     float vMean = 0;
-                    vMean += dataErrorMap[l0 + i-1];
+                    vMean += dataErrorMap[l0 + i - 1];
                     vMean += dataErrorMap[l0 + i];
-                    vMean += dataErrorMap[l0 + i+1];
-                    vMean += dataErrorMap[l1 + i-1];
+                    vMean += dataErrorMap[l0 + i + 1];
+                    vMean += dataErrorMap[l1 + i - 1];
                     vMean += dataErrorMap[l1 + i];
-                    vMean += dataErrorMap[l1 + i+1];
-                    vMean += dataErrorMap[l2 + i-1];
+                    vMean += dataErrorMap[l1 + i + 1];
+                    vMean += dataErrorMap[l2 + i - 1];
                     vMean += dataErrorMap[l2 + i];
-                    vMean += dataErrorMap[l2 + i+1];
+                    vMean += dataErrorMap[l2 + i + 1];
                     vMean /= 9;
                     dataErrorMapSmooth[l1 + i] = vMean;
                 }
@@ -317,7 +316,6 @@ public class SRRF2_CL {
             System.arraycopy(dataErrorMapSmooth, 0, dataErrorMap, 0, dataErrorMap.length);
         }
     }
-
 
 
 }

@@ -20,15 +20,32 @@ import nanoj.liveSRRF.liveSRRF_CL;
 
 import java.awt.*;
 
+import static java.lang.Math.max;
 import static java.lang.Math.min;
 import static nanoj.core2.NanoJCrossCorrelation.calculateCrossCorrelationMap;
 
 public class liveSRRF_optimised_ implements PlugIn {
 
     // Basic formats
-    private int magnification, nFrameForSRRF, sensitivity, frameGap, nFrameOnGPU, nSRRFframe, nSlices, width, height;
+    private int magnification,
+            nFrameForSRRF,
+            sensitivity,
+            frameGap,
+            nFrameOnGPU,
+            nSRRFframe,
+            nSlices,
+            width,
+            height,
+            nGPUloadPerSRRFframe;
+
     private float fwhm, maxMemoryGPU;
-    private boolean correctVibration, calculateAVG, calculateSTD, doFusion, getInterpolatedImage;
+
+    private boolean correctVibration,
+            calculateAVG,
+            calculateSTD,
+            doFusion,
+            getInterpolatedImage;
+
     private final int radiusCCM = 5;
     private float[] shiftX, shiftY;
 
@@ -89,9 +106,6 @@ public class liveSRRF_optimised_ implements PlugIn {
         // Save last user entries
         savePreferences();
 
-        shiftX = new float[nFrameForSRRF];
-        shiftY = new float[nFrameForSRRF];
-
         if (calculateAVG || doFusion) {
             ImagePlus impSRRFavg = new ImagePlus(imp.getTitle() + " - liveSRRF (AVG projection)");
             impSRRFavg.copyScale(imp); // make sure we copy the pixel sizes correctly across
@@ -133,35 +147,32 @@ public class liveSRRF_optimised_ implements PlugIn {
         IJ.log("GPU memory usage: " + Math.round(predictMemoryUsed(nFrameOnGPU)[0]) + " MB");
         IJ.log("RAM usage: " + Math.round(predictMemoryUsed(nFrameOnGPU)[1]) + " MB");
         IJ.log("# reconstructed frames: " + nSRRFframe);
+        IJ.log("# GPU load / SRRF frame: " + nGPUloadPerSRRFframe);
+
 
         int indexStartSRRFframe;
-        int indexStartGPUloadframe;
         int nFrameToLoad = nFrameOnGPU;
-        int counterGPUframe = 0;
-        int counterRawDataLoad = 0;
         liveSRRF_CL liveSRRF = new liveSRRF_CL(width, height, magnification, fwhm, sensitivity, nFrameOnGPU, nFrameForSRRF);
-        liveSRRF.loadRawDataGPUbuffer(imp, 0, nFrameOnGPU);
+
+        shiftX = new float[nFrameForSRRF];
+        shiftY = new float[nFrameForSRRF];
 
         for (int r = 1; r <= nSRRFframe; r++) {
+
             IJ.log("--------");
             IJ.log("SRRF frame: " + r);
             indexStartSRRFframe = (r - 1) * frameGap + 1;
             IJ.log("Stack index start: " + indexStartSRRFframe);
             if (correctVibration) calculateShiftArray(indexStartSRRFframe);
+            liveSRRF.loadShiftXYGPUbuffer(shiftX, shiftY);
 
-            for (int s = 1; s <= nFrameForSRRF; s++) {
-                // calculateSRRF image
-                counterGPUframe++;
-                if (counterGPUframe > nFrameOnGPU) {
-                    counterGPUframe = 0;
-                    counterRawDataLoad++;
-                    nFrameToLoad = min(nFrameOnGPU, nSlices - nFrameOnGPU * counterRawDataLoad); //TODO: exclude the last few frames that are not analysed
-                    liveSRRF.loadRawDataGPUbuffer(imp, nFrameOnGPU * counterRawDataLoad, nFrameToLoad);
-                }
-
+            for (int l = 0; l < nGPUloadPerSRRFframe; l++) {
+                liveSRRF.loadRawDataGPUbuffer(imp, nFrameOnGPU * l, nFrameToLoad);
+                liveSRRF.calculateSRRF();
+                nFrameToLoad = min(nFrameOnGPU, nSlices - nFrameOnGPU * l); // TODO: exclude the last few frames that are not analysed
             }
 
-
+//            live.SRRF.readSRRFbuffer;
         }
 
         liveSRRF.release(); // Release the GPU!!!
@@ -213,14 +224,16 @@ public class liveSRRF_optimised_ implements PlugIn {
         maxnFrameOnGPU = maxnFrameOnGPU - 1;
         if (maxnFrameOnGPU > 0) {
             goodToGo = true;
-            nFrameOnGPU = (int) math.ceil((float) nSlices / (float) maxnFrameOnGPU);
-            nFrameOnGPU = (int) math.ceil(((float) nSlices / (float) nFrameOnGPU));
+            nFrameOnGPU = (int) math.ceil((float) nFrameForSRRF / (float) maxnFrameOnGPU);
+            nFrameOnGPU = (int) math.ceil(((float) nFrameForSRRF / (float) nFrameOnGPU));
+            nFrameOnGPU = max(nFrameForSRRF, nFrameOnGPU);
             IJ.showStatus("liveSRRF - Number of frames on GPU: " + (nFrameOnGPU));
         } else {
             memUsed = predictMemoryUsed(1);
             IJ.showStatus("liveSRRF - Minimum GPU memory: " + Math.round(memUsed[0]) + "MB");
         }
 
+        nGPUloadPerSRRFframe = (int) math.ceil(nFrameForSRRF / nFrameOnGPU);
 
         return goodToGo;
 

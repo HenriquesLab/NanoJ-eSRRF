@@ -2,6 +2,7 @@
 #define magnification $MAGNIFICATION$
 #define fwhm $FWHM$
 #define sensitivity $SENSITIVITY$
+#define GxGyMagnification $GXGYMAGNIFICATION$
 #define sigma $SIGMA$
 #define radius $RADIUS$ // TODO: check radius calculation
 #define w $WIDTH$
@@ -11,13 +12,8 @@
 #define hM $HM$
 #define whM $WHM$
 
-//    int const GxGyMagnification, // TODO: add these as defined here (local memory?)
-//    float const vxy_offset,
-//    int const vxy_ArrayShift,
-//    float const vxy_PixelShift,
-//    int const intWeighting
-
-
+#define vxy_offset $VXY_OFFSET$
+#define vxy_ArrayShift $VXY_ARRAYSHIFT$
 
 // Cubic function for interpolation
 static float cubic(float x) {
@@ -98,6 +94,7 @@ static float getVBoundaryCheck(__global float* array, int const width, int const
 //    GyArray[offset] = - pixels[y0 * w + x1] + pixels[y1 * w + x0] + pixels[y1 * w + x1] - pixels[y0 * w + x0];
 //}
 
+
 // First kernel: evaluating gradient from image using 2-point gradient --------------------------------------------------
 __kernel void calculateGradient_2point(
     __global float* pixels,
@@ -146,24 +143,24 @@ __kernel void calculateRadialGradientConvergence(
     __global float* pixels,
     __global float* GxArray,
     __global float* GyArray,
-    __global float* RGCArray,
+    __global float* OutArray,
     __global float* shiftX,
     __global float* shiftY,
-    __global int* nCurrentFrame,
+    __global int* nCurrentFrame
 
 //    __global float* wSumArray,
 //    __global float* debugFunArray,
 
 //    int const magnification,
-    int const GxGyMagnification,
+//    int const GxGyMagnification,
 //    float const fwhm,
 //    int const sensitivity,
 //    float const shiftX,
 //    float const shiftY,
-    float const vxy_offset,
-    int const vxy_ArrayShift,
-    float const vxy_PixelShift,
-    int const intWeighting
+//    float const vxy_offset,
+//    int const vxy_ArrayShift,
+//    float const vxy_PixelShift,
+//    int const intWeighting
 
     ) {
 
@@ -182,9 +179,6 @@ __kernel void calculateRadialGradientConvergence(
     float distanceWeightSum = 0;
     float sigma22 = 2 * sigma * sigma;
 
-
-//    int countdebugFun = 0;
-
     float vx, vy, Gx, Gy;
 //    float sigma = fwhm / 2.354f; // Sigma = 0.21 * lambda/NA in theory
 //    float fradius = sigma * 2;
@@ -193,22 +187,14 @@ __kernel void calculateRadialGradientConvergence(
 
 
     for (int j=-GxGyMagnification*radius; j<=(GxGyMagnification*radius+1); j++) {
-//        vy = ((int) (GxGyMagnification*(yc - vxy_PixelShift)) + j)/GxGyMagnification + vxy_PixelShift; // position in continuous space TODO: problems with negative values and (int)?
-        vy = ((float) ((int) (GxGyMagnification*(yc - vxy_PixelShift))) + j)/GxGyMagnification + vxy_PixelShift; // position in continuous space TODO: problems with negative values and (int)?
+        vy = ((float) ((int) (GxGyMagnification*yc)) + j)/GxGyMagnification; // position in continuous space TODO: problems with negative values and (int)?
 
         for (int i=-GxGyMagnification*radius; i<=(GxGyMagnification*radius+1); i++) {
-//            vx = ((int) (GxGyMagnification*(xc - vxy_PixelShift)) + i)/GxGyMagnification + vxy_PixelShift; // position in continuous space TODO: problems with negative values and (int)?
-            vx = ((float) ((int) (GxGyMagnification*(xc - vxy_PixelShift))) + i)/GxGyMagnification + vxy_PixelShift; // position in continuous space TODO: problems with negative values and (int)?
+            vx = ((float) ((int) (GxGyMagnification*xc)) + i)/GxGyMagnification; // position in continuous space TODO: problems with negative values and (int)?
 
             float distance = sqrt((vx - xc)*(vx - xc) + (vy - yc)*(vy - yc));    // Distance D
 
-//            if (j<countdebugFun) countdebugFun = j;
-
-//            if (distance != 0 && distance <= (fwhm/2)) {
-//            if (distance != 0 && distance <= (2*sigma+1) && GdotR <= 0) {
             if (distance != 0 && distance <= (2*sigma+1)) {
-//            countdebugFun +=1;
-
 
                 Gx = getVBoundaryCheck(GxArray, GxGyMagnification*w, GxGyMagnification*h, GxGyMagnification*(vx - vxy_offset) + vxy_ArrayShift, GxGyMagnification*(vy - vxy_offset));
                 Gy = getVBoundaryCheck(GyArray, GxGyMagnification*w, GxGyMagnification*h, GxGyMagnification*(vx - vxy_offset), GxGyMagnification*(vy - vxy_offset) + vxy_ArrayShift);
@@ -280,10 +266,14 @@ __kernel void calculateRadialGradientConvergence(
     if (CGLH >= 0) CGLH = pow(CGLH, sensitivity);
     else CGLH = 0;
 
-    if (intWeighting == 1) {
+//    if (intWeighting == 1) {
         float v = getInterpolatedValue(pixels, w, h, ((float) xM)/magnification + shiftX[nCurrentFrame[1]] - 0.5f, ((float) yM)/magnification + shiftY[nCurrentFrame[1]] - 0.5f);
-        RGCArray[offset] = v * CGLH;}
-    else RGCArray[offset] = CGLH;
+        OutArray[offset] = RGCArray[offset] + v * CGLH;
+        OutArray[offset + whM] = RGCArray[offset + whM] + OutArray[offset] * OutArray[offset];
+        OutArray[offset + 2*whM] = OutArray[offset + 2*whM] + v;
+//        }
+//    else RGCArray[offset] = CGLH;
+
 }
 
 
