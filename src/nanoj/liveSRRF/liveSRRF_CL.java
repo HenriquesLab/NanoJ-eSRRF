@@ -43,7 +43,8 @@ public class liveSRRF_CL {
             kernelInterpolateGradient,
             kernelCalculateSRRF,
             kernelIncrementFramePosition,
-            kernelResetFramePosition;
+            kernelResetFramePosition,
+            kernelResetOutputBuffer;
 
     static CLCommandQueue queue;
 
@@ -115,6 +116,8 @@ public class liveSRRF_CL {
 
         kernelIncrementFramePosition = programLiveSRRF.createCLKernel("kernelIncrementFramePosition");
         kernelResetFramePosition = programLiveSRRF.createCLKernel("kernelResetFramePosition");
+        kernelResetOutputBuffer = programLiveSRRF.createCLKernel("kernelResetSRRFbuffer");
+
 
         queue = device.createCommandQueue();
 
@@ -239,5 +242,13 @@ public class liveSRRF_CL {
         return imsSRRF;
     }
 
+
+    public void resetSRRFoutputBuffer() {
+        int id = prof.startTimer();
+        kernelResetOutputBuffer.setArg(0, clBufferOut); // make sure type is the same !!
+        queue.put3DRangeKernel(kernelResetOutputBuffer, 0, 0, 0, widthM, heightM, nReconstructions+1, 0,0,0);
+        prof.recordTime("Reset SRRF output buffer", prof.endTimer(id));
+
+    }
 
 }

@@ -153,6 +153,8 @@ public class liveSRRF_optimised_ implements PlugIn {
 
             imsSRRFavg.addSlice(reconstructionLabels[0], imsBuffer.getProcessor(1));
             imsSRRFstd.addSlice(reconstructionLabels[1], imsBuffer.getProcessor(2));
+
+            liveSRRF.resetSRRFoutputBuffer();
         }
 
         liveSRRF.release(); // Release the GPU!!!

@@ -322,3 +322,16 @@ __kernel void kernelResetFramePosition(
     ){
     nCurrentFrame[0] = 0;
 }
+
+
+// Sixth kernel: reset the frame number -----------------------------------------------------------------
+__kernel void kernelResetSRRFbuffer(
+    __global float* OutArray
+    ){
+
+    int xM = get_global_id(0);
+    int yM = get_global_id(1);
+    int r = get_global_id(2);
+
+    OutArray[xM + wM * yM + r * wM * hM] = 0;
+}
