@@ -31,7 +31,7 @@ static float cubic(float x) {
 }
 
 // Interpolation function: interpolate in continuous space with respect to the reference of the array
-static float getInterpolatedValue(__global float* array, int const width, int const height, float const x, float const y) { // TODO: review the grid position in the interpolation (seems offset)
+static float getInterpolatedValue(__global float* array, int const width, int const height, float const x, float const y, int const f) { // TODO: review the grid position in the interpolation (seems offset)
     int u0 = (int) floor(x);
     int v0 = (int) floor(y);
     float q = 0.0f;
@@ -40,7 +40,7 @@ static float getInterpolatedValue(__global float* array, int const width, int co
         float p = 0.0f;
         for (int i = 0; i <= 3; i++) {
             int u = min(max(u0 - 1 + i, 0), width-1);
-            p = p + array[v*width+u] * cubic(x - (float) (u));
+            p = p + array[v*width+u + width*height*f] * cubic(x - (float) (u));
         }
         q = q + p * cubic(y - (float) (v));
     }
@@ -48,10 +48,10 @@ static float getInterpolatedValue(__global float* array, int const width, int co
 }
 
 // Check boundaries of the image and returns the gradient value
-static float getVBoundaryCheck(__global float* array, int const width, int const height, int const x, int const y) {
+static float getVBoundaryCheck(__global float* array, int const width, int const height, int const x, int const y, int const z) {
     int _x = min(max(x, 0), width-1);
     int _y = min(max(y, 0), height-1);
-    return array[_y*width+_x];
+    return array[_y*width+_x + width*height*z];
 }
 
 
@@ -117,8 +117,8 @@ __kernel void calculateGradient_2point(
     int y0 = max(y1-1, 0);
 
     // 2-point gradient
-    GxArray[offset] = pixels[y1 * w + x1] - pixels[y1 * w + x0];
-    GyArray[offset] = pixels[y1 * w + x1] - pixels[y0 * w + x1];
+    GxArray[offset] = pixels[y1 * w + x1 + w * h * f] - pixels[y1 * w + x0 + w * h * f];
+    GyArray[offset] = pixels[y1 * w + x1 + w * h * f] - pixels[y0 * w + x1 + w * h * f];
 }
 
 // First kernel follow up: interpolating gradient from 2-point gradient image -------------------------------------------
@@ -138,8 +138,8 @@ __kernel void calculateGradientInterpolation(
     int offset = y * wInt + x + f * wInt * hInt;
 
     // Two-fold interpolation of the gradients
-    GxIntArray[offset] = getInterpolatedValue(GxArray, (int) (wInt/2), (int) (hInt/2), (float) (x)/2.0f, (float) (y)/2.0f);
-    GyIntArray[offset] = getInterpolatedValue(GyArray, (int) (wInt/2), (int) (hInt/2), (float) (x)/2.0f, (float) (y)/2.0f);
+    GxIntArray[offset] = getInterpolatedValue(GxArray, (int) (wInt/2), (int) (hInt/2), (float) (x)/2.0f, (float) (y)/2.0f, f);
+    GyIntArray[offset] = getInterpolatedValue(GyArray, (int) (wInt/2), (int) (hInt/2), (float) (x)/2.0f, (float) (y)/2.0f, f);
 }
 
 
@@ -198,31 +198,33 @@ __kernel void calculateRadialGradientConvergence(
     for (int j=-GxGyMagnification*radius; j<=(GxGyMagnification*radius+1); j++) {
         vy = ((float) ((int) (GxGyMagnification*yc)) + j)/GxGyMagnification; // position in continuous space TODO: problems with negative values and (int)?
 
-        for (int i=-GxGyMagnification*radius; i<=(GxGyMagnification*radius+1); i++) {
-            vx = ((float) ((int) (GxGyMagnification*xc)) + i)/GxGyMagnification; // position in continuous space TODO: problems with negative values and (int)?
+        if (vy > 0 && vy < h){
+            for (int i=-GxGyMagnification*radius; i<=(GxGyMagnification*radius+1); i++) {
+                vx = ((float) ((int) (GxGyMagnification*xc)) + i)/GxGyMagnification; // position in continuous space TODO: problems with negative values and (int)?
+                if (vx > 0 && vx < w){
 
-            float distance = sqrt((vx - xc)*(vx - xc) + (vy - yc)*(vy - yc));    // Distance D
+                    float distance = sqrt((vx - xc)*(vx - xc) + (vy - yc)*(vy - yc));    // Distance D
 
-            if (distance != 0 && distance <= (2*sigma+1)) {
+                    if (distance != 0 && distance <= (2*sigma+1)) {
 
-                Gx = getVBoundaryCheck(GxArray, GxGyMagnification*w, GxGyMagnification*h, GxGyMagnification*(vx - vxy_offset) + vxy_ArrayShift, GxGyMagnification*(vy - vxy_offset));
-                Gy = getVBoundaryCheck(GyArray, GxGyMagnification*w, GxGyMagnification*h, GxGyMagnification*(vx - vxy_offset), GxGyMagnification*(vy - vxy_offset) + vxy_ArrayShift);
+                        Gx = getVBoundaryCheck(GxArray, wInt, hInt, GxGyMagnification*(vx - vxy_offset) + vxy_ArrayShift, GxGyMagnification*(vy - vxy_offset), f);
+                        Gy = getVBoundaryCheck(GyArray, wInt, hInt, GxGyMagnification*(vx - vxy_offset), GxGyMagnification*(vy - vxy_offset) + vxy_ArrayShift, f);
 
-                float distanceWeight = distance*exp(-(distance*distance)/sigma22);  // TODO: dGauss: can use Taylor expansion there
-                distanceWeight = distanceWeight * distanceWeight * distanceWeight * distanceWeight ;  // TODO: dGauss: what power is best? Let's FRC !
-                distanceWeightSum += distanceWeight;
-                float GdotR = (Gx * (vx - xc) + Gy * (vy - yc)); // tells you if vector was pointing inward or outward
-
-
-                if (GdotR < 0) {
-                    // Calculate perpendicular distance from (xc,yc) to gradient line through (vx,vy)
-                    float GMag = sqrt(Gx * Gx + Gy * Gy);
-                    float Dk = fabs(Gy * (xc - vx) - Gx * (yc - vy)) / GMag;    // Dk = D*sin(theta) obtained from cross-product
-                    if (isnan(Dk)) Dk = distance; // this makes Dk = 0 in the next line
+                        float distanceWeight = distance*exp(-(distance*distance)/sigma22);  // TODO: dGauss: can use Taylor expansion there
+                        distanceWeight = distanceWeight * distanceWeight * distanceWeight * distanceWeight ;  // TODO: dGauss: what power is best? Let's FRC !
+                        distanceWeightSum += distanceWeight;
+                        float GdotR = (Gx * (vx - xc) + Gy * (vy - yc)); // tells you if vector was pointing inward or outward
 
 
-                    // Linear function ----------------------
-                    Dk = 1 - Dk / distance; // Dk is now between 0 to 1, 1 if vector points precisely to (xc, yx), Dk = 1-sin(theta)
+                        if (GdotR < 0) {
+                            // Calculate perpendicular distance from (xc,yc) to gradient line through (vx,vy)
+                            float GMag = sqrt(Gx * Gx + Gy * Gy);
+                            float Dk = fabs(Gy * (xc - vx) - Gx * (yc - vy)) / GMag;    // Dk = D*sin(theta) obtained from cross-product
+                            if (isnan(Dk)) Dk = distance; // this makes Dk = 0 in the next line
+
+
+                            // Linear function ----------------------
+                            Dk = 1 - Dk / distance; // Dk is now between 0 to 1, 1 if vector points precisely to (xc, yx), Dk = 1-sin(theta)
 
                     //Linear truncated ----------------------
 //                  Dk = 1 - Dk / distance; // Dk is now between 0 to 1, 1 if vector points precisely to (xc, yx), Dk = 1-sin(theta)
@@ -254,8 +256,8 @@ __kernel void calculateRadialGradientConvergence(
 //                  float SigmaTheta = 0.25;
 //                  Dk = exp(-1.0f*(float) (Dk/SigmaTheta));
 
-                    CGLH += Dk*distanceWeight;
-                }
+                            CGLH += Dk*distanceWeight;
+                        }
 
 
 //                Dk *= distanceWeight;
@@ -264,8 +266,10 @@ __kernel void calculateRadialGradientConvergence(
 //                float GdotR = (Gx * i + Gy * j); // tells you if vector was pointing inward or outward
 //                if (GdotR <= 0) CGLH += Dk; // vector was pointing inwards
 //                //else CGLH -= Dk; // vector was pointing outwards
+                    }
+                }
             }
-        }
+       }
     }
 
 //    debugFunArray[offset] = countdebugFun;
@@ -276,10 +280,11 @@ __kernel void calculateRadialGradientConvergence(
     else CGLH = 0;
 
 //    if (intWeighting == 1) {
-        float v = getInterpolatedValue(pixels, w, h, ((float) xM)/magnification + shiftX[nCurrentFrame[1]] - 0.5f, ((float) yM)/magnification + shiftY[nCurrentFrame[1]] - 0.5f);
+        float v = getInterpolatedValue(pixels, w, h, ((float) xM)/magnification + shiftX[nCurrentFrame[0] + f] - 0.5f, ((float) yM)/magnification + shiftY[nCurrentFrame[0] + f] - 0.5f, f);
+
         OutArray[offset] = OutArray[offset] + v * CGLH;
         OutArray[offset + whM] = OutArray[offset + whM] + OutArray[offset] * OutArray[offset];
-        OutArray[offset + 2*whM] = OutArray[offset + 2*whM] + v;
+        OutArray[offset + 2 * whM] = OutArray[offset + 2 * whM] + v;
 //        }
 //    else RGCArray[offset] = CGLH;
 
@@ -312,8 +317,7 @@ __kernel void calculateRadialGradientConvergence(
 __kernel void kernelIncrementFramePosition(
     __global int* nCurrentFrame
     ){
-    int i = get_global_id(0);
-    nCurrentFrame[i] = nCurrentFrame[i] + nFrameOnGPU;
+    nCurrentFrame[0] = nCurrentFrame[0] + nFrameOnGPU;
 }
 
 // Fifth kernel: reset the frame number -----------------------------------------------------------------
@@ -323,7 +327,6 @@ __kernel void kernelResetFramePosition(
     nCurrentFrame[0] = 0;
 }
 
-
 // Sixth kernel: reset the frame number -----------------------------------------------------------------
 __kernel void kernelResetSRRFbuffer(
     __global float* OutArray
@@ -331,7 +334,7 @@ __kernel void kernelResetSRRFbuffer(
 
     int xM = get_global_id(0);
     int yM = get_global_id(1);
-    int r = get_global_id(2);
+    int f = get_global_id(2);
 
-    OutArray[xM + wM * yM + r * wM * hM] = 0;
+    OutArray[xM + wM * yM + f * wM * hM] = 0;
 }

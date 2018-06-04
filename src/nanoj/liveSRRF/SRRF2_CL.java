@@ -179,7 +179,7 @@ public class SRRF2_CL {
 
         for (int n = 0; n < whM; n++) {
             dataSRRF[n] = bufferSRRF.get(whM + n);
-            if (Float.isNaN(dataSRRF[n])) dataSRRF[n] = 0; // make sure we dont get any weirdness
+            if (Float.isNaN(dataSRRF[n])) dataSRRF[n] = 0; // make sure we don't get any weirdness
         }
 
         prof.recordTime("kernelCalculateSRRF", prof.endTimer(id));
