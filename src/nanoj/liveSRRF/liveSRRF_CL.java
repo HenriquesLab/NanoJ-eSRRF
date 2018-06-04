@@ -149,19 +149,6 @@ public class liveSRRF_CL {
 
     }
 
-    // --- Release GPU context ---
-    public void release() {
-        context.release();
-    }
-
-
-    // --- Reset the SRRF frame counter ---
-    public void resetFramePosition() {
-        int id = prof.startTimer();
-        kernelResetFramePosition.setArg(0, clBufferCurrentFrame); // make sure type is the same !!
-        queue.put1DRangeKernel(kernelResetFramePosition, 0, 1, 0);
-        prof.recordTime("Reset SRRF frame counter", prof.endTimer(id));
-    }
 
     // --- Calculate SRRF images ---
     public synchronized void calculateSRRF(ImagePlus imp, int indexStart, int nFrameToLoad) {
@@ -231,9 +218,10 @@ public class liveSRRF_CL {
         FloatBuffer bufferSRRF = clBufferOut.getBuffer();
 
         ImageStack imsSRRF = new ImageStack(widthM, heightM);
-        float[] dataSRRF = new float[widthM * heightM];
+        float[] dataSRRF;
 
         // Load average
+        dataSRRF = new float[widthM * heightM];
         for (int n = 0; n < widthM * heightM; n++) {
             dataSRRF[n] = bufferSRRF.get(n) / nFrameForSRRF;
             if (Float.isNaN(dataSRRF[n])) dataSRRF[n] = 0; // make sure we dont get any weirdness
@@ -241,6 +229,7 @@ public class liveSRRF_CL {
         imsSRRF.addSlice(new FloatProcessor(widthM, heightM, dataSRRF));
 
         // Load standard deviation
+        dataSRRF = new float[widthM * heightM];
         for (int n = 0; n < widthM * heightM; n++) {
             dataSRRF[n] = (float) Math.sqrt(((bufferSRRF.get(n + widthM * heightM) - bufferSRRF.get(n)) / nFrameForSRRF));
             if (Float.isNaN(dataSRRF[n])) dataSRRF[n] = 0; // make sure we dont get any weirdness
@@ -248,11 +237,13 @@ public class liveSRRF_CL {
         imsSRRF.addSlice(new FloatProcessor(widthM, heightM, dataSRRF));
 
         // Load interpolated data
+        dataSRRF = new float[widthM * heightM];
         for (int n = 0; n < widthM * heightM; n++) {
             dataSRRF[n] = bufferSRRF.get(n + 2 * widthM * heightM) / nFrameForSRRF;
             if (Float.isNaN(dataSRRF[n])) dataSRRF[n] = 0; // make sure we dont get any weirdness
         }
         imsSRRF.addSlice(new FloatProcessor(widthM, heightM, dataSRRF));
+        queue.finish(); // Make sure everything is done... //TODO: do we need to do this for every method?
 
         return imsSRRF;
     }
@@ -263,6 +254,21 @@ public class liveSRRF_CL {
         kernelResetOutputBuffer.setArg(0, clBufferOut); // make sure type is the same !!
         queue.put3DRangeKernel(kernelResetOutputBuffer, 0, 0, 0, widthM, heightM, nReconstructions + 1, 0, 0, 0);
         prof.recordTime("Reset SRRF output buffer", prof.endTimer(id));
+        queue.finish(); // Make sure everything is done... //TODO: do we need to do this for every method?
+    }
 
+    // --- Release GPU context ---
+    public void release() {
+        context.release();
+    }
+
+
+    // --- Reset the SRRF frame counter ---
+    public void resetFramePosition() {
+        int id = prof.startTimer();
+        kernelResetFramePosition.setArg(0, clBufferCurrentFrame); // make sure type is the same !!
+        queue.put1DRangeKernel(kernelResetFramePosition, 0, 1, 0);
+        prof.recordTime("Reset SRRF frame counter", prof.endTimer(id));
+        queue.finish(); // Make sure everything is done... //TODO: do we need to do this for every method?
     }
 }

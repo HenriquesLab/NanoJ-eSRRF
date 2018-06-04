@@ -48,10 +48,10 @@ static float getInterpolatedValue(__global float* array, int const width, int co
 }
 
 // Check boundaries of the image and returns the gradient value
-static float getVBoundaryCheck(__global float* array, int const width, int const height, int const x, int const y, int const z) {
+static float getVBoundaryCheck(__global float* array, int const width, int const height, int const x, int const y, int const f) {
     int _x = min(max(x, 0), width-1);
     int _y = min(max(y, 0), height-1);
-    return array[_y*width+_x + width*height*z];
+    return array[_y*width+_x + width*height*f];
 }
 
 
@@ -181,6 +181,11 @@ __kernel void calculateRadialGradientConvergence(
 
     int offset = yM * wM + xM;
 
+//        OutArray[offset] = 5;
+//        OutArray[offset + whM] = 6;
+//        OutArray[offset + 2 * whM] = 7;
+//        return;
+
     float xc = (xM + 0.5) / magnification + shiftX[nCurrentFrame[0] + f]; // continuous space position at the centre of magnified pixel
     float yc = (yM + 0.5) / magnification + shiftY[nCurrentFrame[0] + f];
 
@@ -214,7 +219,6 @@ __kernel void calculateRadialGradientConvergence(
                         distanceWeight = distanceWeight * distanceWeight * distanceWeight * distanceWeight ;  // TODO: dGauss: what power is best? Let's FRC !
                         distanceWeightSum += distanceWeight;
                         float GdotR = (Gx * (vx - xc) + Gy * (vy - yc)); // tells you if vector was pointing inward or outward
-
 
                         if (GdotR < 0) {
                             // Calculate perpendicular distance from (xc,yc) to gradient line through (vx,vy)
@@ -286,6 +290,8 @@ __kernel void calculateRadialGradientConvergence(
         OutArray[offset + whM] = OutArray[offset + whM] + OutArray[offset] * OutArray[offset];
         OutArray[offset + 2 * whM] = OutArray[offset + 2 * whM] + v;
 //        }
+
+
 //    else RGCArray[offset] = CGLH;
 
 }
