@@ -19,6 +19,8 @@ import nanoj.liveSRRF.liveSRRF_CL;
 
 
 import java.awt.*;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 
 import static java.lang.Math.max;
 import static java.lang.Math.min;
@@ -38,6 +40,10 @@ public class liveSRRF_optimised_ implements PlugIn {
             height,
             nGPUloadPerSRRFframe;
 
+    private ImagePlus impSRRFavg,
+            impSRRFstd,
+            impRawInterpolated;
+
     private float fwhm, maxMemoryGPU;
 
     private boolean correctVibration,
@@ -48,6 +54,7 @@ public class liveSRRF_optimised_ implements PlugIn {
 
     private final int radiusCCM = 5;
     private final String[] reconstructionLabels = {"AVG", "STD", "RawInt"};
+    private final String LiveSRRFVersion = "v0.1";
 
     private float[] shiftX, shiftY;
 
@@ -109,7 +116,14 @@ public class liveSRRF_optimised_ implements PlugIn {
         savePreferences();
 
         IJ.log("-------------------------------------");
-        IJ.log("liveSRRF");
+        IJ.log("-------------------------------------");
+        IJ.log("liveSRRF " + LiveSRRFVersion);
+        LocalDateTime now = LocalDateTime.now();
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+        String nowString = now.format(formatter);
+        IJ.log(nowString);
+        IJ.log("-------------------------------------");
+        IJ.log("Parameters:");
         IJ.log("Magnification: " + magnification);
         IJ.log("# frames for SRRF: " + nFrameForSRRF);
         IJ.log("# frames gap: " + frameGap);
@@ -119,7 +133,6 @@ public class liveSRRF_optimised_ implements PlugIn {
         IJ.log("# reconstructed frames: " + nSRRFframe);
         IJ.log("# GPU load / SRRF frame: " + nGPUloadPerSRRFframe);
 
-
         // Initialize variables
         int indexStartSRRFframe;
         int nFrameToLoad;
@@ -128,7 +141,7 @@ public class liveSRRF_optimised_ implements PlugIn {
         shiftX = new float[nFrameForSRRF];
         shiftY = new float[nFrameForSRRF];
 
-        ImageStack imsBuffer = new ImageStack(width * magnification, height * magnification);
+        ImageStack imsBuffer;
 
         ImageStack imsSRRFavg = new ImageStack(width * magnification, height * magnification);
         ImageStack imsSRRFstd = new ImageStack(width * magnification, height * magnification);
@@ -136,7 +149,6 @@ public class liveSRRF_optimised_ implements PlugIn {
 
         // Start looping trough SRRF frames
         for (int r = 1; r <= nSRRFframe; r++) {
-            liveSRRF.resetSRRFoutputBuffer();
             liveSRRF.resetFramePosition();
 
             IJ.log("--------");
@@ -148,32 +160,25 @@ public class liveSRRF_optimised_ implements PlugIn {
             liveSRRF.loadShiftXYGPUbuffer(shiftX, shiftY);
 
             for (int l = 0; l < nGPUloadPerSRRFframe; l++) {
+                IJ.log("----------------------------");
                 nFrameToLoad = min(nFrameOnGPU, nFrameForSRRF - nFrameOnGPU * l);
-                IJ.log("Number of frames to load: "+nFrameToLoad);
+                IJ.log("Number of frames to load: " + nFrameToLoad);
+                IJ.log("Index start: " + (indexStartSRRFframe + nFrameOnGPU * l));
                 liveSRRF.calculateSRRF(imp, indexStartSRRFframe + nFrameOnGPU * l, nFrameToLoad);
             }
 
             imsBuffer = liveSRRF.readSRRFbuffer();
-
             imsSRRFavg.addSlice(reconstructionLabels[0], imsBuffer.getProcessor(1));
             imsSRRFstd.addSlice(reconstructionLabels[1], imsBuffer.getProcessor(2));
             imsRawInterpolated.addSlice(reconstructionLabels[2], imsBuffer.getProcessor(3));
-
         }
-
-
-//        ImagePlus impSRRFresults = new ImagePlus(imp.getTitle() + " - liveSRRF all");
-//        impSRRFresults.setStack(imsBuffer);
-//        impSRRFresults.setTitle(imp.getTitle() + " - liveSRRF all");
-//        impSRRFresults.show();
-
 
         // Release the GPU
         liveSRRF.release();
 
         //Display results
         if (calculateAVG || doFusion) {
-            ImagePlus impSRRFavg = new ImagePlus(imp.getTitle() + " - liveSRRF (AVG projection)");
+            impSRRFavg = new ImagePlus(imp.getTitle() + " - liveSRRF (AVG projection)");
             impSRRFavg.copyScale(imp); // make sure we copy the pixel sizes correctly across
             Calibration cal = impSRRFavg.getCalibration();
             cal.pixelWidth /= magnification;
@@ -186,7 +191,7 @@ public class liveSRRF_optimised_ implements PlugIn {
         }
 
         if (calculateSTD || doFusion) {
-            ImagePlus impSRRFstd = new ImagePlus(imp.getTitle() + " - liveSRRF (STD projection)");
+            impSRRFstd = new ImagePlus(imp.getTitle() + " - liveSRRF (STD projection)");
             impSRRFstd.copyScale(imp); // make sure we copy the pixel sizes correctly across
             Calibration cal = impSRRFstd.getCalibration();
             cal.pixelWidth /= magnification;
@@ -209,7 +214,7 @@ public class liveSRRF_optimised_ implements PlugIn {
 //        }
 
         if (getInterpolatedImage) {
-            ImagePlus impRawInterpolated = new ImagePlus(imp.getTitle() + " - Interpolated");
+            impRawInterpolated = new ImagePlus(imp.getTitle() + " - Interpolated");
             impRawInterpolated.copyScale(imp); // make sure we copy the pixel sizes correctly across
             Calibration cal = impRawInterpolated.getCalibration();
             cal.pixelWidth /= magnification;
@@ -227,6 +232,7 @@ public class liveSRRF_optimised_ implements PlugIn {
         IJ.log("Thank you for your custom on this beautiful day !");
         IJ.log("-------------------------------------");
         IJ.log(prof.report());
+
     }
 
 
@@ -272,14 +278,14 @@ public class liveSRRF_optimised_ implements PlugIn {
             goodToGo = true;
             nFrameOnGPU = (int) math.ceil((float) nFrameForSRRF / (float) maxnFrameOnGPU);
             nFrameOnGPU = (int) math.ceil(((float) nFrameForSRRF / (float) nFrameOnGPU));
-            nFrameOnGPU = max(nFrameForSRRF, nFrameOnGPU);
+            nFrameOnGPU = min(nFrameForSRRF, nFrameOnGPU);
             IJ.showStatus("liveSRRF - Number of frames on GPU: " + (nFrameOnGPU));
         } else {
             memUsed = predictMemoryUsed(1);
             IJ.showStatus("liveSRRF - Minimum GPU memory: " + Math.round(memUsed[0]) + "MB");
         }
 
-        nGPUloadPerSRRFframe = (int) math.ceil(nFrameForSRRF / nFrameOnGPU);
+        nGPUloadPerSRRFframe = (int) math.ceil((float) nFrameForSRRF / (float) nFrameOnGPU);
 
         return goodToGo;
     }
@@ -315,7 +321,8 @@ public class liveSRRF_optimised_ implements PlugIn {
         memUsed[1] = 0;
         memUsed[1] += width * height * nSlices; // clBufferPx
         memUsed[1] += 2 * nSRRFframe * width * height * magnification * magnification; // clBufferSRRF // TODO: estimating RAM requirements properly
-        if (getInterpolatedImage) memUsed[1] += width * height * magnification * magnification; // clBufferInt
+        if (getInterpolatedImage)
+            memUsed[1] += nSRRFframe * width * height * magnification * magnification; // clBufferInt
 
         memUsed[0] *= Float.SIZE / 8000000d;
         memUsed[1] *= Float.SIZE / 8000000d;
@@ -388,7 +395,7 @@ public class liveSRRF_optimised_ implements PlugIn {
     private void calculateShiftArray(int indexStart) {
 
         imp.setSlice(indexStart);
-        ImageProcessor ipRef = imp.getProcessor();
+        ImageProcessor ipRef = imp.getProcessor().duplicate();
         ImageProcessor ipData;
 
         for (int s = 0; s < nFrameForSRRF; s++) {

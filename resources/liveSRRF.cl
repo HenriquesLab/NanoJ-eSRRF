@@ -13,7 +13,7 @@
 #define wM $WM$
 #define hM $HM$
 #define whM $WHM$
-#define nFrameOnGPU $NFRAMEONGPU$
+#define nFrameForSRRF $NFRAMEFORSRRF$
 
 #define vxy_offset $VXY_OFFSET$
 #define vxy_ArrayShift $VXY_ARRAYSHIFT$
@@ -172,7 +172,6 @@ __kernel void calculateRadialGradientConvergence(
 
     int xM = get_global_id(0);
     int yM = get_global_id(1);
-    int f = get_global_id(2);
 
 //    int wM = get_global_size(0);
 //    int hM = get_global_size(1);
@@ -186,8 +185,8 @@ __kernel void calculateRadialGradientConvergence(
 //        OutArray[offset + 2 * whM] = 7;
 //        return;
 
-    float xc = (xM + 0.5) / magnification + shiftX[nCurrentFrame[0] + f]; // continuous space position at the centre of magnified pixel
-    float yc = (yM + 0.5) / magnification + shiftY[nCurrentFrame[0] + f];
+    float xc = (xM + 0.5) / magnification + shiftX[nCurrentFrame[0]]; // continuous space position at the centre of magnified pixel
+    float yc = (yM + 0.5) / magnification + shiftY[nCurrentFrame[0]];
 
     float CGLH = 0; // CGLH stands for Radiality original name - Culley-Gustafsson-Laine-Henriques transform
     float distanceWeightSum = 0;
@@ -212,8 +211,8 @@ __kernel void calculateRadialGradientConvergence(
 
                     if (distance != 0 && distance <= (2*sigma+1)) {
 
-                        Gx = getVBoundaryCheck(GxArray, wInt, hInt, GxGyMagnification*(vx - vxy_offset) + vxy_ArrayShift, GxGyMagnification*(vy - vxy_offset), f);
-                        Gy = getVBoundaryCheck(GyArray, wInt, hInt, GxGyMagnification*(vx - vxy_offset), GxGyMagnification*(vy - vxy_offset) + vxy_ArrayShift, f);
+                        Gx = getVBoundaryCheck(GxArray, wInt, hInt, GxGyMagnification*(vx - vxy_offset) + vxy_ArrayShift, GxGyMagnification*(vy - vxy_offset), nCurrentFrame[0]);
+                        Gy = getVBoundaryCheck(GyArray, wInt, hInt, GxGyMagnification*(vx - vxy_offset), GxGyMagnification*(vy - vxy_offset) + vxy_ArrayShift, nCurrentFrame[0]);
 
                         float distanceWeight = distance*exp(-(distance*distance)/sigma22);  // TODO: dGauss: can use Taylor expansion there
                         distanceWeight = distanceWeight * distanceWeight * distanceWeight * distanceWeight ;  // TODO: dGauss: what power is best? Let's FRC !
@@ -284,11 +283,19 @@ __kernel void calculateRadialGradientConvergence(
     else CGLH = 0;
 
 //    if (intWeighting == 1) {
-        float v = getInterpolatedValue(pixels, w, h, ((float) xM)/magnification + shiftX[nCurrentFrame[0] + f] - 0.5f, ((float) yM)/magnification + shiftY[nCurrentFrame[0] + f] - 0.5f, f);
+        float v = getInterpolatedValue(pixels, w, h, ((float) xM)/magnification + shiftX[nCurrentFrame[0]] - 0.5f, ((float) yM)/magnification + shiftY[nCurrentFrame[0]] - 0.5f, nCurrentFrame[0]);
 
-        OutArray[offset] = OutArray[offset] + v * CGLH;
-        OutArray[offset + whM] = OutArray[offset + whM] + OutArray[offset] * OutArray[offset];
-        OutArray[offset + 2 * whM] = OutArray[offset + 2 * whM] + v;
+    if (nCurrentFrame[0] == 0) {
+        OutArray[offset] = v * CGLH / nFrameForSRRF;
+        OutArray[offset + whM] = v * CGLH * v * CGLH / nFrameForSRRF;
+        OutArray[offset + 2 * whM] = v / nFrameForSRRF;
+    }
+    else {
+        OutArray[offset] = OutArray[offset] + v * CGLH / nFrameForSRRF;
+        OutArray[offset + whM] = OutArray[offset + whM] + v * CGLH * v * CGLH / nFrameForSRRF;
+        OutArray[offset + 2 * whM] = OutArray[offset + 2 * whM] + v / nFrameForSRRF;
+    }
+
 //        }
 
 
@@ -323,7 +330,7 @@ __kernel void calculateRadialGradientConvergence(
 __kernel void kernelIncrementFramePosition(
     __global int* nCurrentFrame
     ){
-    nCurrentFrame[0] = nCurrentFrame[0] + nFrameOnGPU;
+    nCurrentFrame[0] = nCurrentFrame[0] + 1;
 }
 
 // Fifth kernel: reset the frame number -----------------------------------------------------------------
@@ -333,14 +340,3 @@ __kernel void kernelResetFramePosition(
     nCurrentFrame[0] = 0;
 }
 
-// Sixth kernel: reset the frame number -----------------------------------------------------------------
-__kernel void kernelResetSRRFbuffer(
-    __global float* OutArray
-    ){
-
-    int xM = get_global_id(0);
-    int yM = get_global_id(1);
-    int f = get_global_id(2);
-
-    OutArray[xM + wM * yM + f * wM * hM] = 0;
-}

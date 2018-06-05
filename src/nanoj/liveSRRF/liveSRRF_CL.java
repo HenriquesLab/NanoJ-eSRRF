@@ -6,6 +6,7 @@ import ij.ImagePlus;
 import ij.ImageStack;
 import ij.process.FloatProcessor;
 import nanoj.core2.NanoJProfiler;
+import org.python.modules.math;
 
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
@@ -23,8 +24,7 @@ public class liveSRRF_CL {
     private int width,
             height,
             widthM,
-            heightM,
-            nFrameForSRRF;
+            heightM;
 
     private final int GxGyMagnification = 2;
     private final float vxy_offset = 0.5f;
@@ -42,8 +42,7 @@ public class liveSRRF_CL {
             kernelInterpolateGradient,
             kernelCalculateSRRF,
             kernelIncrementFramePosition,
-            kernelResetFramePosition,
-            kernelResetOutputBuffer;
+            kernelResetFramePosition;
 
     static CLCommandQueue queue;
 
@@ -64,7 +63,6 @@ public class liveSRRF_CL {
         this.height = height;
         this.heightM = height * magnification;
         this.widthM = width * magnification;
-        this.nFrameForSRRF = nFrameForSRRF;
 
         context = CLContext.create();
         System.out.println("created " + context);
@@ -103,23 +101,17 @@ public class liveSRRF_CL {
         programString = replaceFirst(programString, "$WHM$", "" + (width * height * magnification * magnification));
         programString = replaceFirst(programString, "$WINT$", "" + (GxGyMagnification * width));
         programString = replaceFirst(programString, "$HINT$", "" + (GxGyMagnification * height));
-
         programString = replaceFirst(programString, "$VXY_OFFSET$", "" + vxy_offset);
         programString = replaceFirst(programString, "$VXY_ARRAYSHIFT$", "" + vxy_ArrayShift);
-
-        programString = replaceFirst(programString, "$NFRAMEONGPU$", "" + nFramesOnGPU);
-
+        programString = replaceFirst(programString, "$NFRAMEFORSRRF$", "" + nFrameForSRRF);
 
         programLiveSRRF = context.createProgram(programString).build();
 
         kernelCalculateGradient = programLiveSRRF.createCLKernel("calculateGradient_2point");
         kernelInterpolateGradient = programLiveSRRF.createCLKernel("calculateGradientInterpolation");
         kernelCalculateSRRF = programLiveSRRF.createCLKernel("calculateRadialGradientConvergence");
-
         kernelIncrementFramePosition = programLiveSRRF.createCLKernel("kernelIncrementFramePosition");
         kernelResetFramePosition = programLiveSRRF.createCLKernel("kernelResetFramePosition");
-        kernelResetOutputBuffer = programLiveSRRF.createCLKernel("kernelResetSRRFbuffer");
-
 
         queue = device.createCommandQueue();
 
@@ -145,7 +137,6 @@ public class liveSRRF_CL {
         fillBuffer(clBufferShiftY, shiftY);
         queue.putWriteBuffer(clBufferShiftY, false);
         prof.recordTime("Uploading shift arrays to GPU", prof.endTimer(id));
-        queue.finish(); // Make sure everything is done... // TODO: do we need to do this for every method?
 
     }
 
@@ -162,7 +153,6 @@ public class liveSRRF_CL {
             imsRawData.addSlice(imp.getProcessor());
         }
 
-        IJ.log("----------------------------");
         IJ.log("Uploading raw data to GPU...");
         int id = prof.startTimer();
         fillBuffer(clBufferPx, imsRawData);
@@ -191,29 +181,33 @@ public class liveSRRF_CL {
 
         // Make kernelCalculateSRRF assignment
         IJ.log("Calculating SRRF...");
-        id = prof.startTimer();
-        argn = 0;
-        kernelCalculateSRRF.setArg(argn++, clBufferPx); // make sure type is the same !!
-        kernelCalculateSRRF.setArg(argn++, clBufferGxInt); // make sure type is the same !!
-        kernelCalculateSRRF.setArg(argn++, clBufferGyInt); // make sure type is the same !!
-        kernelCalculateSRRF.setArg(argn++, clBufferOut); // make sure type is the same !!
-        kernelCalculateSRRF.setArg(argn++, clBufferShiftX); // make sure type is the same !!
-        kernelCalculateSRRF.setArg(argn++, clBufferShiftY); // make sure type is the same !!
-        kernelCalculateSRRF.setArg(argn++, clBufferCurrentFrame); // make sure type is the same !!
-        queue.put3DRangeKernel(kernelCalculateSRRF, 0, 0, 0, widthM, heightM, nFrameToLoad, 0, 0, 0);
-        prof.recordTime("kernelCalculateSRRF", prof.endTimer(id));
 
-        id = prof.startTimer();
-        kernelIncrementFramePosition.setArg(0, clBufferCurrentFrame); // make sure type is the same !!
-        queue.put1DRangeKernel(kernelIncrementFramePosition, 0, 1, 0);
-        prof.recordTime("Increment frame count", prof.endTimer(id));
 
-        queue.finish(); // Make sure everything is done... //TODO: do we need to do this for every method?
+        for (int f = 0; f < nFrameToLoad; f++) {
+            id = prof.startTimer();
+            argn = 0;
+            kernelCalculateSRRF.setArg(argn++, clBufferPx); // make sure type is the same !!
+            kernelCalculateSRRF.setArg(argn++, clBufferGxInt); // make sure type is the same !!
+            kernelCalculateSRRF.setArg(argn++, clBufferGyInt); // make sure type is the same !!
+            kernelCalculateSRRF.setArg(argn++, clBufferOut); // make sure type is the same !!
+            kernelCalculateSRRF.setArg(argn++, clBufferShiftX); // make sure type is the same !!
+            kernelCalculateSRRF.setArg(argn++, clBufferShiftY); // make sure type is the same !!
+            kernelCalculateSRRF.setArg(argn++, clBufferCurrentFrame); // make sure type is the same !!
+            queue.put2DRangeKernel(kernelCalculateSRRF, 0, 0, widthM, heightM, 0, 0);
+            prof.recordTime("kernelCalculateSRRF", prof.endTimer(id));
+
+            id = prof.startTimer();
+            kernelIncrementFramePosition.setArg(0, clBufferCurrentFrame); // make sure type is the same !!
+            queue.put1DRangeKernel(kernelIncrementFramePosition, 0, 1, 0);
+            prof.recordTime("Increment frame count", prof.endTimer(id));
+        }
+
     }
 
     // --- Read the output buffer ---
     public ImageStack readSRRFbuffer() {
 
+        queue.finish(); // Make sure everything is done... // TODO: do we need to do this for every method?
         queue.putReadBuffer(clBufferOut, true);
         FloatBuffer bufferSRRF = clBufferOut.getBuffer();
 
@@ -223,39 +217,31 @@ public class liveSRRF_CL {
         // Load average
         dataSRRF = new float[widthM * heightM];
         for (int n = 0; n < widthM * heightM; n++) {
-            dataSRRF[n] = bufferSRRF.get(n) / nFrameForSRRF;
-            if (Float.isNaN(dataSRRF[n])) dataSRRF[n] = 0; // make sure we dont get any weirdness
+            dataSRRF[n] = bufferSRRF.get(n);
+//            if (Float.isNaN(dataSRRF[n])) dataSRRF[n] = 0; // make sure we dont get any weirdness
         }
         imsSRRF.addSlice(new FloatProcessor(widthM, heightM, dataSRRF));
 
         // Load standard deviation
         dataSRRF = new float[widthM * heightM];
         for (int n = 0; n < widthM * heightM; n++) {
-            dataSRRF[n] = (float) Math.sqrt(((bufferSRRF.get(n + widthM * heightM) - bufferSRRF.get(n)) / nFrameForSRRF));
-            if (Float.isNaN(dataSRRF[n])) dataSRRF[n] = 0; // make sure we dont get any weirdness
+            dataSRRF[n] = bufferSRRF.get(n + widthM * heightM) - bufferSRRF.get(n)*bufferSRRF.get(n); // Var[X] = E[X^2] - (E[X])^2
+//            if (Float.isNaN(dataSRRF[n])) dataSRRF[n] = 0; // make sure we dont get any weirdness
+            dataSRRF[n] = (float) math.sqrt( dataSRRF[n] );
         }
         imsSRRF.addSlice(new FloatProcessor(widthM, heightM, dataSRRF));
 
         // Load interpolated data
         dataSRRF = new float[widthM * heightM];
         for (int n = 0; n < widthM * heightM; n++) {
-            dataSRRF[n] = bufferSRRF.get(n + 2 * widthM * heightM) / nFrameForSRRF;
-            if (Float.isNaN(dataSRRF[n])) dataSRRF[n] = 0; // make sure we dont get any weirdness
+            dataSRRF[n] = bufferSRRF.get(n + 2 * widthM * heightM);
+//            if (Float.isNaN(dataSRRF[n])) dataSRRF[n] = 0; // make sure we don't get any weirdness
         }
         imsSRRF.addSlice(new FloatProcessor(widthM, heightM, dataSRRF));
-        queue.finish(); // Make sure everything is done... //TODO: do we need to do this for every method?
 
         return imsSRRF;
     }
 
-    // --- Reset the output buffer ---
-    public void resetSRRFoutputBuffer() {
-        int id = prof.startTimer();
-        kernelResetOutputBuffer.setArg(0, clBufferOut); // make sure type is the same !!
-        queue.put3DRangeKernel(kernelResetOutputBuffer, 0, 0, 0, widthM, heightM, nReconstructions + 1, 0, 0, 0);
-        prof.recordTime("Reset SRRF output buffer", prof.endTimer(id));
-        queue.finish(); // Make sure everything is done... //TODO: do we need to do this for every method?
-    }
 
     // --- Release GPU context ---
     public void release() {
@@ -269,6 +255,5 @@ public class liveSRRF_CL {
         kernelResetFramePosition.setArg(0, clBufferCurrentFrame); // make sure type is the same !!
         queue.put1DRangeKernel(kernelResetFramePosition, 0, 1, 0);
         prof.recordTime("Reset SRRF frame counter", prof.endTimer(id));
-        queue.finish(); // Make sure everything is done... //TODO: do we need to do this for every method?
     }
 }

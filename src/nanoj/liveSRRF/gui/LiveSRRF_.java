@@ -28,7 +28,7 @@ public class LiveSRRF_ implements PlugIn {
     private Font headerFont = new Font("Arial", Font.BOLD, 16);
 
     private String user = "FijiUpdater";
-    private String version = "20180418-"+user;
+    private String version = "20180418-" + user;
 
     private NanoJPrefs prefs = new NanoJPrefs(this.getClass().getName());
     private NanoJUsageTracker tracker = new NanoJUsageTracker("NanoJ-LiveSRRF", version, "UA-61590656-4");
@@ -93,7 +93,7 @@ public class LiveSRRF_ implements PlugIn {
         int hM = ims.getHeight() * magnification;
         int nPixelsM = wM * hM;
 
-        ImagePlus impSRRF = new ImagePlus(imp.getTitle()+" - SRRF2");
+        ImagePlus impSRRF = new ImagePlus(imp.getTitle() + " - SRRF2");
         impSRRF.copyScale(imp); // make sure we copy the pixel sizes correctly accross
         Calibration cal = impSRRF.getCalibration();
         cal.pixelWidth /= magnification;
@@ -117,7 +117,7 @@ public class LiveSRRF_ implements PlugIn {
         // !!! MAIN LOOP THROUGH FRAMES !!! //
         //////////////////////////////////////
 
-        for (int s=1; s<=nSlices; s++) {
+        for (int s = 1; s <= nSlices; s++) {
             // Check if user is cancelling calculation
             IJ.showProgress(s, nSlices);
             if (IJ.escapePressed()) {
@@ -133,31 +133,29 @@ public class LiveSRRF_ implements PlugIn {
 
             // Estimate vibrations
             if (correctVibration) {
-                System.out.println("New reference..."+counter);
+                System.out.println("New reference..." + counter);
                 int id = prof.startTimer();
                 if (counter == 0) {
                     ipRef = ip.duplicate();
                     shiftX[counter] = 0;
                     shiftY[counter] = 0;
-                }
-                else {
+                } else {
                     float[] shift = calculateShift(ipRef, ip, 5);
                     shiftX[counter] = shift[0];
                     shiftY[counter] = shift[1];
                 }
-                System.out.println("Frame="+s+" shiftX="+shiftX[counter]+" shiftY="+shiftY[counter]);
+                System.out.println("Frame=" + s + " shiftX=" + shiftX[counter] + " shiftY=" + shiftY[counter]);
                 prof.recordTime("Drift Estimation", prof.endTimer(id));
             }
 
-            if (counter == nFrames-1 || s == nSlices) {
+            if (counter == nFrames - 1 || s == nSlices) {
                 int id = prof.startTimer();
                 ImageStack imsResults = srrf2CL.calculateSRRF(imsRawDataBuffer, shiftX, shiftY);
                 nReconstructions = imsResults.getSize();
                 if (!showAllReconstructions) {
                     imsSRRF.addSlice(imsResults.getProcessor(nReconstructions));
-                    imsSRRF.setSliceLabel(srrf2CL.reconstructionLabel.get(nReconstructions-1), imsSRRF.getSize());
-                }
-                else {
+                    imsSRRF.setSliceLabel(srrf2CL.reconstructionLabel.get(nReconstructions - 1), imsSRRF.getSize());
+                } else {
                     for (int r = 1; r <= imsResults.getSize(); r++) {
                         imsSRRF.addSlice(imsResults.getProcessor(r));
                         imsSRRF.setSliceLabel(srrf2CL.reconstructionLabel.get(r - 1), imsSRRF.getSize());
@@ -169,8 +167,7 @@ public class LiveSRRF_ implements PlugIn {
                     impSRRF.setSlice(imsSRRF.getSize());
                     IJ.run(impSRRF, "Enhance Contrast", "saturated=0.35");
                     firstTime = false;
-                }
-                else {
+                } else {
                     impSRRF.setSlice(imsSRRF.getSize());
                 }
 
@@ -178,8 +175,7 @@ public class LiveSRRF_ implements PlugIn {
                 imsRawDataBuffer = new ImageStack(w, h);
                 counter = 0;
                 prof.recordTime("full SRRF-frame calculation", prof.endTimer(id));
-            }
-            else counter++;
+            } else counter++;
         }
 
         srrf2CL.release(); // Release the GPU!!!
@@ -188,11 +184,11 @@ public class LiveSRRF_ implements PlugIn {
         // Show final rendering...
         impSRRF.setStack(imsSRRF);
         IJ.run(impSRRF, "Enhance Contrast", "saturated=0.5");
-        impSRRF.setTitle(imp.getTitle()+" - SRRF2");
+        impSRRF.setTitle(imp.getTitle() + " - SRRF2");
 
         if (showAllReconstructions) {
             int nSRRFFrames = imsSRRF.getSize() / nReconstructions;
-            IJ.run(impSRRF, "Stack to Hyperstack...", "order=xyczt(default) channels="+nReconstructions+" slices=1 frames="+nSRRFFrames+" display=Grayscale");
+            IJ.run(impSRRF, "Stack to Hyperstack...", "order=xyczt(default) channels=" + nReconstructions + " slices=1 frames=" + nSRRFFrames + " display=Grayscale");
         }
     }
 
@@ -207,7 +203,7 @@ public class LiveSRRF_ implements PlugIn {
         boolean doBin2 = gd.getNextBoolean();
         boolean doBin4 = gd.getNextBoolean();
 
-        if (nTimeLags<1) return false;
+        if (nTimeLags < 1) return false;
 
         prefs.set("magnification", (float) magnification);
         prefs.set("fwhm", fwhm);
@@ -239,7 +235,7 @@ public class LiveSRRF_ implements PlugIn {
             ImageStack ims = imp.getImageStack();
 
             double memUsed = predictMemoryUsed(ims.getWidth(), ims.getHeight(), nFrames, magnification, nTimeLags, doBin);
-            IJ.showStatus("SRRF2 - Predicted used GPU memory: "+Math.round(memUsed)+"MB");
+            IJ.showStatus("SRRF2 - Predicted used GPU memory: " + Math.round(memUsed) + "MB");
 
             return goodToGo;
         }
@@ -261,9 +257,9 @@ public class LiveSRRF_ implements PlugIn {
         double yMax = 0;
 
         // first do coarse search for max
-        for (int y = 1; y<windowSize-1; y++){
-            for (int x = 1; x<windowSize-1; x++) {
-                double v = fpCCM.getf(x,y);
+        for (int y = 1; y < windowSize - 1; y++) {
+            for (int x = 1; x < windowSize - 1; x++) {
+                double v = fpCCM.getf(x, y);
                 if (v > vMax) {
                     vMax = v;
                     xMax = x;
@@ -276,8 +272,8 @@ public class LiveSRRF_ implements PlugIn {
 
         //vMax = -Double.MAX_VALUE;
         // do fine search for max
-        for (double y = yMax; y<yMax+1; y+=0.01){
-            for (double x = xMax; x<xMax+1; x+=0.01) {
+        for (double y = yMax; y < yMax + 1; y += 0.01) {
+            for (double x = xMax; x < xMax + 1; x += 0.01) {
                 double v = fpCCM.getBicubicInterpolatedPixel(x, y, fpCCM);
                 if (v > vMax) {
                     vMax = v;
@@ -296,10 +292,10 @@ public class LiveSRRF_ implements PlugIn {
             impCCM.show();
         }
         impCCM.setProcessor(fpCCM);
-        impCCM.setRoi(new PointRoi(xMax+.5, yMax+.5));
+        impCCM.setRoi(new PointRoi(xMax + .5, yMax + .5));
         impCCM.setDisplayRange(vMin, vMax);
 
-        return new float[] {shiftX, shiftY};
+        return new float[]{shiftX, shiftY};
     }
 
 
