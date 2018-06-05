@@ -150,8 +150,7 @@ __kernel void calculateRadialGradientConvergence(
     __global float* GxArray,
     __global float* GyArray,
     __global float* OutArray,
-    __global float* shiftX,
-    __global float* shiftY,
+    __global float* shiftXY,
     __global int* nCurrentFrame
 
 //    __global float* wSumArray,
@@ -185,8 +184,11 @@ __kernel void calculateRadialGradientConvergence(
 //        OutArray[offset + 2 * whM] = 7;
 //        return;
 
-    float xc = (xM + 0.5) / magnification + shiftX[nCurrentFrame[0]]; // continuous space position at the centre of magnified pixel
-    float yc = (yM + 0.5) / magnification + shiftY[nCurrentFrame[0]];
+    float shiftX = shiftXY[nCurrentFrame[0]];
+    float shiftY = shiftXY[nCurrentFrame[0] + nFrameForSRRF];
+
+    float xc = (xM + 0.5) / magnification + shiftX; // continuous space position at the centre of magnified pixel
+    float yc = (yM + 0.5) / magnification + shiftY;
 
     float CGLH = 0; // CGLH stands for Radiality original name - Culley-Gustafsson-Laine-Henriques transform
     float distanceWeightSum = 0;
@@ -283,7 +285,7 @@ __kernel void calculateRadialGradientConvergence(
     else CGLH = 0;
 
 //    if (intWeighting == 1) {
-        float v = getInterpolatedValue(pixels, w, h, ((float) xM)/magnification + shiftX[nCurrentFrame[0]] - 0.5f, ((float) yM)/magnification + shiftY[nCurrentFrame[0]] - 0.5f, nCurrentFrame[0]);
+        float v = getInterpolatedValue(pixels, w, h, ((float) xM)/magnification + shiftX - 0.5f, ((float) yM)/magnification + shiftY - 0.5f, nCurrentFrame[0]);
 
     if (nCurrentFrame[0] == 0) {
         OutArray[offset] = v * CGLH / nFrameForSRRF;

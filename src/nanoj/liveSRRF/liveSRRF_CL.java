@@ -24,7 +24,8 @@ public class liveSRRF_CL {
     private int width,
             height,
             widthM,
-            heightM;
+            heightM,
+            nFrameForSRRF;
 
     private final int GxGyMagnification = 2;
     private final float vxy_offset = 0.5f;
@@ -36,21 +37,21 @@ public class liveSRRF_CL {
     private NanoJProfiler prof = new NanoJProfiler();
 
     // OpenCL formats
-    static CLContext context;
-    static CLProgram programLiveSRRF;
-    static CLKernel kernelCalculateGradient,
+    static private CLContext context;
+    static private CLProgram programLiveSRRF;
+    static private CLKernel kernelCalculateGradient,
             kernelInterpolateGradient,
             kernelCalculateSRRF,
             kernelIncrementFramePosition,
             kernelResetFramePosition;
 
-    static CLCommandQueue queue;
+    static private CLCommandQueue queue;
 
     private CLBuffer<FloatBuffer>
             clBufferPx,
             clBufferGx, clBufferGy,
             clBufferGxInt, clBufferGyInt,
-            clBufferShiftX, clBufferShiftY,
+            clBufferShiftXY,
             clBufferOut;
 
     private CLBuffer<IntBuffer>
@@ -63,6 +64,7 @@ public class liveSRRF_CL {
         this.height = height;
         this.heightM = height * magnification;
         this.widthM = width * magnification;
+        this.nFrameForSRRF = nFrameForSRRF;
 
         context = CLContext.create();
         System.out.println("created " + context);
@@ -72,8 +74,7 @@ public class liveSRRF_CL {
         System.out.println("using " + device);
 
         clBufferPx = context.createFloatBuffer(nFramesOnGPU * width * height, READ_ONLY);
-        clBufferShiftX = context.createFloatBuffer(nFrameForSRRF, READ_ONLY);
-        clBufferShiftY = context.createFloatBuffer(nFrameForSRRF, READ_ONLY);
+        clBufferShiftXY = context.createFloatBuffer(2*nFrameForSRRF, READ_ONLY);
         clBufferGx = context.createFloatBuffer(nFramesOnGPU * width * height, READ_WRITE); // single frame Gx
         clBufferGy = context.createFloatBuffer(nFramesOnGPU * width * height, READ_WRITE); // single frame Gy
         clBufferGxInt = context.createFloatBuffer(nFramesOnGPU * 4 * width * height, READ_WRITE); // single frame Gx
@@ -117,8 +118,7 @@ public class liveSRRF_CL {
 
         System.out.println("used device memory: " + (
                 clBufferPx.getCLSize() +
-                        clBufferShiftX.getCLSize() +
-                        clBufferShiftY.getCLSize() +
+                        clBufferShiftXY.getCLSize() +
                         clBufferGx.getCLSize() +
                         clBufferGy.getCLSize() +
                         clBufferGxInt.getCLSize() +
@@ -131,11 +131,14 @@ public class liveSRRF_CL {
 
     // --- Load Shift array on GPU ---
     public void loadShiftXYGPUbuffer(float[] shiftX, float[] shiftY) {
+
+        float[] shiftXY = new float[2*nFrameForSRRF];
+        System.arraycopy(shiftX,0,shiftXY,0,nFrameForSRRF);
+        System.arraycopy(shiftY,0,shiftXY,nFrameForSRRF,nFrameForSRRF);
+
         int id = prof.startTimer();
-        fillBuffer(clBufferShiftX, shiftX); // TODO: load ShiftXY as a single buffer??
-        queue.putWriteBuffer(clBufferShiftX, false);
-        fillBuffer(clBufferShiftY, shiftY);
-        queue.putWriteBuffer(clBufferShiftY, false);
+        fillBuffer(clBufferShiftXY, shiftXY);
+        queue.putWriteBuffer(clBufferShiftXY, false);
         prof.recordTime("Uploading shift arrays to GPU", prof.endTimer(id));
 
     }
@@ -190,8 +193,7 @@ public class liveSRRF_CL {
             kernelCalculateSRRF.setArg(argn++, clBufferGxInt); // make sure type is the same !!
             kernelCalculateSRRF.setArg(argn++, clBufferGyInt); // make sure type is the same !!
             kernelCalculateSRRF.setArg(argn++, clBufferOut); // make sure type is the same !!
-            kernelCalculateSRRF.setArg(argn++, clBufferShiftX); // make sure type is the same !!
-            kernelCalculateSRRF.setArg(argn++, clBufferShiftY); // make sure type is the same !!
+            kernelCalculateSRRF.setArg(argn++, clBufferShiftXY); // make sure type is the same !!
             kernelCalculateSRRF.setArg(argn++, clBufferCurrentFrame); // make sure type is the same !!
             queue.put2DRangeKernel(kernelCalculateSRRF, 0, 0, widthM, heightM, 0, 0);
             prof.recordTime("kernelCalculateSRRF", prof.endTimer(id));
@@ -207,7 +209,7 @@ public class liveSRRF_CL {
     // --- Read the output buffer ---
     public ImageStack readSRRFbuffer() {
 
-        queue.finish(); // Make sure everything is done... // TODO: do we need to do this for every method?
+        queue.finish(); // Make sure everything is done
         queue.putReadBuffer(clBufferOut, true);
         FloatBuffer bufferSRRF = clBufferOut.getBuffer();
 
@@ -225,9 +227,9 @@ public class liveSRRF_CL {
         // Load standard deviation
         dataSRRF = new float[widthM * heightM];
         for (int n = 0; n < widthM * heightM; n++) {
-            dataSRRF[n] = bufferSRRF.get(n + widthM * heightM) - bufferSRRF.get(n)*bufferSRRF.get(n); // Var[X] = E[X^2] - (E[X])^2
+            dataSRRF[n] = bufferSRRF.get(n + widthM * heightM) - bufferSRRF.get(n) * bufferSRRF.get(n); // Var[X] = E[X^2] - (E[X])^2
 //            if (Float.isNaN(dataSRRF[n])) dataSRRF[n] = 0; // make sure we dont get any weirdness
-            dataSRRF[n] = (float) math.sqrt( dataSRRF[n] );
+            dataSRRF[n] = (float) math.sqrt(dataSRRF[n]);
         }
         imsSRRF.addSlice(new FloatProcessor(widthM, heightM, dataSRRF));
 
