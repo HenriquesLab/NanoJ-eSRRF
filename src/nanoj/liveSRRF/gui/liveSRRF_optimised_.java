@@ -17,12 +17,10 @@ import nanoj.core2.NanoJProfiler;
 import org.python.modules.math;
 import nanoj.liveSRRF.liveSRRF_CL;
 
-
 import java.awt.*;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
-import static java.lang.Math.max;
 import static java.lang.Math.min;
 import static nanoj.core2.NanoJCrossCorrelation.calculateCrossCorrelationMap;
 
@@ -70,7 +68,6 @@ public class liveSRRF_optimised_ implements PlugIn {
     @Override
     public void run(String arg) {
 
-//        IJ.log("\\clear"); / TODO: clear the log window properly
         // Get raw data
         imp = WindowManager.getCurrentImage(); // TODO: depending on the size of data and RAM, consider using Virtual Stack load
         if (imp == null) imp = IJ.openImage();
@@ -82,7 +79,7 @@ public class liveSRRF_optimised_ implements PlugIn {
 
         // Build GUI
         Font headerFont = new Font("Arial", Font.BOLD, 16);
-        NonBlockingGenericDialog gd = new NonBlockingGenericDialog("LiveSRRF");
+        NonBlockingGenericDialog gd = new NonBlockingGenericDialog("liveSRRF " + LiveSRRFVersion);
         gd.addNumericField("Magnification (default: 5)", prefs.get("magnification", 5), 0);
         gd.addNumericField("FWHM (pixels, default: 2)", prefs.get("fwhm", 2), 2);
         gd.addNumericField("Sensitivity (default: 3)", prefs.get("sensitivity", 3), 0);
@@ -93,19 +90,18 @@ public class liveSRRF_optimised_ implements PlugIn {
         gd.addMessage("-=-= Reconstructions =-=-\n", headerFont);
         gd.addCheckbox("AVG reconstruction (default: on)", prefs.get("calculateAVG", true));
         gd.addCheckbox("STD reconstruction (default: off)", prefs.get("calculateSTD", false));
-        gd.addCheckbox("Fusion reconstruction (default: off)", prefs.get("doFusion", false));
+//        gd.addCheckbox("Fusion reconstruction (default: off)", prefs.get("doFusion", false));
         gd.addCheckbox("Wide-field interpolation (default: off)", prefs.get("getInterpolatedImage", false));
 
         gd.addMessage("-=-= Rolling analysis =-=-\n", headerFont);
         gd.addNumericField("Gap between SR frame (frames, default: 50)", prefs.get("frameGap", 50), 0);
-        gd.addMessage("Rolling analysis may lead to long computation times.");
+        gd.addMessage("Warning: Rolling analysis may lead to long computation times.");
 
         gd.addMessage("-=-= Memory =-=-\n", headerFont);
         gd.addNumericField("Maximum amount of memory on GPU (MB, default: 1000)", prefs.get("maxMemoryGPU", 500), 2);
         gd.addMessage("Giving SRRF access to a lot of memory speeds up the reconstruction\n" +
                 "but may slow down the graphics card for your Minecraft game that you have \n" +
                 "running in parallel.");
-
 
         MyDialogListener dl = new MyDialogListener(); // this serves to estimate a few indicators such as RAM usage
         gd.addDialogListener(dl);
@@ -115,6 +111,7 @@ public class liveSRRF_optimised_ implements PlugIn {
         // Save last user entries
         savePreferences();
 
+        IJ.log("\\Clear");  // Clear the log window
         IJ.log("-------------------------------------");
         IJ.log("-------------------------------------");
         IJ.log("liveSRRF " + LiveSRRFVersion);
@@ -150,6 +147,7 @@ public class liveSRRF_optimised_ implements PlugIn {
         // Start looping trough SRRF frames
         for (int r = 1; r <= nSRRFframe; r++) {
             liveSRRF.resetFramePosition();
+            liveSRRF.loadShiftXYGPUbuffer(shiftX, shiftY);
 
             IJ.log("--------");
             IJ.log("SRRF frame: " + r);
@@ -157,12 +155,20 @@ public class liveSRRF_optimised_ implements PlugIn {
             IJ.log("Stack index start: " + indexStartSRRFframe);
             if (correctVibration) calculateShiftArray(indexStartSRRFframe);
 
-            liveSRRF.loadShiftXYGPUbuffer(shiftX, shiftY);
 
             for (int l = 0; l < nGPUloadPerSRRFframe; l++) {
+
+                // Check if user is cancelling calculation
+                IJ.showProgress(r, nSRRFframe);
+                if (IJ.escapePressed()) {
+                    IJ.resetEscape();
+                    liveSRRF.release();
+                    return;
+                }
+
                 IJ.log("----------------------------");
                 nFrameToLoad = min(nFrameOnGPU, nFrameForSRRF - nFrameOnGPU * l);
-                IJ.log("Number of frames to load: " + nFrameToLoad);
+//                IJ.log("Number of frames to load: " + nFrameToLoad);
                 IJ.log("Index start: " + (indexStartSRRFframe + nFrameOnGPU * l));
                 liveSRRF.calculateSRRF(imp, indexStartSRRFframe + nFrameOnGPU * l, nFrameToLoad);
             }
@@ -171,6 +177,7 @@ public class liveSRRF_optimised_ implements PlugIn {
             imsSRRFavg.addSlice(reconstructionLabels[0], imsBuffer.getProcessor(1));
             imsSRRFstd.addSlice(reconstructionLabels[1], imsBuffer.getProcessor(2));
             imsRawInterpolated.addSlice(reconstructionLabels[2], imsBuffer.getProcessor(3));
+            IJ.log("RAM used: " + IJ.freeMemory());
         }
 
         // Release the GPU
@@ -186,8 +193,11 @@ public class liveSRRF_optimised_ implements PlugIn {
 
             impSRRFavg.setStack(imsSRRFavg);
             IJ.run(impSRRFavg, "Enhance Contrast", "saturated=0.5");
-            impSRRFavg.setTitle(imp.getTitle() + " - liveSRRF (AVG)");
-            impSRRFavg.show();
+
+            ImagePlus impAVG = impSRRFavg.duplicate();
+            impSRRFavg.close();
+            impAVG.setTitle(imp.getTitle() + " - liveSRRF (AVG)");
+            impAVG.show();
         }
 
         if (calculateSTD || doFusion) {
@@ -199,8 +209,11 @@ public class liveSRRF_optimised_ implements PlugIn {
 
             impSRRFstd.setStack(imsSRRFstd);
             IJ.run(impSRRFstd, "Enhance Contrast", "saturated=0.5");
-            impSRRFstd.setTitle(imp.getTitle() + " - liveSRRF (STD)");
-            impSRRFstd.show();
+
+            ImagePlus impSTD = impSRRFstd.duplicate();
+            impSRRFstd.close();
+            impSTD.setTitle(imp.getTitle() + " - liveSRRF (STD)");
+            impSTD.show();
         }
 
 //        if (doFusion) {
@@ -222,17 +235,19 @@ public class liveSRRF_optimised_ implements PlugIn {
 
             impRawInterpolated.setStack(imsRawInterpolated);
             IJ.run(impRawInterpolated, "Enhance Contrast", "saturated=0.5");
-            impRawInterpolated.setTitle(imp.getTitle() + " - interpolated image");
-            impRawInterpolated.show();
-        }
 
+            ImagePlus impINT = impRawInterpolated.duplicate();
+            impRawInterpolated.close();
+            impINT.setTitle(imp.getTitle() + " - interpolated image");
+            impINT.show();
+        }
 
         // Bye-bye and report
         IJ.log("-------------------------------------");
+        IJ.log("Memory usage: "+IJ.freeMemory());  // this also runs the garbage collector
         IJ.log("Thank you for your custom on this beautiful day !");
         IJ.log("-------------------------------------");
-        IJ.log(prof.report());
-
+//        IJ.log(prof.report());
     }
 
 
@@ -254,7 +269,9 @@ public class liveSRRF_optimised_ implements PlugIn {
 
         calculateAVG = gd.getNextBoolean();
         calculateSTD = gd.getNextBoolean();
-        doFusion = gd.getNextBoolean();
+//        doFusion = gd.getNextBoolean();
+        doFusion = false; // for now until fusion is implemented.
+
         getInterpolatedImage = gd.getNextBoolean();
 
         frameGap = (int) gd.getNextNumber();
@@ -274,15 +291,24 @@ public class liveSRRF_optimised_ implements PlugIn {
         }
 
         maxnFrameOnGPU = maxnFrameOnGPU - 1;
+
         if (maxnFrameOnGPU > 0) {
             goodToGo = true;
             nFrameOnGPU = (int) math.ceil((float) nFrameForSRRF / (float) maxnFrameOnGPU);
             nFrameOnGPU = (int) math.ceil(((float) nFrameForSRRF / (float) nFrameOnGPU));
             nFrameOnGPU = min(nFrameForSRRF, nFrameOnGPU);
-            IJ.showStatus("liveSRRF - Number of frames on GPU: " + (nFrameOnGPU));
+            memUsed = predictMemoryUsed(nFrameOnGPU);
+
+            IJ.showStatus("liveSRRF - Number of frames on GPU: " + (nFrameOnGPU) + " (" + Math.round(memUsed[0]) + " MB)");
         } else {
             memUsed = predictMemoryUsed(1);
             IJ.showStatus("liveSRRF - Minimum GPU memory: " + Math.round(memUsed[0]) + "MB");
+        }
+
+        // Check for RAM on computer
+        if (memUsed[1] > IJ.maxMemory()) {
+            goodToGo = false;
+            IJ.showStatus("liveSRRF - Max RAM available exceeded: (" + (Math.round(memUsed[1])) + "MB vs. " + (Math.round(IJ.maxMemory())) + "MB)");
         }
 
         nGPUloadPerSRRFframe = (int) math.ceil((float) nFrameForSRRF / (float) nFrameOnGPU);
@@ -315,14 +341,13 @@ public class liveSRRF_optimised_ implements PlugIn {
         memUsed[0] += 4 * width * height * nFrameOnGPU; // clBufferGxInt
         memUsed[0] += 4 * width * height * nFrameOnGPU; // clBufferGyInt
         memUsed[0] += 2 * width * height * magnification * magnification; // clBufferRGC
-        if (getInterpolatedImage) memUsed[0] += width * height * magnification * magnification; // clBufferInt
+        memUsed[0] += width * height * magnification * magnification; // clBufferInt
 
         // Memory on CPU ----
         memUsed[1] = 0;
         memUsed[1] += width * height * nSlices; // clBufferPx
-        memUsed[1] += 2 * nSRRFframe * width * height * magnification * magnification; // clBufferSRRF // TODO: estimating RAM requirements properly
-        if (getInterpolatedImage)
-            memUsed[1] += nSRRFframe * width * height * magnification * magnification; // clBufferInt
+        memUsed[1] += 2 * nSRRFframe * width * height * magnification * magnification; // clBufferSRRF
+        memUsed[1] += nSRRFframe * width * height * magnification * magnification; // clBufferInt
 
         memUsed[0] *= Float.SIZE / 8000000d;
         memUsed[1] *= Float.SIZE / 8000000d;

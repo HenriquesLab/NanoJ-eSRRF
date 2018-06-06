@@ -74,13 +74,16 @@ public class liveSRRF_CL {
         System.out.println("using " + device);
 
         clBufferPx = context.createFloatBuffer(nFramesOnGPU * width * height, READ_ONLY);
-        clBufferShiftXY = context.createFloatBuffer(2*nFrameForSRRF, READ_ONLY);
+        clBufferShiftXY = context.createFloatBuffer(2 * nFrameForSRRF, READ_ONLY);
         clBufferGx = context.createFloatBuffer(nFramesOnGPU * width * height, READ_WRITE); // single frame Gx
         clBufferGy = context.createFloatBuffer(nFramesOnGPU * width * height, READ_WRITE); // single frame Gy
         clBufferGxInt = context.createFloatBuffer(nFramesOnGPU * 4 * width * height, READ_WRITE); // single frame Gx
         clBufferGyInt = context.createFloatBuffer(nFramesOnGPU * 4 * width * height, READ_WRITE); // single frame Gy
         clBufferOut = context.createFloatBuffer((nReconstructions + 1) * widthM * heightM, WRITE_ONLY); // single frame cumulative AVG projection of RGC
-        clBufferCurrentFrame = context.createIntBuffer(1, READ_WRITE);
+        clBufferCurrentFrame = context.createIntBuffer(2, READ_WRITE);
+        // Current frame is a 2 element Int buffer:
+        // nCurrentFrame[0] is the global current frame in the current SRRF frame (reset every SRRF frame)
+        // nCurrentFrame[1] is the local current frame in the current GPU-loaded dataset (reset every tun of the method calculateSRRF (within the gradient calculation))
 
         // Create the program
         float sigma = fwhm / 2.354f;
@@ -114,6 +117,27 @@ public class liveSRRF_CL {
         kernelIncrementFramePosition = programLiveSRRF.createCLKernel("kernelIncrementFramePosition");
         kernelResetFramePosition = programLiveSRRF.createCLKernel("kernelResetFramePosition");
 
+        int argn;
+        argn = 0;
+        kernelCalculateGradient.setArg(argn++, clBufferPx); // make sure type is the same !!
+        kernelCalculateGradient.setArg(argn++, clBufferGx); // make sure type is the same !!
+        kernelCalculateGradient.setArg(argn++, clBufferGy); // make sure type is the same !!
+        kernelCalculateGradient.setArg(argn++, clBufferCurrentFrame); // make sure type is the same !!
+
+        argn = 0;
+        kernelInterpolateGradient.setArg(argn++, clBufferGx); // make sure type is the same !!
+        kernelInterpolateGradient.setArg(argn++, clBufferGy); // make sure type is the same !!
+        kernelInterpolateGradient.setArg(argn++, clBufferGxInt); // make sure type is the same !!
+        kernelInterpolateGradient.setArg(argn++, clBufferGyInt); // make sure type is the same !!
+
+        argn = 0;
+        kernelCalculateSRRF.setArg(argn++, clBufferPx); // make sure type is the same !!
+        kernelCalculateSRRF.setArg(argn++, clBufferGxInt); // make sure type is the same !!
+        kernelCalculateSRRF.setArg(argn++, clBufferGyInt); // make sure type is the same !!
+        kernelCalculateSRRF.setArg(argn++, clBufferOut); // make sure type is the same !!
+        kernelCalculateSRRF.setArg(argn++, clBufferShiftXY); // make sure type is the same !!
+        kernelCalculateSRRF.setArg(argn++, clBufferCurrentFrame); // make sure type is the same !!
+
         queue = device.createCommandQueue();
 
         System.out.println("used device memory: " + (
@@ -132,9 +156,9 @@ public class liveSRRF_CL {
     // --- Load Shift array on GPU ---
     public void loadShiftXYGPUbuffer(float[] shiftX, float[] shiftY) {
 
-        float[] shiftXY = new float[2*nFrameForSRRF];
-        System.arraycopy(shiftX,0,shiftXY,0,nFrameForSRRF);
-        System.arraycopy(shiftY,0,shiftXY,nFrameForSRRF,nFrameForSRRF);
+        float[] shiftXY = new float[2 * nFrameForSRRF];
+        System.arraycopy(shiftX, 0, shiftXY, 0, nFrameForSRRF);
+        System.arraycopy(shiftY, 0, shiftXY, nFrameForSRRF, nFrameForSRRF);
 
         int id = prof.startTimer();
         fillBuffer(clBufferShiftXY, shiftXY);
@@ -147,7 +171,6 @@ public class liveSRRF_CL {
     // --- Calculate SRRF images ---
     public synchronized void calculateSRRF(ImagePlus imp, int indexStart, int nFrameToLoad) {
 
-        int argn;
         assert (imp.getWidth() == width && imp.getHeight() == height);
         ImageStack imsRawData = new ImageStack(width, height);
 
@@ -165,20 +188,11 @@ public class liveSRRF_CL {
         // Make kernelCalculateGradient assignment
         IJ.log("Calculating gradient...");
         id = prof.startTimer();
-        argn = 0;
-        kernelCalculateGradient.setArg(argn++, clBufferPx); // make sure type is the same !!
-        kernelCalculateGradient.setArg(argn++, clBufferGx); // make sure type is the same !!
-        kernelCalculateGradient.setArg(argn++, clBufferGy); // make sure type is the same !!
         queue.put3DRangeKernel(kernelCalculateGradient, 0, 0, 0, width, height, nFrameToLoad, 0, 0, 0);
         prof.recordTime("kernelCalculateGradient", prof.endTimer(id));
 
         IJ.log("Interpolating gradient...");
         id = prof.startTimer();
-        argn = 0;
-        kernelInterpolateGradient.setArg(argn++, clBufferGx); // make sure type is the same !!
-        kernelInterpolateGradient.setArg(argn++, clBufferGy); // make sure type is the same !!
-        kernelInterpolateGradient.setArg(argn++, clBufferGxInt); // make sure type is the same !!
-        kernelInterpolateGradient.setArg(argn++, clBufferGyInt); // make sure type is the same !!
         queue.put3DRangeKernel(kernelInterpolateGradient, 0, 0, 0, GxGyMagnification * width, GxGyMagnification * height, nFrameToLoad, 0, 0, 0);
         prof.recordTime("kernelInterpolateGradient", prof.endTimer(id));
 
@@ -188,19 +202,12 @@ public class liveSRRF_CL {
 
         for (int f = 0; f < nFrameToLoad; f++) {
             id = prof.startTimer();
-            argn = 0;
-            kernelCalculateSRRF.setArg(argn++, clBufferPx); // make sure type is the same !!
-            kernelCalculateSRRF.setArg(argn++, clBufferGxInt); // make sure type is the same !!
-            kernelCalculateSRRF.setArg(argn++, clBufferGyInt); // make sure type is the same !!
-            kernelCalculateSRRF.setArg(argn++, clBufferOut); // make sure type is the same !!
-            kernelCalculateSRRF.setArg(argn++, clBufferShiftXY); // make sure type is the same !!
-            kernelCalculateSRRF.setArg(argn++, clBufferCurrentFrame); // make sure type is the same !!
             queue.put2DRangeKernel(kernelCalculateSRRF, 0, 0, widthM, heightM, 0, 0);
             prof.recordTime("kernelCalculateSRRF", prof.endTimer(id));
 
             id = prof.startTimer();
             kernelIncrementFramePosition.setArg(0, clBufferCurrentFrame); // make sure type is the same !!
-            queue.put1DRangeKernel(kernelIncrementFramePosition, 0, 1, 0);
+            queue.put1DRangeKernel(kernelIncrementFramePosition, 0, 2, 0);
             prof.recordTime("Increment frame count", prof.endTimer(id));
         }
 
@@ -220,7 +227,7 @@ public class liveSRRF_CL {
         dataSRRF = new float[widthM * heightM];
         for (int n = 0; n < widthM * heightM; n++) {
             dataSRRF[n] = bufferSRRF.get(n);
-//            if (Float.isNaN(dataSRRF[n])) dataSRRF[n] = 0; // make sure we dont get any weirdness
+            if (Float.isNaN(dataSRRF[n])) dataSRRF[n] = 0; // make sure we dont get any weirdness
         }
         imsSRRF.addSlice(new FloatProcessor(widthM, heightM, dataSRRF));
 
@@ -228,7 +235,11 @@ public class liveSRRF_CL {
         dataSRRF = new float[widthM * heightM];
         for (int n = 0; n < widthM * heightM; n++) {
             dataSRRF[n] = bufferSRRF.get(n + widthM * heightM) - bufferSRRF.get(n) * bufferSRRF.get(n); // Var[X] = E[X^2] - (E[X])^2
-//            if (Float.isNaN(dataSRRF[n])) dataSRRF[n] = 0; // make sure we dont get any weirdness
+            if (dataSRRF[n] < 0) {
+                dataSRRF[n] = 0;
+                IJ.log("!!Negative VAR value!!");
+            }
+            if (Float.isNaN(dataSRRF[n])) dataSRRF[n] = 0; // make sure we dont get any weirdness
             dataSRRF[n] = (float) math.sqrt(dataSRRF[n]);
         }
         imsSRRF.addSlice(new FloatProcessor(widthM, heightM, dataSRRF));
@@ -237,7 +248,7 @@ public class liveSRRF_CL {
         dataSRRF = new float[widthM * heightM];
         for (int n = 0; n < widthM * heightM; n++) {
             dataSRRF[n] = bufferSRRF.get(n + 2 * widthM * heightM);
-//            if (Float.isNaN(dataSRRF[n])) dataSRRF[n] = 0; // make sure we don't get any weirdness
+            if (Float.isNaN(dataSRRF[n])) dataSRRF[n] = 0; // make sure we don't get any weirdness
         }
         imsSRRF.addSlice(new FloatProcessor(widthM, heightM, dataSRRF));
 

@@ -102,23 +102,25 @@ static float getVBoundaryCheck(__global float* array, int const width, int const
 __kernel void calculateGradient_2point(
     __global float* pixels,
     __global float* GxArray,
-    __global float* GyArray
+    __global float* GyArray,
+    __global int* nCurrentFrame
 
     ) {
     int x1 = get_global_id(0);
     int y1 = get_global_id(1);
     int f = get_global_id(2);
 
-//    int w = get_global_size(0);
-//    int h = get_global_size(1);
     int offset = y1 * w + x1 + w * h * f;
-
     int x0 = max(x1-1, 0);
     int y0 = max(y1-1, 0);
 
     // 2-point gradient
     GxArray[offset] = pixels[y1 * w + x1 + w * h * f] - pixels[y1 * w + x0 + w * h * f];
     GyArray[offset] = pixels[y1 * w + x1 + w * h * f] - pixels[y0 * w + x1 + w * h * f];
+
+    // Reset the local current frame
+    nCurrentFrame[1] = 0;
+
 }
 
 // First kernel follow up: interpolating gradient from 2-point gradient image -------------------------------------------
@@ -133,8 +135,6 @@ __kernel void calculateGradientInterpolation(
     int y = get_global_id(1);
     int f = get_global_id(2);
 
-//    int wInt = get_global_size(0);
-//    int hInt = get_global_size(1);
     int offset = y * wInt + x + f * wInt * hInt;
 
     // Two-fold interpolation of the gradients
@@ -152,37 +152,17 @@ __kernel void calculateRadialGradientConvergence(
     __global float* OutArray,
     __global float* shiftXY,
     __global int* nCurrentFrame
+    // Current frame is a 2 element Int buffer:
+            // nCurrentFrame[0] is the global current frame in the current SRRF frame (reset every SRRF frame)
+            // nCurrentFrame[1] is the local current frame in the current GPU-loaded dataset (reset every tun of the method calculateSRRF (within the gradient calculation))
 
-//    __global float* wSumArray,
-//    __global float* debugFunArray,
-
-//    int const magnification,
-//    int const GxGyMagnification,
-//    float const fwhm,
-//    int const sensitivity,
-//    float const shiftX,
-//    float const shiftY,
-//    float const vxy_offset,
-//    int const vxy_ArrayShift,
-//    float const vxy_PixelShift,
-//    int const intWeighting
 
     ) {
 
     int xM = get_global_id(0);
     int yM = get_global_id(1);
 
-//    int wM = get_global_size(0);
-//    int hM = get_global_size(1);
-//    int w = wM / magnification;
-//    int h = hM / magnification;
-
     int offset = yM * wM + xM;
-
-//        OutArray[offset] = 5;
-//        OutArray[offset + whM] = 6;
-//        OutArray[offset + 2 * whM] = 7;
-//        return;
 
     float shiftX = shiftXY[nCurrentFrame[0]];
     float shiftY = shiftXY[nCurrentFrame[0] + nFrameForSRRF];
@@ -213,8 +193,8 @@ __kernel void calculateRadialGradientConvergence(
 
                     if (distance != 0 && distance <= (2*sigma+1)) {
 
-                        Gx = getVBoundaryCheck(GxArray, wInt, hInt, GxGyMagnification*(vx - vxy_offset) + vxy_ArrayShift, GxGyMagnification*(vy - vxy_offset), nCurrentFrame[0]);
-                        Gy = getVBoundaryCheck(GyArray, wInt, hInt, GxGyMagnification*(vx - vxy_offset), GxGyMagnification*(vy - vxy_offset) + vxy_ArrayShift, nCurrentFrame[0]);
+                        Gx = getVBoundaryCheck(GxArray, wInt, hInt, GxGyMagnification*(vx - vxy_offset) + vxy_ArrayShift, GxGyMagnification*(vy - vxy_offset), nCurrentFrame[1]);
+                        Gy = getVBoundaryCheck(GyArray, wInt, hInt, GxGyMagnification*(vx - vxy_offset), GxGyMagnification*(vy - vxy_offset) + vxy_ArrayShift, nCurrentFrame[1]);
 
                         float distanceWeight = distance*exp(-(distance*distance)/sigma22);  // TODO: dGauss: can use Taylor expansion there
                         distanceWeight = distanceWeight * distanceWeight * distanceWeight * distanceWeight ;  // TODO: dGauss: what power is best? Let's FRC !
@@ -277,15 +257,13 @@ __kernel void calculateRadialGradientConvergence(
        }
     }
 
-//    debugFunArray[offset] = countdebugFun;
-//    wSumArray[offset] = distanceWeightSum;
 
     CGLH /= distanceWeightSum;
     if (CGLH >= 0) CGLH = pow(CGLH, sensitivity);
     else CGLH = 0;
 
 //    if (intWeighting == 1) {
-        float v = getInterpolatedValue(pixels, w, h, ((float) xM)/magnification + shiftX - 0.5f, ((float) yM)/magnification + shiftY - 0.5f, nCurrentFrame[0]);
+        float v = getInterpolatedValue(pixels, w, h, ((float) xM)/magnification + shiftX - 0.5f, ((float) yM)/magnification + shiftY - 0.5f, nCurrentFrame[1]);
 
     if (nCurrentFrame[0] == 0) {
         OutArray[offset] = v * CGLH / nFrameForSRRF;
@@ -332,7 +310,8 @@ __kernel void calculateRadialGradientConvergence(
 __kernel void kernelIncrementFramePosition(
     __global int* nCurrentFrame
     ){
-    nCurrentFrame[0] = nCurrentFrame[0] + 1;
+    int i = get_global_id(0);
+    nCurrentFrame[i] = nCurrentFrame[i] + 1;
 }
 
 // Fifth kernel: reset the frame number -----------------------------------------------------------------
