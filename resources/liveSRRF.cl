@@ -20,7 +20,7 @@
 
 // Cubic function for interpolation
 static float cubic(float x) {
-    float a = 0.5f; // Catmull-Rom interpolation
+    const float a = 0.5f; // Catmull-Rom interpolation
     if (x < 0.0f) x = -x;
     float z = 0.0f;
     if (x < 1.0f)
@@ -32,25 +32,55 @@ static float cubic(float x) {
 
 // Interpolation function: interpolate in continuous space with respect to the reference of the array
 static float getInterpolatedValue(__global float* array, int const width, int const height, float const x, float const y, int const f) { // TODO: review the grid position in the interpolation (seems offset)
-    int u0 = (int) floor(x);
-    int v0 = (int) floor(y);
+    const int u0 = (int) floor(x);
+    const int v0 = (int) floor(y);
+    const int whf = width*height*f;
+
     float q = 0.0f;
-    for (int j = 0; j <= 3; j++) {
-        int v = min(max(v0 - 1 + j, 0), height-1);
-        float p = 0.0f;
-        for (int i = 0; i <= 3; i++) {
-            int u = min(max(u0 - 1 + i, 0), width-1);
-            p = p + array[v*width+u + width*height*f] * cubic(x - (float) (u));
+
+    // Bicubic interpolation
+    if (u0 > 0 && u0 < w - 2 && v0 > 0 && v0 < h - 2) {
+        for (int j = 0; j <= 3; j++) {
+            int v = min(max(v0 - 1 + j, 0), h-1);
+            float p = 0.0f;
+            for (int i = 0; i <= 3; i++) {
+                int u = min(max(u0 - 1 + i, 0), w-1);
+                p = p + array[v*width+u + whf] * cubic(x - (float) (u));
+            }
+            q = q + p * cubic(y - (float) (v));
         }
-        q = q + p * cubic(y - (float) (v));
     }
+
+    // Bilinear interpolation & extrapolation
+    else  {
+//        else if (x >= 0 && x < w && y >= 0 && y < h) {
+
+        int xbase = (int)x;
+        int ybase = (int)y;
+        int xbase1 = min(xbase+1, w-1);
+        int ybase1 = min(ybase+1, h-1);
+
+        float xFraction = x - (float) xbase;
+        float yFraction = y - (float) ybase;
+        xFraction = fmax(xFraction, 0);
+        yFraction = fmax(yFraction, 0);
+
+        float lowerLeft = array[whf + ybase * width + xbase];
+        float lowerRight = array[whf + ybase * width + xbase1];
+        float upperRight = array[whf + ybase1 * width + xbase1];
+        float upperLeft = array[whf + ybase1 * width + xbase];
+        float upperAverage = upperLeft + xFraction * (upperRight - upperLeft);
+        float lowerAverage = lowerLeft + xFraction * (lowerRight - lowerLeft);
+        q = lowerAverage + yFraction * (upperAverage - lowerAverage);
+    }
+
     return q;
 }
 
 // Check boundaries of the image and returns the gradient value
 static float getVBoundaryCheck(__global float* array, int const width, int const height, int const x, int const y, int const f) {
-    int _x = min(max(x, 0), width-1);
-    int _y = min(max(y, 0), height-1);
+    const int _x = min(max(x, 0), width-1);
+    const int _y = min(max(y, 0), height-1);
     return array[_y*width+_x + width*height*f];
 }
 
@@ -106,13 +136,13 @@ __kernel void calculateGradient_2point(
     __global int* nCurrentFrame
 
     ) {
-    int x1 = get_global_id(0);
-    int y1 = get_global_id(1);
-    int f = get_global_id(2);
+    const int x1 = get_global_id(0);
+    const int y1 = get_global_id(1);
+    const int f = get_global_id(2);
 
-    int offset = y1 * w + x1 + w * h * f;
-    int x0 = max(x1-1, 0);
-    int y0 = max(y1-1, 0);
+    const int offset = y1 * w + x1 + w * h * f;
+    const int x0 = max(x1-1, 0);
+    const int y0 = max(y1-1, 0);
 
     // 2-point gradient
     GxArray[offset] = pixels[y1 * w + x1 + w * h * f] - pixels[y1 * w + x0 + w * h * f];
@@ -131,11 +161,11 @@ __kernel void calculateGradientInterpolation(
     __global float* GyIntArray
 
     ){
-    int x = get_global_id(0);
-    int y = get_global_id(1);
-    int f = get_global_id(2);
+    const int x = get_global_id(0);
+    const int y = get_global_id(1);
+    const int f = get_global_id(2);
 
-    int offset = y * wInt + x + f * wInt * hInt;
+    const int offset = y * wInt + x + f * wInt * hInt;
 
     // Two-fold interpolation of the gradients
     GxIntArray[offset] = getInterpolatedValue(GxArray, (int) (wInt/2), (int) (hInt/2), (float) (x)/2.0f, (float) (y)/2.0f, f);
@@ -159,20 +189,20 @@ __kernel void calculateRadialGradientConvergence(
 
     ) {
 
-    int xM = get_global_id(0);
-    int yM = get_global_id(1);
+    const int xM = get_global_id(0);
+    const int yM = get_global_id(1);
 
-    int offset = yM * wM + xM;
+    const int offset = yM * wM + xM;
 
-    float shiftX = shiftXY[nCurrentFrame[0]];
-    float shiftY = shiftXY[nCurrentFrame[0] + nFrameForSRRF];
+    const float shiftX = shiftXY[nCurrentFrame[0]];
+    const float shiftY = shiftXY[nCurrentFrame[0] + nFrameForSRRF];
 
-    float xc = (xM + 0.5) / magnification + shiftX; // continuous space position at the centre of magnified pixel
-    float yc = (yM + 0.5) / magnification + shiftY;
+    const float xc = (xM + 0.5) / magnification + shiftX; // continuous space position at the centre of magnified pixel
+    const float yc = (yM + 0.5) / magnification + shiftY;
+    const float sigma22 = 2 * sigma * sigma; // TODO: add as hardcoded value?
 
     float CGLH = 0; // CGLH stands for Radiality original name - Culley-Gustafsson-Laine-Henriques transform
     float distanceWeightSum = 0;
-    float sigma22 = 2 * sigma * sigma;
 
     float vx, vy, Gx, Gy;
 //    float sigma = fwhm / 2.354f; // Sigma = 0.21 * lambda/NA in theory
@@ -310,7 +340,7 @@ __kernel void calculateRadialGradientConvergence(
 __kernel void kernelIncrementFramePosition(
     __global int* nCurrentFrame
     ){
-    int i = get_global_id(0);
+    const int i = get_global_id(0);
     nCurrentFrame[i] = nCurrentFrame[i] + 1;
 }
 

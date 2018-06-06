@@ -52,7 +52,7 @@ public class liveSRRF_optimised_ implements PlugIn {
 
     private final int radiusCCM = 5;
     private final String[] reconstructionLabels = {"AVG", "STD", "RawInt"};
-    private final String LiveSRRFVersion = "v0.1";
+    private final String LiveSRRFVersion = "v0.2";
 
     private float[] shiftX, shiftY;
 
