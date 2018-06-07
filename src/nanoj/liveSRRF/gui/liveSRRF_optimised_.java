@@ -1,9 +1,6 @@
 package nanoj.liveSRRF.gui;
 
-import ij.IJ;
-import ij.ImagePlus;
-import ij.ImageStack;
-import ij.WindowManager;
+import ij.*;
 import ij.gui.DialogListener;
 import ij.gui.GenericDialog;
 import ij.gui.NonBlockingGenericDialog;
@@ -12,12 +9,16 @@ import ij.measure.Calibration;
 import ij.plugin.PlugIn;
 import ij.process.FloatProcessor;
 import ij.process.ImageProcessor;
+import nanoj.core.java.io.zip.SaveFileInZip;
+import nanoj.core.java.io.zip.virtualStacks.FullFramesVirtualStack;
 import nanoj.core2.NanoJPrefs;
 import nanoj.core2.NanoJProfiler;
+import net.imglib2.img.display.imagej.ImageJVirtualStack;
 import org.python.modules.math;
 import nanoj.liveSRRF.liveSRRF_CL;
 
 import java.awt.*;
+import java.io.IOException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
@@ -38,21 +39,18 @@ public class liveSRRF_optimised_ implements PlugIn {
             height,
             nGPUloadPerSRRFframe;
 
-    private ImagePlus impSRRFavg,
-            impSRRFstd,
-            impRawInterpolated;
-
     private float fwhm, maxMemoryGPU;
 
     private boolean correctVibration,
             calculateAVG,
             calculateSTD,
             doFusion,
-            getInterpolatedImage;
+            getInterpolatedImage,
+            writeToDisk;
 
     private final int radiusCCM = 5;
-    private final String[] reconstructionLabels = {"AVG", "STD", "RawInt"};
-    private final String LiveSRRFVersion = "v0.2";
+    private final String LiveSRRFVersion = "v0.3";
+    private String pathToDisk = "";
 
     private float[] shiftX, shiftY;
 
@@ -60,13 +58,22 @@ public class liveSRRF_optimised_ implements PlugIn {
     private ImagePlus imp;
     private ImagePlus impCCM = null;
 
+    private ImagePlus impSRRFavg,
+            impSRRFstd,
+            impRawInterpolated;
+
+
     // Advanced formats
     private NanoJPrefs prefs = new NanoJPrefs(this.getClass().getName());
     private NanoJProfiler prof = new NanoJProfiler();
 
+    SaveFileInZip saveFileInZip;
+
 
     @Override
     public void run(String arg) {
+
+        ImageJVirtualStack ijVS;
 
         // Get raw data
         imp = WindowManager.getCurrentImage(); // TODO: depending on the size of data and RAM, consider using Virtual Stack load
@@ -80,10 +87,10 @@ public class liveSRRF_optimised_ implements PlugIn {
         // Build GUI
         Font headerFont = new Font("Arial", Font.BOLD, 16);
         NonBlockingGenericDialog gd = new NonBlockingGenericDialog("liveSRRF " + LiveSRRFVersion);
+        gd.addMessage("-=-= SRRF parameters =-=-\n", headerFont);
         gd.addNumericField("Magnification (default: 5)", prefs.get("magnification", 5), 0);
         gd.addNumericField("FWHM (pixels, default: 2)", prefs.get("fwhm", 2), 2);
         gd.addNumericField("Sensitivity (default: 3)", prefs.get("sensitivity", 3), 0);
-
         gd.addNumericField("# frames for SRRF (0 = auto)", prefs.get("nFrameForSRRF", 0), 0);
         gd.addCheckbox("Correct vibration", prefs.get("correctVibration", false));
 
@@ -97,11 +104,18 @@ public class liveSRRF_optimised_ implements PlugIn {
         gd.addNumericField("Gap between SR frame (frames, default: 50)", prefs.get("frameGap", 50), 0);
         gd.addMessage("Warning: Rolling analysis may lead to long computation times.");
 
-        gd.addMessage("-=-= Memory =-=-\n", headerFont);
+        gd.addMessage("-=-= GPU memory =-=-\n", headerFont);
         gd.addNumericField("Maximum amount of memory on GPU (MB, default: 1000)", prefs.get("maxMemoryGPU", 500), 2);
         gd.addMessage("Giving SRRF access to a lot of memory speeds up the reconstruction\n" +
                 "but may slow down the graphics card for your Minecraft game that you have \n" +
                 "running in parallel.");
+
+        gd.addMessage("-=-= Write to disk =-=-\n", headerFont);
+        gd.addCheckbox("Directly write to disk (default: off)", false);
+        gd.addMessage(pathToDisk);
+        gd.addMessage("Writing directly to disk will slow down the reconstruction but \n" +
+                "will allow for long time courses to be reconstructed without\n" +
+                "exceeding RAM capacity.");
 
         MyDialogListener dl = new MyDialogListener(); // this serves to estimate a few indicators such as RAM usage
         gd.addDialogListener(dl);
@@ -110,6 +124,7 @@ public class liveSRRF_optimised_ implements PlugIn {
 
         // Save last user entries
         savePreferences();
+
 
         IJ.log("\\Clear");  // Clear the log window
         IJ.log("-------------------------------------");
@@ -130,6 +145,23 @@ public class liveSRRF_optimised_ implements PlugIn {
         IJ.log("# reconstructed frames: " + nSRRFframe);
         IJ.log("# GPU load / SRRF frame: " + nGPUloadPerSRRFframe);
 
+        // Initialize ZipSaver in case we're writing to disk
+        if (writeToDisk) {
+            calculateAVG = false;
+            calculateSTD = false;
+            getInterpolatedImage = false;
+            String fileName = pathToDisk + imp.getTitle() + " - liveSRRF.zip";
+            IJ.log("Write to disk enabled");
+            IJ.log(fileName);
+
+            try {
+                saveFileInZip = new SaveFileInZip(fileName, false);
+            } catch (IOException e) {
+                IJ.error("Whoops, it seems that "+fileName+" doesn't exist. At least there's icecream...");
+                e.printStackTrace();
+            }
+        }
+
         // Initialize variables
         int indexStartSRRFframe;
         int nFrameToLoad;
@@ -143,6 +175,8 @@ public class liveSRRF_optimised_ implements PlugIn {
         ImageStack imsSRRFavg = new ImageStack(width * magnification, height * magnification);
         ImageStack imsSRRFstd = new ImageStack(width * magnification, height * magnification);
         ImageStack imsRawInterpolated = new ImageStack(width * magnification, height * magnification);
+
+        ImagePlus impTemp;
 
         // Start looping trough SRRF frames
         for (int r = 1; r <= nSRRFframe; r++) {
@@ -174,14 +208,37 @@ public class liveSRRF_optimised_ implements PlugIn {
             }
 
             imsBuffer = liveSRRF.readSRRFbuffer();
-            imsSRRFavg.addSlice(reconstructionLabels[0], imsBuffer.getProcessor(1));
-            imsSRRFstd.addSlice(reconstructionLabels[1], imsBuffer.getProcessor(2));
-            imsRawInterpolated.addSlice(reconstructionLabels[2], imsBuffer.getProcessor(3));
+            if (writeToDisk) {
+                try {
+                    impTemp = new ImagePlus("impTemp",imsBuffer);
+                    impTemp.setStack(imsBuffer);
+                    saveFileInZip.addTiffImage("SRRF frame="+r,  impTemp);
+                    saveFileInZip.flush();
+
+                } catch (IOException e) {
+                    IJ.error("Whoops, it seems that there was a problem with saving to disk... (insert sad face here).");
+                    e.printStackTrace();
+                }
+            } else {
+                imsSRRFavg.addSlice(imsBuffer.getProcessor(1));
+                imsSRRFstd.addSlice(imsBuffer.getProcessor(2));
+                imsRawInterpolated.addSlice(imsBuffer.getProcessor(3));
+            }
             IJ.log("RAM used: " + IJ.freeMemory());
         }
 
         // Release the GPU
         liveSRRF.release();
+
+        // Close the ZipSaver
+        if (writeToDisk) {
+            try {
+                saveFileInZip.close();
+            } catch (IOException e) {
+                IJ.error("Error closing the ZipSaver !!!!!");
+                e.printStackTrace();
+            }
+        }
 
         //Display results
         if (calculateAVG || doFusion) {
@@ -244,7 +301,7 @@ public class liveSRRF_optimised_ implements PlugIn {
 
         // Bye-bye and report
         IJ.log("-------------------------------------");
-        IJ.log("Memory usage: "+IJ.freeMemory());  // this also runs the garbage collector
+        IJ.log("Memory usage: " + IJ.freeMemory());  // this also runs the garbage collector
         IJ.log("Thank you for your custom on this beautiful day !");
         IJ.log("-------------------------------------");
 //        IJ.log(prof.report());
@@ -276,7 +333,9 @@ public class liveSRRF_optimised_ implements PlugIn {
 
         frameGap = (int) gd.getNextNumber();
         maxMemoryGPU = (int) gd.getNextNumber();
+        writeToDisk = gd.getNextBoolean();
 
+        // Calculate the parameters based on user inputs
         if (nFrameForSRRF == 0) nFrameForSRRF = nSlices;
         nFrameForSRRF = min(nSlices, nFrameForSRRF);
         nSRRFframe = (int) ((float) (nSlices - nFrameForSRRF) / (float) frameGap) + 1;
@@ -312,6 +371,22 @@ public class liveSRRF_optimised_ implements PlugIn {
         }
 
         nGPUloadPerSRRFframe = (int) math.ceil((float) nFrameForSRRF / (float) nFrameOnGPU);
+
+        if (writeToDisk) {
+            pathToDisk = IJ.getDirectory("");
+//            folderChooser.setCurrentDirectory(new java.io.File("."));
+//            folderChooser.setDialogTitle("Choose a folder to save dataset");
+//            folderChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+//            folderChooser.setAcceptAllFileFilterUsed(false);
+//
+//            writeToDiskFile = folderChooser.getSelectedFile();
+//            if (folderChooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) {
+//                System.out.println("getCurrentDirectory(): " + folderChooser.getCurrentDirectory());
+//                System.out.println("getSelectedFile() : " + folderChooser.getSelectedFile());
+//            } else {
+//                System.out.println("No Selection ");
+//            }
+        }
 
         return goodToGo;
     }
