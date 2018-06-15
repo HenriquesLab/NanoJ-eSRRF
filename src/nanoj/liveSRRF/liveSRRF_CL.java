@@ -2,7 +2,6 @@ package nanoj.liveSRRF;
 
 import com.jogamp.opencl.*;
 import ij.IJ;
-import ij.ImagePlus;
 import ij.ImageStack;
 import ij.process.FloatProcessor;
 import nanoj.core2.NanoJProfiler;

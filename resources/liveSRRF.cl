@@ -4,7 +4,7 @@
 #define sensitivity $SENSITIVITY$
 #define GxGyMagnification $GXGYMAGNIFICATION$
 #define sigma $SIGMA$
-#define radius $RADIUS$ // TODO: check radius calculation
+#define radius $RADIUS$
 #define w $WIDTH$
 #define h $HEIGHT$
 #define wh $WH$
@@ -31,7 +31,7 @@ static float cubic(float x) {
 }
 
 // Interpolation function: interpolate in continuous space with respect to the reference of the array
-static float getInterpolatedValue(__global float* array, int const width, int const height, float const x, float const y, int const f) { // TODO: review the grid position in the interpolation (seems offset)
+static float getInterpolatedValue(__global float* array, int const width, int const height, float const x, float const y, int const f) {
     const int u0 = (int) floor(x);
     const int v0 = (int) floor(y);
     const int whf = width*height*f;
@@ -227,7 +227,7 @@ __kernel void calculateRadialGradientConvergence(
                         Gy = getVBoundaryCheck(GyArray, wInt, hInt, GxGyMagnification*(vx - vxy_offset), GxGyMagnification*(vy - vxy_offset) + vxy_ArrayShift, nCurrentFrame[1]);
 
                         float distanceWeight = distance*exp(-(distance*distance)/sigma22);  // TODO: dGauss: can use Taylor expansion there
-                        distanceWeight = distanceWeight * distanceWeight * distanceWeight * distanceWeight ;  // TODO: dGauss: what power is best? Let's FRC !
+                        distanceWeight = distanceWeight * distanceWeight * distanceWeight * distanceWeight ;
                         distanceWeightSum += distanceWeight;
                         float GdotR = (Gx * (vx - xc) + Gy * (vy - yc)); // tells you if vector was pointing inward or outward
 

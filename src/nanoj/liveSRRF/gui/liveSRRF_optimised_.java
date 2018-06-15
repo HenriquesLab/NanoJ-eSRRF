@@ -10,6 +10,7 @@ import ij.plugin.PlugIn;
 import ij.process.FloatProcessor;
 import ij.process.ImageProcessor;
 import nanoj.core.java.io.zip.SaveFileInZip;
+import nanoj.core.java.io.zip.virtualStacks.FullFramesVirtualStack;
 import nanoj.core2.NanoJPrefs;
 import nanoj.core2.NanoJProfiler;
 import org.python.modules.math;
@@ -48,7 +49,7 @@ public class liveSRRF_optimised_ implements PlugIn {
             previousWriteToDisk = false;
 
     private final int radiusCCM = 5;
-    private final String LiveSRRFVersion = "v0.4";
+    private final String LiveSRRFVersion = "v0.5";
     private String pathToDisk = "",
             fileName;
 
@@ -77,6 +78,7 @@ public class liveSRRF_optimised_ implements PlugIn {
         // Get raw data
         imp = WindowManager.getCurrentImage(); // TODO: depending on the size of data and RAM, consider using Virtual Stack load
         if (imp == null) imp = IJ.openImage();
+        if (imp == null) return;
         imp.show();
 
         nSlices = imp.getImageStack().getSize();
@@ -223,7 +225,7 @@ public class liveSRRF_optimised_ implements PlugIn {
                 try {
                     if (calculateAVG) {
                         impTemp = new ImagePlus("\"AVG stack - frame=" + r + ".tif", imsBuffer.getProcessor(1));
-                        impTemp.setCalibration(cal); //TODO: scale is carried forward fine but not the unit?
+                        impTemp.setCalibration(cal);
                         saveFileInZip.addTiffImage("AVG stack - frame=" + r, impTemp);
                     }
                     if (calculateSTD) {
@@ -231,7 +233,7 @@ public class liveSRRF_optimised_ implements PlugIn {
                         impTemp.setCalibration(cal);
                         saveFileInZip.addTiffImage("STD stack - frame=" + r, impTemp);
                     }
-                    if (getInterpolatedImage){
+                    if (getInterpolatedImage) {
                         impTemp = new ImagePlus("\"AVG stack - frame=" + r + ".tif", imsBuffer.getProcessor(3));
                         impTemp.setCalibration(cal);
                         saveFileInZip.addTiffImage("INT stack - frame=" + r, impTemp);
@@ -255,15 +257,66 @@ public class liveSRRF_optimised_ implements PlugIn {
         // Release the GPU
         liveSRRF.release();
 
+        IJ.log("-------------------------------------");
         // Close the ZipSaver & display stack as virtual stacks
         if (writeToDisk) {
+            IJ.log("Results displayed as virtual stacks.");
+
             try {
                 saveFileInZip.close();
             } catch (IOException e) {
                 IJ.error("Error closing the ZipSaver !!!!!");
                 e.printStackTrace();
             }
+
+            try {
+                if (calculateAVG) {
+                    FullFramesVirtualStack vsimsSRRFavg = new FullFramesVirtualStack(fileName, true);
+                    for (int f = 0; f < nSRRFframe; f++) {
+                        vsimsSRRFavg.deleteSlice((nSRRFframe - f) * 3);
+                        vsimsSRRFavg.deleteSlice((nSRRFframe - f) * 3 - 1);
+                    }
+
+                    impSRRFavg = new ImagePlus(imp.getTitle() + " - liveSRRF (AVG)", vsimsSRRFavg);
+                    impSRRFavg.setCalibration(cal);
+                    IJ.run(impSRRFavg, "Enhance Contrast", "saturated=0.5");
+                    impSRRFavg.show();
+                }
+
+                if (calculateSTD) {
+                    FullFramesVirtualStack vsimsSRRFstd = new FullFramesVirtualStack(fileName, true);
+                    for (int f = 0; f < nSRRFframe; f++) {
+                        vsimsSRRFstd.deleteSlice((nSRRFframe - f) * 3);
+                        vsimsSRRFstd.deleteSlice((nSRRFframe - f) * 3 - 2);
+                    }
+
+                    impSRRFstd = new ImagePlus(imp.getTitle() + " - liveSRRF (STD)", vsimsSRRFstd);
+                    impSRRFstd.setCalibration(cal);
+                    IJ.run(impSRRFstd, "Enhance Contrast", "saturated=0.5");
+                    impSRRFstd.show();
+                }
+
+                if (getInterpolatedImage) {
+                    FullFramesVirtualStack vsimsRawInterpolated = new FullFramesVirtualStack(fileName, true);
+                    for (int f = 0; f < nSRRFframe; f++) {
+                        vsimsRawInterpolated.deleteSlice((nSRRFframe - f) * 3 - 1);
+                        vsimsRawInterpolated.deleteSlice((nSRRFframe - f) * 3 - 2);
+                    }
+
+                    impRawInterpolated = new ImagePlus(imp.getTitle() + " - interpolated image", vsimsRawInterpolated);
+                    impRawInterpolated.setCalibration(cal);
+                    IJ.run(impRawInterpolated, "Enhance Contrast", "saturated=0.5");
+                    impRawInterpolated.show();
+                }
+
+            } catch (IOException e) {
+                IJ.error("Whoops, it seems that there was a problem with opening from disk... (insert sad face here).");
+                e.printStackTrace();
+            }
+
+
         } else {
+
 
             //Display results
             if (calculateAVG || doFusion) {
@@ -298,8 +351,8 @@ public class liveSRRF_optimised_ implements PlugIn {
             }
         }
 
+
         // Bye-bye and report
-        IJ.log("-------------------------------------");
         IJ.log("Memory usage: " + IJ.freeMemory());  // this also runs the garbage collector
         IJ.log("Thank you for your custom on this beautiful day !");
         IJ.log("-------------------------------------");
@@ -428,6 +481,7 @@ public class liveSRRF_optimised_ implements PlugIn {
 
         memUsed[0] *= Float.SIZE / 8000000d;
         memUsed[1] *= Float.SIZE / 8000000d;
+        // TODO: if allocated RAM to Fiji is exceeded, suggest using WriteToDisk !
 
         return memUsed;
     }
