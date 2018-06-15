@@ -62,8 +62,6 @@ public class liveSRRF_optimised_ implements PlugIn {
             impSRRFstd,
             impRawInterpolated;
 
-//    private VirtualStack vsAVG;
-
 
     // Advanced formats
     private NanoJPrefs prefs = new NanoJPrefs(this.getClass().getName());
@@ -137,6 +135,8 @@ public class liveSRRF_optimised_ implements PlugIn {
         IJ.log("-------------------------------------");
         IJ.log("Parameters:");
         IJ.log("Magnification: " + magnification);
+        IJ.log("FWHM: " + fwhm + " pixels");
+        IJ.log("Sensitivity: " + sensitivity);
         IJ.log("# frames for SRRF: " + nFrameForSRRF);
         IJ.log("# frames gap: " + frameGap);
         IJ.log("# frames on GPU: " + nFrameOnGPU);
@@ -169,29 +169,17 @@ public class liveSRRF_optimised_ implements PlugIn {
 
         ImageStack imsBuffer;
 
-        ImageStack imsRawData = new ImageStack(width, height);
+        ImageStack imsRawData;
         ImageStack imsSRRFavg = new ImageStack(width * magnification, height * magnification);
         ImageStack imsSRRFstd = new ImageStack(width * magnification, height * magnification);
         ImageStack imsRawInterpolated = new ImageStack(width * magnification, height * magnification);
 
-        ImagePlus impTemp;
-
-//        ImageProcessor ip = imp.getProcessor();
-//        ColorModel cm = ip.getColorModel();
-//        String pathtoDiskvs = pathToDisk+"vsTest.tif";
-//        vsAVG = new VirtualStack(width * magnification, height * magnification, cm, pathtoDiskvs);
-//        vsAVG.setBitDepth(16);
-//
-//        vsAVG.addSlice("FirstSlice");
-//        imp.setSlice(1);
-//        ip = imp.getProcessor();
-//        vsAVG.setPixels(ip.getPixels(), 1);
-//
-//        vsAVG.addSlice("SecondSlice");
-//        imp.setSlice(2);
-//        ip = imp.getProcessor();
-//        vsAVG.setPixels(ip.getPixels(), 2);
-
+        ImagePlus impTemp = new ImagePlus();
+        impTemp.copyScale(imp); // make sure we copy the pixel sizes correctly across
+        Calibration cal = impTemp.getCalibration();
+        cal.pixelWidth /= magnification;
+        cal.pixelHeight /= magnification;
+        cal.setUnit(imp.getCalibration().getUnit());
 
         // Start looping trough SRRF frames --------------------------------------------
         for (int r = 1; r <= nSRRFframe; r++) {
@@ -221,7 +209,6 @@ public class liveSRRF_optimised_ implements PlugIn {
 //                IJ.log("Index start: " + (indexStartSRRFframe + nFrameOnGPU * l));
 
                 imsRawData = new ImageStack(width, height);
-
                 for (int f = 0; f < nFrameToLoad; f++) {
                     imp.setSlice(indexStartSRRFframe + nFrameOnGPU * l + f);
                     imsRawData.addSlice(imp.getProcessor());
@@ -233,31 +220,25 @@ public class liveSRRF_optimised_ implements PlugIn {
             imsBuffer = liveSRRF.readSRRFbuffer();
 
             if (writeToDisk) {
-                if (calculateAVG) {
-                    try {
-                        saveFileInZip.addTiffImage("AVG stack - frame=" + r, imsBuffer.getProcessor(1));
-                    } catch (IOException e) {
-                        IJ.error("Whoops, it seems that there was a problem with saving to disk... (insert sad face here).");
-                        e.printStackTrace();
+                try {
+                    if (calculateAVG) {
+                        impTemp = new ImagePlus("\"AVG stack - frame=" + r + ".tif", imsBuffer.getProcessor(1));
+                        impTemp.setCalibration(cal); //TODO: scale is carried forward fine but not the unit?
+                        saveFileInZip.addTiffImage("AVG stack - frame=" + r, impTemp);
                     }
-                }
-
-                if (calculateSTD) {
-                    try {
-                        saveFileInZip.addTiffImage("STD stack - frame=" + r, imsBuffer.getProcessor(2));
-                    } catch (IOException e) {
-                        IJ.error("Whoops, it seems that there was a problem with saving to disk... (insert sad face here).");
-                        e.printStackTrace();
+                    if (calculateSTD) {
+                        impTemp = new ImagePlus("\"AVG stack - frame=" + r + ".tif", imsBuffer.getProcessor(2));
+                        impTemp.setCalibration(cal);
+                        saveFileInZip.addTiffImage("STD stack - frame=" + r, impTemp);
                     }
-                }
-
-                if (getInterpolatedImage) {
-                    try {
-                        saveFileInZip.addTiffImage("INT stack - frame=" + r, imsBuffer.getProcessor(3));
-                    } catch (IOException e) {
-                        IJ.error("Whoops, it seems that there was a problem with saving to disk... (insert sad face here).");
-                        e.printStackTrace();
+                    if (getInterpolatedImage){
+                        impTemp = new ImagePlus("\"AVG stack - frame=" + r + ".tif", imsBuffer.getProcessor(3));
+                        impTemp.setCalibration(cal);
+                        saveFileInZip.addTiffImage("INT stack - frame=" + r, impTemp);
                     }
+                } catch (IOException e) {
+                    IJ.error("Whoops, it seems that there was a problem with saving to disk... (insert sad face here).");
+                    e.printStackTrace();
                 }
 
 
@@ -286,35 +267,17 @@ public class liveSRRF_optimised_ implements PlugIn {
 
             //Display results
             if (calculateAVG || doFusion) {
-                impSRRFavg = new ImagePlus(imp.getTitle() + " - liveSRRF (AVG projection)");
-                impSRRFavg.copyScale(imp); // make sure we copy the pixel sizes correctly across
-                Calibration cal = impSRRFavg.getCalibration();
-                cal.pixelWidth /= magnification;
-                cal.pixelHeight /= magnification;
-
-                impSRRFavg.setStack(imsSRRFavg);
+                impSRRFavg = new ImagePlus(imp.getTitle() + " - liveSRRF (AVG)", imsSRRFavg);
+                impSRRFavg.setCalibration(cal);
                 IJ.run(impSRRFavg, "Enhance Contrast", "saturated=0.5");
-
-                ImagePlus impAVG = impSRRFavg.duplicate();
-                impSRRFavg.close();
-                impAVG.setTitle(imp.getTitle() + " - liveSRRF (AVG)");
-                impAVG.show();
+                impSRRFavg.show();
             }
 
             if (calculateSTD || doFusion) {
-                impSRRFstd = new ImagePlus(imp.getTitle() + " - liveSRRF (STD projection)");
-                impSRRFstd.copyScale(imp); // make sure we copy the pixel sizes correctly across
-                Calibration cal = impSRRFstd.getCalibration();
-                cal.pixelWidth /= magnification;
-                cal.pixelHeight /= magnification;
-
-                impSRRFstd.setStack(imsSRRFstd);
+                impSRRFstd = new ImagePlus(imp.getTitle() + " - liveSRRF (STD)", imsSRRFstd);
+                impSRRFstd.setCalibration(cal);
                 IJ.run(impSRRFstd, "Enhance Contrast", "saturated=0.5");
-
-                ImagePlus impSTD = impSRRFstd.duplicate();
-                impSRRFstd.close();
-                impSTD.setTitle(imp.getTitle() + " - liveSRRF (STD)");
-                impSTD.show();
+                impSRRFstd.show();
             }
 
 //        if (doFusion) {
@@ -328,19 +291,10 @@ public class liveSRRF_optimised_ implements PlugIn {
 //        }
 
             if (getInterpolatedImage) {
-                impRawInterpolated = new ImagePlus(imp.getTitle() + " - Interpolated");
-                impRawInterpolated.copyScale(imp); // make sure we copy the pixel sizes correctly across
-                Calibration cal = impRawInterpolated.getCalibration();
-                cal.pixelWidth /= magnification;
-                cal.pixelHeight /= magnification;
-
-                impRawInterpolated.setStack(imsRawInterpolated);
+                impRawInterpolated = new ImagePlus(imp.getTitle() + " - interpolated image", imsRawInterpolated);
+                impRawInterpolated.setCalibration(cal);
                 IJ.run(impRawInterpolated, "Enhance Contrast", "saturated=0.5");
-
-                ImagePlus impINT = impRawInterpolated.duplicate();
-                impRawInterpolated.close();
-                impINT.setTitle(imp.getTitle() + " - interpolated image");
-                impINT.show();
+                impRawInterpolated.show();
             }
         }
 
