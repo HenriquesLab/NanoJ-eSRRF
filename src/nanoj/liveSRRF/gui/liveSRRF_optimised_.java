@@ -10,10 +10,8 @@ import ij.plugin.PlugIn;
 import ij.process.FloatProcessor;
 import ij.process.ImageProcessor;
 import nanoj.core.java.io.zip.SaveFileInZip;
-import nanoj.core.java.io.zip.virtualStacks.FullFramesVirtualStack;
 import nanoj.core2.NanoJPrefs;
 import nanoj.core2.NanoJProfiler;
-import net.imglib2.img.display.imagej.ImageJVirtualStack;
 import org.python.modules.math;
 import nanoj.liveSRRF.liveSRRF_CL;
 
@@ -46,11 +44,13 @@ public class liveSRRF_optimised_ implements PlugIn {
             calculateSTD,
             doFusion,
             getInterpolatedImage,
-            writeToDisk;
+            writeToDisk,
+            previousWriteToDisk = false;
 
     private final int radiusCCM = 5;
-    private final String LiveSRRFVersion = "v0.3";
-    private String pathToDisk = "";
+    private final String LiveSRRFVersion = "v0.4";
+    private String pathToDisk = "",
+            fileName;
 
     private float[] shiftX, shiftY;
 
@@ -61,6 +61,8 @@ public class liveSRRF_optimised_ implements PlugIn {
     private ImagePlus impSRRFavg,
             impSRRFstd,
             impRawInterpolated;
+
+//    private VirtualStack vsAVG;
 
 
     // Advanced formats
@@ -73,7 +75,6 @@ public class liveSRRF_optimised_ implements PlugIn {
     @Override
     public void run(String arg) {
 
-        ImageJVirtualStack ijVS;
 
         // Get raw data
         imp = WindowManager.getCurrentImage(); // TODO: depending on the size of data and RAM, consider using Virtual Stack load
@@ -112,7 +113,6 @@ public class liveSRRF_optimised_ implements PlugIn {
 
         gd.addMessage("-=-= Write to disk =-=-\n", headerFont);
         gd.addCheckbox("Directly write to disk (default: off)", false);
-        gd.addMessage(pathToDisk);
         gd.addMessage("Writing directly to disk will slow down the reconstruction but \n" +
                 "will allow for long time courses to be reconstructed without\n" +
                 "exceeding RAM capacity.");
@@ -147,17 +147,14 @@ public class liveSRRF_optimised_ implements PlugIn {
 
         // Initialize ZipSaver in case we're writing to disk
         if (writeToDisk) {
-            calculateAVG = false;
-            calculateSTD = false;
-            getInterpolatedImage = false;
-            String fileName = pathToDisk + imp.getTitle() + " - liveSRRF.zip";
+            fileName = pathToDisk + imp.getTitle() + " - liveSRRF.zip";
             IJ.log("Write to disk enabled");
             IJ.log(fileName);
 
             try {
                 saveFileInZip = new SaveFileInZip(fileName, false);
             } catch (IOException e) {
-                IJ.error("Whoops, it seems that "+fileName+" doesn't exist. At least there's icecream...");
+                IJ.error("Whoops, it seems that " + fileName + " doesn't exist. At least there's ice-cream...");
                 e.printStackTrace();
             }
         }
@@ -172,13 +169,31 @@ public class liveSRRF_optimised_ implements PlugIn {
 
         ImageStack imsBuffer;
 
+        ImageStack imsRawData = new ImageStack(width, height);
         ImageStack imsSRRFavg = new ImageStack(width * magnification, height * magnification);
         ImageStack imsSRRFstd = new ImageStack(width * magnification, height * magnification);
         ImageStack imsRawInterpolated = new ImageStack(width * magnification, height * magnification);
 
         ImagePlus impTemp;
 
-        // Start looping trough SRRF frames
+//        ImageProcessor ip = imp.getProcessor();
+//        ColorModel cm = ip.getColorModel();
+//        String pathtoDiskvs = pathToDisk+"vsTest.tif";
+//        vsAVG = new VirtualStack(width * magnification, height * magnification, cm, pathtoDiskvs);
+//        vsAVG.setBitDepth(16);
+//
+//        vsAVG.addSlice("FirstSlice");
+//        imp.setSlice(1);
+//        ip = imp.getProcessor();
+//        vsAVG.setPixels(ip.getPixels(), 1);
+//
+//        vsAVG.addSlice("SecondSlice");
+//        imp.setSlice(2);
+//        ip = imp.getProcessor();
+//        vsAVG.setPixels(ip.getPixels(), 2);
+
+
+        // Start looping trough SRRF frames --------------------------------------------
         for (int r = 1; r <= nSRRFframe; r++) {
             liveSRRF.resetFramePosition();
             liveSRRF.loadShiftXYGPUbuffer(shiftX, shiftY);
@@ -189,48 +204,77 @@ public class liveSRRF_optimised_ implements PlugIn {
             IJ.log("Stack index start: " + indexStartSRRFframe);
             if (correctVibration) calculateShiftArray(indexStartSRRFframe);
 
+            IJ.showProgress(r, nSRRFframe);
 
             for (int l = 0; l < nGPUloadPerSRRFframe; l++) {
 
                 // Check if user is cancelling calculation
-                IJ.showProgress(r, nSRRFframe);
                 if (IJ.escapePressed()) {
                     IJ.resetEscape();
                     liveSRRF.release();
                     return;
                 }
 
-                IJ.log("----------------------------");
+//                IJ.log("----------------------------");
                 nFrameToLoad = min(nFrameOnGPU, nFrameForSRRF - nFrameOnGPU * l);
 //                IJ.log("Number of frames to load: " + nFrameToLoad);
-                IJ.log("Index start: " + (indexStartSRRFframe + nFrameOnGPU * l));
-                liveSRRF.calculateSRRF(imp, indexStartSRRFframe + nFrameOnGPU * l, nFrameToLoad);
+//                IJ.log("Index start: " + (indexStartSRRFframe + nFrameOnGPU * l));
+
+                imsRawData = new ImageStack(width, height);
+
+                for (int f = 0; f < nFrameToLoad; f++) {
+                    imp.setSlice(indexStartSRRFframe + nFrameOnGPU * l + f);
+                    imsRawData.addSlice(imp.getProcessor());
+                }
+
+                liveSRRF.calculateSRRF(imsRawData);
             }
 
             imsBuffer = liveSRRF.readSRRFbuffer();
-            if (writeToDisk) {
-                try {
-                    impTemp = new ImagePlus("impTemp",imsBuffer);
-                    impTemp.setStack(imsBuffer);
-                    saveFileInZip.addTiffImage("SRRF frame="+r,  impTemp);
-                    saveFileInZip.flush();
 
-                } catch (IOException e) {
-                    IJ.error("Whoops, it seems that there was a problem with saving to disk... (insert sad face here).");
-                    e.printStackTrace();
+            if (writeToDisk) {
+                if (calculateAVG) {
+                    try {
+                        saveFileInZip.addTiffImage("AVG stack - frame=" + r, imsBuffer.getProcessor(1));
+                    } catch (IOException e) {
+                        IJ.error("Whoops, it seems that there was a problem with saving to disk... (insert sad face here).");
+                        e.printStackTrace();
+                    }
                 }
+
+                if (calculateSTD) {
+                    try {
+                        saveFileInZip.addTiffImage("STD stack - frame=" + r, imsBuffer.getProcessor(2));
+                    } catch (IOException e) {
+                        IJ.error("Whoops, it seems that there was a problem with saving to disk... (insert sad face here).");
+                        e.printStackTrace();
+                    }
+                }
+
+                if (getInterpolatedImage) {
+                    try {
+                        saveFileInZip.addTiffImage("INT stack - frame=" + r, imsBuffer.getProcessor(3));
+                    } catch (IOException e) {
+                        IJ.error("Whoops, it seems that there was a problem with saving to disk... (insert sad face here).");
+                        e.printStackTrace();
+                    }
+                }
+
+
             } else {
-                imsSRRFavg.addSlice(imsBuffer.getProcessor(1));
-                imsSRRFstd.addSlice(imsBuffer.getProcessor(2));
-                imsRawInterpolated.addSlice(imsBuffer.getProcessor(3));
+                if (calculateAVG) imsSRRFavg.addSlice(imsBuffer.getProcessor(1));
+                if (calculateSTD) imsSRRFstd.addSlice(imsBuffer.getProcessor(2));
+                if (getInterpolatedImage) imsRawInterpolated.addSlice(imsBuffer.getProcessor(3));
             }
             IJ.log("RAM used: " + IJ.freeMemory());
         }
+        // End looping trough SRRF frames --------------------------------------------
+
 
         // Release the GPU
         liveSRRF.release();
 
-        // Close the ZipSaver
+        // Close the ZipSaver & display stack as virtual stacks
         if (writeToDisk) {
             try {
                 saveFileInZip.close();
@@ -238,40 +282,40 @@ public class liveSRRF_optimised_ implements PlugIn {
                 IJ.error("Error closing the ZipSaver !!!!!");
                 e.printStackTrace();
             }
-        }
+        } else {
 
-        //Display results
-        if (calculateAVG || doFusion) {
-            impSRRFavg = new ImagePlus(imp.getTitle() + " - liveSRRF (AVG projection)");
-            impSRRFavg.copyScale(imp); // make sure we copy the pixel sizes correctly across
-            Calibration cal = impSRRFavg.getCalibration();
-            cal.pixelWidth /= magnification;
-            cal.pixelHeight /= magnification;
+            //Display results
+            if (calculateAVG || doFusion) {
+                impSRRFavg = new ImagePlus(imp.getTitle() + " - liveSRRF (AVG projection)");
+                impSRRFavg.copyScale(imp); // make sure we copy the pixel sizes correctly across
+                Calibration cal = impSRRFavg.getCalibration();
+                cal.pixelWidth /= magnification;
+                cal.pixelHeight /= magnification;
 
-            impSRRFavg.setStack(imsSRRFavg);
-            IJ.run(impSRRFavg, "Enhance Contrast", "saturated=0.5");
+                impSRRFavg.setStack(imsSRRFavg);
+                IJ.run(impSRRFavg, "Enhance Contrast", "saturated=0.5");
 
-            ImagePlus impAVG = impSRRFavg.duplicate();
-            impSRRFavg.close();
-            impAVG.setTitle(imp.getTitle() + " - liveSRRF (AVG)");
-            impAVG.show();
-        }
+                ImagePlus impAVG = impSRRFavg.duplicate();
+                impSRRFavg.close();
+                impAVG.setTitle(imp.getTitle() + " - liveSRRF (AVG)");
+                impAVG.show();
+            }
 
-        if (calculateSTD || doFusion) {
-            impSRRFstd = new ImagePlus(imp.getTitle() + " - liveSRRF (STD projection)");
-            impSRRFstd.copyScale(imp); // make sure we copy the pixel sizes correctly across
-            Calibration cal = impSRRFstd.getCalibration();
-            cal.pixelWidth /= magnification;
-            cal.pixelHeight /= magnification;
+            if (calculateSTD || doFusion) {
+                impSRRFstd = new ImagePlus(imp.getTitle() + " - liveSRRF (STD projection)");
+                impSRRFstd.copyScale(imp); // make sure we copy the pixel sizes correctly across
+                Calibration cal = impSRRFstd.getCalibration();
+                cal.pixelWidth /= magnification;
+                cal.pixelHeight /= magnification;
 
-            impSRRFstd.setStack(imsSRRFstd);
-            IJ.run(impSRRFstd, "Enhance Contrast", "saturated=0.5");
+                impSRRFstd.setStack(imsSRRFstd);
+                IJ.run(impSRRFstd, "Enhance Contrast", "saturated=0.5");
 
-            ImagePlus impSTD = impSRRFstd.duplicate();
-            impSRRFstd.close();
-            impSTD.setTitle(imp.getTitle() + " - liveSRRF (STD)");
-            impSTD.show();
-        }
+                ImagePlus impSTD = impSRRFstd.duplicate();
+                impSRRFstd.close();
+                impSTD.setTitle(imp.getTitle() + " - liveSRRF (STD)");
+                impSTD.show();
+            }
 
 //        if (doFusion) {
 //            ImagePlus impSRRFfusion = new ImagePlus(imp.getTitle() + " - liveSRRF (fusion)");
@@ -283,20 +327,21 @@ public class liveSRRF_optimised_ implements PlugIn {
 //            ImageStack imsSRRFfusion = new ImageStack(width * magnification, height * magnification);
 //        }
 
-        if (getInterpolatedImage) {
-            impRawInterpolated = new ImagePlus(imp.getTitle() + " - Interpolated");
-            impRawInterpolated.copyScale(imp); // make sure we copy the pixel sizes correctly across
-            Calibration cal = impRawInterpolated.getCalibration();
-            cal.pixelWidth /= magnification;
-            cal.pixelHeight /= magnification;
+            if (getInterpolatedImage) {
+                impRawInterpolated = new ImagePlus(imp.getTitle() + " - Interpolated");
+                impRawInterpolated.copyScale(imp); // make sure we copy the pixel sizes correctly across
+                Calibration cal = impRawInterpolated.getCalibration();
+                cal.pixelWidth /= magnification;
+                cal.pixelHeight /= magnification;
 
-            impRawInterpolated.setStack(imsRawInterpolated);
-            IJ.run(impRawInterpolated, "Enhance Contrast", "saturated=0.5");
+                impRawInterpolated.setStack(imsRawInterpolated);
+                IJ.run(impRawInterpolated, "Enhance Contrast", "saturated=0.5");
 
-            ImagePlus impINT = impRawInterpolated.duplicate();
-            impRawInterpolated.close();
-            impINT.setTitle(imp.getTitle() + " - interpolated image");
-            impINT.show();
+                ImagePlus impINT = impRawInterpolated.duplicate();
+                impRawInterpolated.close();
+                impINT.setTitle(imp.getTitle() + " - interpolated image");
+                impINT.show();
+            }
         }
 
         // Bye-bye and report
@@ -304,7 +349,7 @@ public class liveSRRF_optimised_ implements PlugIn {
         IJ.log("Memory usage: " + IJ.freeMemory());  // this also runs the garbage collector
         IJ.log("Thank you for your custom on this beautiful day !");
         IJ.log("-------------------------------------");
-//        IJ.log(prof.report());
+        IJ.log(prof.report());
     }
 
 
@@ -372,8 +417,9 @@ public class liveSRRF_optimised_ implements PlugIn {
 
         nGPUloadPerSRRFframe = (int) math.ceil((float) nFrameForSRRF / (float) nFrameOnGPU);
 
-        if (writeToDisk) {
+        if (writeToDisk && !previousWriteToDisk) {
             pathToDisk = IJ.getDirectory("");
+            if (pathToDisk == null) writeToDisk = false;
 //            folderChooser.setCurrentDirectory(new java.io.File("."));
 //            folderChooser.setDialogTitle("Choose a folder to save dataset");
 //            folderChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
@@ -387,6 +433,8 @@ public class liveSRRF_optimised_ implements PlugIn {
 //                System.out.println("No Selection ");
 //            }
         }
+
+        previousWriteToDisk = writeToDisk;
 
         return goodToGo;
     }

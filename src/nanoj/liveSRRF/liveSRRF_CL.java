@@ -169,35 +169,30 @@ public class liveSRRF_CL {
 
 
     // --- Calculate SRRF images ---
-    public synchronized void calculateSRRF(ImagePlus imp, int indexStart, int nFrameToLoad) {
+    public synchronized void calculateSRRF(ImageStack imsRawData) {
 
-        assert (imp.getWidth() == width && imp.getHeight() == height);
-        ImageStack imsRawData = new ImageStack(width, height);
+        assert (imsRawData.getWidth() == width && imsRawData.getHeight() == height);
+        int nFrameToLoad = imsRawData.getSize();
 
-        for (int f = 0; f < nFrameToLoad; f++) {
-            imp.setSlice(indexStart + f);
-            imsRawData.addSlice(imp.getProcessor());
-        }
-
-        IJ.log("Uploading raw data to GPU...");
+//        IJ.log("Uploading raw data to GPU...");
         int id = prof.startTimer();
         fillBuffer(clBufferPx, imsRawData);
         queue.putWriteBuffer(clBufferPx, false);
         prof.recordTime("Uploading data to GPU", prof.endTimer(id));
 
         // Make kernelCalculateGradient assignment
-        IJ.log("Calculating gradient...");
+//        IJ.log("Calculating gradient...");
         id = prof.startTimer();
         queue.put3DRangeKernel(kernelCalculateGradient, 0, 0, 0, width, height, nFrameToLoad, 0, 0, 0);
         prof.recordTime("kernelCalculateGradient", prof.endTimer(id));
 
-        IJ.log("Interpolating gradient...");
+//        IJ.log("Interpolating gradient...");
         id = prof.startTimer();
         queue.put3DRangeKernel(kernelInterpolateGradient, 0, 0, 0, GxGyMagnification * width, GxGyMagnification * height, nFrameToLoad, 0, 0, 0);
         prof.recordTime("kernelInterpolateGradient", prof.endTimer(id));
 
         // Make kernelCalculateSRRF assignment
-        IJ.log("Calculating SRRF...");
+//        IJ.log("Calculating SRRF...");
 
 
         for (int f = 0; f < nFrameToLoad; f++) {
