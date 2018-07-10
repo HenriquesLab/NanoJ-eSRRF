@@ -59,7 +59,6 @@ public class liveSRRF_CL {
             clBufferCurrentFrame;
 
 
-
     // --- Initialization method ---
     public liveSRRF_CL(int width, int height, int magnification, float fwhm, int sensitivity, int nFramesOnGPU, int nFrameForSRRF, String deviceType) {
 
@@ -88,14 +87,15 @@ public class liveSRRF_CL {
         CLDevice device;
         switch (deviceType) {
             case "CPU":
-                IJ.log("Looking for CPU devices...");
+                IJ.log("Looking for the fastest CPU device...");
                 device = context.getMaxFlopsDevice(CLDevice.Type.CPU);
                 break;
             case "GPU":
-                IJ.log("Looking for GPU devices...");
+                IJ.log("Looking for the fastest GPU device...");
                 device = context.getMaxFlopsDevice(CLDevice.Type.GPU);
                 break;
             default:
+                IJ.log("Looking for the fastest devices...");
                 device = context.getMaxFlopsDevice();
                 break;
         }
