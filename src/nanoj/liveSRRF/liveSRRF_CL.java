@@ -32,6 +32,8 @@ public class liveSRRF_CL {
 
     private final int nReconstructions = 2; // Currently only STD and AVG
 
+    private final boolean DEBUG = true;
+
     // Advanced formats
     private NanoJProfiler prof = new NanoJProfiler();
 
@@ -56,8 +58,10 @@ public class liveSRRF_CL {
     private CLBuffer<IntBuffer>
             clBufferCurrentFrame;
 
+
+
     // --- Initialization method ---
-    public liveSRRF_CL(int width, int height, int magnification, float fwhm, int sensitivity, int nFramesOnGPU, int nFrameForSRRF) {
+    public liveSRRF_CL(int width, int height, int magnification, float fwhm, int sensitivity, int nFramesOnGPU, int nFrameForSRRF, String deviceType) {
 
         this.width = width;
         this.height = height;
@@ -68,9 +72,37 @@ public class liveSRRF_CL {
         context = CLContext.create();
         System.out.println("created " + context);
 
-        // Select fastest device
-        CLDevice device = context.getMaxFlopsDevice();
+        if (DEBUG) {
+            IJ.log("--------");
+            // Check devices
+            CLDevice[] allCLdevice = context.getDevices();
+            int nDevices = allCLdevice.length;
+            for (int i = 0; i < nDevices; i++) {
+                IJ.log("Device #" + i + ": " + allCLdevice[i]);
+                IJ.log("Max clock: "+allCLdevice[i].getMaxClockFrequency() + " MHz");
+                IJ.log("Max cores: "+allCLdevice[i].getMaxComputeUnits()+" cores");
+                IJ.log("Device type: "+ allCLdevice[i].getType());
+            }
+        }
+
+        CLDevice device;
+        switch (deviceType) {
+            case "CPU":
+                IJ.log("Looking for CPU devices...");
+                device = context.getMaxFlopsDevice(CLDevice.Type.CPU);
+                break;
+            case "GPU":
+                IJ.log("Looking for GPU devices...");
+                device = context.getMaxFlopsDevice(CLDevice.Type.GPU);
+                break;
+            default:
+                device = context.getMaxFlopsDevice();
+                break;
+        }
+
         System.out.println("using " + device);
+        IJ.log("Using " + device);
+
 
         clBufferPx = context.createFloatBuffer(nFramesOnGPU * width * height, READ_ONLY);
         clBufferShiftXY = context.createFloatBuffer(2 * nFrameForSRRF, READ_ONLY);

@@ -49,9 +49,10 @@ public class liveSRRF_optimised_ implements PlugIn {
             previousWriteToDisk = false;
 
     private final int radiusCCM = 5;
-    private final String LiveSRRFVersion = "v0.5";
+    private final String LiveSRRFVersion = "v0.6";
     private String pathToDisk = "",
-            fileName;
+            fileName,
+            deviceType;
 
     private float[] shiftX, shiftY;
 
@@ -85,6 +86,12 @@ public class liveSRRF_optimised_ implements PlugIn {
         width = imp.getImageStack().getWidth();
         height = imp.getImageStack().getHeight();
 
+        // initilizaing string for device choice
+        String[] deviceTypes = new String[3];
+        deviceTypes[0] = "Default";
+        deviceTypes[1] = "GPU";
+        deviceTypes[2] = "CPU";
+
         // Build GUI
         Font headerFont = new Font("Arial", Font.BOLD, 16);
         NonBlockingGenericDialog gd = new NonBlockingGenericDialog("liveSRRF " + LiveSRRFVersion);
@@ -105,7 +112,8 @@ public class liveSRRF_optimised_ implements PlugIn {
         gd.addNumericField("Gap between SR frame (frames, default: 50)", prefs.get("frameGap", 50), 0);
         gd.addMessage("Warning: Rolling analysis may lead to long computation times.");
 
-        gd.addMessage("-=-= GPU memory =-=-\n", headerFont);
+        gd.addMessage("-=-= GPU/CPU processing =-=-\n", headerFont);
+        gd.addChoice("Gradient estimation method", deviceTypes, prefs.get("deviceType", deviceTypes[0]));
         gd.addNumericField("Maximum amount of memory on GPU (MB, default: 1000)", prefs.get("maxMemoryGPU", 500), 2);
         gd.addMessage("Giving SRRF access to a lot of memory speeds up the reconstruction\n" +
                 "but may slow down the graphics card for your Minecraft game that you have \n" +
@@ -144,6 +152,7 @@ public class liveSRRF_optimised_ implements PlugIn {
         IJ.log("# frames on GPU: " + nFrameOnGPU);
         IJ.log("Estimated GPU memory usage: " + Math.round(predictMemoryUsed(nFrameOnGPU)[0]) + " MB");
         IJ.log("Estimated RAM usage: " + Math.round(predictMemoryUsed(nFrameOnGPU)[1]) + " MB");
+        IJ.log("Running on: " + deviceType);
         IJ.log("# reconstructed frames: " + nSRRFframe);
         IJ.log("# GPU load / SRRF frame: " + nGPUloadPerSRRFframe);
 
@@ -164,7 +173,7 @@ public class liveSRRF_optimised_ implements PlugIn {
         // Initialize variables
         int indexStartSRRFframe;
         int nFrameToLoad;
-        liveSRRF_CL liveSRRF = new liveSRRF_CL(width, height, magnification, fwhm, sensitivity, nFrameOnGPU, nFrameForSRRF);
+        liveSRRF_CL liveSRRF = new liveSRRF_CL(width, height, magnification, fwhm, sensitivity, nFrameOnGPU, nFrameForSRRF, deviceType);
 
         shiftX = new float[nFrameForSRRF];
         shiftY = new float[nFrameForSRRF];
@@ -189,7 +198,7 @@ public class liveSRRF_optimised_ implements PlugIn {
             liveSRRF.loadShiftXYGPUbuffer(shiftX, shiftY);
 
             IJ.log("--------");
-            IJ.log("SRRF frame: " + r);
+            IJ.log("SRRF frame: " + r +"/"+nSRRFframe);
             indexStartSRRFframe = (r - 1) * frameGap + 1;
             IJ.log("Stack index start: " + indexStartSRRFframe);
             if (correctVibration) calculateShiftArray(indexStartSRRFframe);
@@ -384,6 +393,7 @@ public class liveSRRF_optimised_ implements PlugIn {
         getInterpolatedImage = gd.getNextBoolean();
 
         frameGap = (int) gd.getNextNumber();
+        deviceType = gd.getNextChoice();
         maxMemoryGPU = (int) gd.getNextNumber();
         writeToDisk = gd.getNextBoolean();
 
@@ -594,6 +604,7 @@ public class liveSRRF_optimised_ implements PlugIn {
         prefs.set("getInterpolatedImage", getInterpolatedImage);
 
         prefs.set("frameGap", frameGap);
+        prefs.set("deviceType", deviceType);
         prefs.set("maxMemoryGPU", maxMemoryGPU);
 
         prefs.save();
