@@ -70,6 +70,8 @@ public class liveSRRF_optimised_ implements PlugIn {
     private NanoJPrefs prefs = new NanoJPrefs(this.getClass().getName());
     private NanoJProfiler prof = new NanoJProfiler();
 
+    liveSRRF_CL liveSRRF;
+
     private SaveFileInZip saveFileInZip;
 
 
@@ -94,8 +96,8 @@ public class liveSRRF_optimised_ implements PlugIn {
         LocalDateTime now = LocalDateTime.now();
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
         IJ.log(now.format(formatter));
-        liveSRRF_CL liveSRRF = new liveSRRF_CL();
-        CLDevice[] allDevices = liveSRRF.checkDevices();   // TODO: close the context if GUI cancelled
+        liveSRRF = new liveSRRF_CL();
+        CLDevice[] allDevices = liveSRRF.checkDevices();
 
         // Initilizaing string for device choice
         String[] deviceNames = new String[allDevices.length+1];
@@ -141,7 +143,12 @@ public class liveSRRF_optimised_ implements PlugIn {
         MyDialogListener dl = new MyDialogListener(); // this serves to estimate a few indicators such as RAM usage
         gd.addDialogListener(dl);
         gd.showDialog();
-        if (gd.wasCanceled()) return;
+
+        // If the GUI was cancelled
+        if (gd.wasCanceled()) {
+            liveSRRF.release();
+            return;
+        }
 
         // Get chosen device
         CLDevice chosenDevice = null;
@@ -568,6 +575,7 @@ public class liveSRRF_optimised_ implements PlugIn {
             // Check if user is cancelling calculation
             IJ.showProgress(s, nFrameForSRRF);
             if (IJ.escapePressed()) {
+                liveSRRF.release();
                 IJ.resetEscape();
                 return;
             }
