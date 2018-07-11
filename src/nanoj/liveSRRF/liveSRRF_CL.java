@@ -32,7 +32,7 @@ public class liveSRRF_CL {
 
     private final int nReconstructions = 2; // Currently only STD and AVG
 
-    private final boolean DEBUG = true;
+    private final boolean DEBUG = false;
 
     // Advanced formats
     private NanoJProfiler prof = new NanoJProfiler();
@@ -59,8 +59,36 @@ public class liveSRRF_CL {
             clBufferCurrentFrame;
 
 
+    // --- Constructor ---
+    public liveSRRF_CL() {
+
+        IJ.log("--------");
+        context = CLContext.create();
+        System.out.println("created " + context);
+
+    }
+
+
+    // -- Check devices --
+    public CLDevice[] checkDevices(){
+
+        CLDevice[] allCLdevice = context.getDevices();
+
+        for (int i = 0; i < allCLdevice.length; i++) {
+            IJ.log("Device #" + i);
+            IJ.log("Max clock: " + allCLdevice[i].getMaxClockFrequency() + " MHz");
+            IJ.log("Max cores: " + allCLdevice[i].getMaxComputeUnits() + " cores");
+            IJ.log("Device type: " + allCLdevice[i].getType());
+            IJ.log("Device name: " + allCLdevice[i].getName());
+            IJ.log("--------");
+        }
+
+        return allCLdevice;
+    }
+
+
     // --- Initialization method ---
-    public liveSRRF_CL(int width, int height, int magnification, float fwhm, int sensitivity, int nFramesOnGPU, int nFrameForSRRF, String deviceType) {
+    public void initilise(int width, int height, int magnification, float fwhm, int sensitivity, int nFramesOnGPU, int nFrameForSRRF, CLDevice chosenDevice) {
 
         this.width = width;
         this.height = height;
@@ -68,41 +96,14 @@ public class liveSRRF_CL {
         this.widthM = width * magnification;
         this.nFrameForSRRF = nFrameForSRRF;
 
-        context = CLContext.create();
-        System.out.println("created " + context);
 
-        if (DEBUG) {
-            IJ.log("--------");
-            // Check devices
-            CLDevice[] allCLdevice = context.getDevices();
-            int nDevices = allCLdevice.length;
-            for (int i = 0; i < nDevices; i++) {
-                IJ.log("Device #" + i + ": " + allCLdevice[i]);
-                IJ.log("Max clock: "+allCLdevice[i].getMaxClockFrequency() + " MHz");
-                IJ.log("Max cores: "+allCLdevice[i].getMaxComputeUnits()+" cores");
-                IJ.log("Device type: "+ allCLdevice[i].getType());
-            }
-        }
+        if (chosenDevice == null) {
+            IJ.log("Looking for the fastest device...");
+            System.out.println("Looking for the fastest device...");
+            chosenDevice = context.getMaxFlopsDevice();}
 
-        CLDevice device;
-        switch (deviceType) {
-            case "CPU":
-                IJ.log("Looking for the fastest CPU device...");
-                device = context.getMaxFlopsDevice(CLDevice.Type.CPU);
-                break;
-            case "GPU":
-                IJ.log("Looking for the fastest GPU device...");
-                device = context.getMaxFlopsDevice(CLDevice.Type.GPU);
-                break;
-            default:
-                IJ.log("Looking for the fastest devices...");
-                device = context.getMaxFlopsDevice();
-                break;
-        }
-
-        System.out.println("using " + device);
-        IJ.log("Using " + device);
-
+        System.out.println("using " + chosenDevice);
+        IJ.log("Using " + chosenDevice.getName());
 
         clBufferPx = context.createFloatBuffer(nFramesOnGPU * width * height, READ_ONLY);
         clBufferShiftXY = context.createFloatBuffer(2 * nFrameForSRRF, READ_ONLY);
@@ -115,6 +116,7 @@ public class liveSRRF_CL {
         // Current frame is a 2 element Int buffer:
         // nCurrentFrame[0] is the global current frame in the current SRRF frame (reset every SRRF frame)
         // nCurrentFrame[1] is the local current frame in the current GPU-loaded dataset (reset every tun of the method calculateSRRF (within the gradient calculation))
+
 
         // Create the program
         float sigma = fwhm / 2.354f;
@@ -169,7 +171,7 @@ public class liveSRRF_CL {
         kernelCalculateSRRF.setArg(argn++, clBufferShiftXY); // make sure type is the same !!
         kernelCalculateSRRF.setArg(argn++, clBufferCurrentFrame); // make sure type is the same !!
 
-        queue = device.createCommandQueue();
+        queue = chosenDevice.createCommandQueue();
 
         System.out.println("used device memory: " + (
                 clBufferPx.getCLSize() +
@@ -181,6 +183,7 @@ public class liveSRRF_CL {
                         clBufferOut.getCLSize() +
                         clBufferCurrentFrame.getCLSize())
                 / 1000000d + "MB");
+
     }
 
 

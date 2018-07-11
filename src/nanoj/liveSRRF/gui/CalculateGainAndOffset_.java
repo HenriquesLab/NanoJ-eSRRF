@@ -10,7 +10,6 @@ import ij.process.FloatProcessor;
 
 import java.util.Random;
 
-import static java.lang.Math.floor;
 import static java.lang.Math.pow;
 
 public class CalculateGainAndOffset_  implements PlugIn {

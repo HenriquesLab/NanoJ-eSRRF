@@ -1,5 +1,6 @@
 package nanoj.liveSRRF.gui;
 
+import com.jogamp.opencl.CLDevice;
 import ij.*;
 import ij.gui.DialogListener;
 import ij.gui.GenericDialog;
@@ -49,10 +50,10 @@ public class liveSRRF_optimised_ implements PlugIn {
             previousWriteToDisk = false;
 
     private final int radiusCCM = 5;
-    private final String LiveSRRFVersion = "v0.6";
+    private final String LiveSRRFVersion = "v0.7";
     private String pathToDisk = "",
             fileName,
-            deviceType;
+            chosenDeviceName;
 
     private float[] shiftX, shiftY;
 
@@ -69,7 +70,7 @@ public class liveSRRF_optimised_ implements PlugIn {
     private NanoJPrefs prefs = new NanoJPrefs(this.getClass().getName());
     private NanoJProfiler prof = new NanoJProfiler();
 
-    SaveFileInZip saveFileInZip;
+    private SaveFileInZip saveFileInZip;
 
 
     @Override
@@ -77,7 +78,7 @@ public class liveSRRF_optimised_ implements PlugIn {
 
 
         // Get raw data
-        imp = WindowManager.getCurrentImage(); // TODO: depending on the size of data and RAM, consider using Virtual Stack load
+        imp = WindowManager.getCurrentImage();
         if (imp == null) imp = IJ.openImage();
         if (imp == null) return;
         imp.show();
@@ -86,11 +87,23 @@ public class liveSRRF_optimised_ implements PlugIn {
         width = imp.getImageStack().getWidth();
         height = imp.getImageStack().getHeight();
 
-        // initilizaing string for device choice
-        String[] deviceTypes = new String[3];
-        deviceTypes[0] = "Default";
-        deviceTypes[1] = "GPU";
-        deviceTypes[2] = "CPU";
+        IJ.log("\\Clear");  // Clear the log window
+        IJ.log("-------------------------------------");
+        IJ.log("-------------------------------------");
+        IJ.log("liveSRRF " + LiveSRRFVersion);
+        LocalDateTime now = LocalDateTime.now();
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+        IJ.log(now.format(formatter));
+        liveSRRF_CL liveSRRF = new liveSRRF_CL();
+        CLDevice[] allDevices = liveSRRF.checkDevices();   // TODO: close the context if GUI cancelled
+
+        // Initilizaing string for device choice
+        String[] deviceNames = new String[allDevices.length+1];
+        deviceNames[0] = "Default device";
+
+        for (int i = 1; i <= allDevices.length; i++) {
+            deviceNames[i] = allDevices[i-1].getName();
+        }
 
         // Build GUI
         Font headerFont = new Font("Arial", Font.BOLD, 16);
@@ -113,7 +126,7 @@ public class liveSRRF_optimised_ implements PlugIn {
         gd.addMessage("Warning: Rolling analysis may lead to long computation times.");
 
         gd.addMessage("-=-= GPU/CPU processing =-=-\n", headerFont);
-        gd.addChoice("Gradient estimation method", deviceTypes, prefs.get("deviceType", deviceTypes[0]));
+        gd.addChoice("Gradient estimation method", deviceNames, prefs.get("chosenDeviceName", "Default device"));
         gd.addNumericField("Maximum amount of memory on GPU (MB, default: 1000)", prefs.get("maxMemoryGPU", 500), 2);
         gd.addMessage("Giving SRRF access to a lot of memory speeds up the reconstruction\n" +
                 "but may slow down the graphics card for your Minecraft game that you have \n" +
@@ -130,18 +143,15 @@ public class liveSRRF_optimised_ implements PlugIn {
         gd.showDialog();
         if (gd.wasCanceled()) return;
 
+        // Get chosen device
+        CLDevice chosenDevice = null;
+        for (CLDevice allDevice : allDevices) {
+            if (chosenDeviceName.equals(allDevice.getName())) chosenDevice = allDevice;
+        }
+
         // Save last user entries
         savePreferences();
 
-
-        IJ.log("\\Clear");  // Clear the log window
-        IJ.log("-------------------------------------");
-        IJ.log("-------------------------------------");
-        IJ.log("liveSRRF " + LiveSRRFVersion);
-        LocalDateTime now = LocalDateTime.now();
-        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-        String nowString = now.format(formatter);
-        IJ.log(nowString);
         IJ.log("-------------------------------------");
         IJ.log("Parameters:");
         IJ.log("Magnification: " + magnification);
@@ -152,7 +162,7 @@ public class liveSRRF_optimised_ implements PlugIn {
         IJ.log("# frames on GPU: " + nFrameOnGPU);
         IJ.log("Estimated GPU memory usage: " + Math.round(predictMemoryUsed(nFrameOnGPU)[0]) + " MB");
         IJ.log("Estimated RAM usage: " + Math.round(predictMemoryUsed(nFrameOnGPU)[1]) + " MB");
-        IJ.log("Running on: " + deviceType);
+        IJ.log("Running on: " + chosenDeviceName);
         IJ.log("# reconstructed frames: " + nSRRFframe);
         IJ.log("# GPU load / SRRF frame: " + nGPUloadPerSRRFframe);
 
@@ -173,7 +183,7 @@ public class liveSRRF_optimised_ implements PlugIn {
         // Initialize variables
         int indexStartSRRFframe;
         int nFrameToLoad;
-        liveSRRF_CL liveSRRF = new liveSRRF_CL(width, height, magnification, fwhm, sensitivity, nFrameOnGPU, nFrameForSRRF, deviceType);
+        liveSRRF.initilise(width, height, magnification, fwhm, sensitivity, nFrameOnGPU, nFrameForSRRF, chosenDevice);
 
         shiftX = new float[nFrameForSRRF];
         shiftY = new float[nFrameForSRRF];
@@ -364,6 +374,8 @@ public class liveSRRF_optimised_ implements PlugIn {
         // Bye-bye and report
         IJ.log("Memory usage: " + IJ.freeMemory());  // this also runs the garbage collector
         IJ.log("Thank you for your custom on this beautiful day !");
+        now = LocalDateTime.now();
+        IJ.log(now.format(formatter));
         IJ.log("-------------------------------------");
         IJ.log(prof.report());
     }
@@ -393,7 +405,7 @@ public class liveSRRF_optimised_ implements PlugIn {
         getInterpolatedImage = gd.getNextBoolean();
 
         frameGap = (int) gd.getNextNumber();
-        deviceType = gd.getNextChoice();
+        chosenDeviceName = gd.getNextChoice();
         maxMemoryGPU = (int) gd.getNextNumber();
         writeToDisk = gd.getNextBoolean();
 
@@ -437,18 +449,6 @@ public class liveSRRF_optimised_ implements PlugIn {
         if (writeToDisk && !previousWriteToDisk) {
             pathToDisk = IJ.getDirectory("");
             if (pathToDisk == null) writeToDisk = false;
-//            folderChooser.setCurrentDirectory(new java.io.File("."));
-//            folderChooser.setDialogTitle("Choose a folder to save dataset");
-//            folderChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
-//            folderChooser.setAcceptAllFileFilterUsed(false);
-//
-//            writeToDiskFile = folderChooser.getSelectedFile();
-//            if (folderChooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) {
-//                System.out.println("getCurrentDirectory(): " + folderChooser.getCurrentDirectory());
-//                System.out.println("getSelectedFile() : " + folderChooser.getSelectedFile());
-//            } else {
-//                System.out.println("No Selection ");
-//            }
         }
 
         previousWriteToDisk = writeToDisk;
@@ -461,8 +461,7 @@ public class liveSRRF_optimised_ implements PlugIn {
         @Override
         public boolean dialogItemChanged(GenericDialog gd, AWTEvent awtEvent) {
 
-            boolean goodToGo = grabSettings(gd);
-            return goodToGo;
+            return grabSettings(gd);
         }
     }
 
@@ -604,12 +603,11 @@ public class liveSRRF_optimised_ implements PlugIn {
         prefs.set("getInterpolatedImage", getInterpolatedImage);
 
         prefs.set("frameGap", frameGap);
-        prefs.set("deviceType", deviceType);
+        prefs.set("chosenDeviceName", chosenDeviceName);
         prefs.set("maxMemoryGPU", maxMemoryGPU);
 
         prefs.save();
 
     }
-
 
 }
