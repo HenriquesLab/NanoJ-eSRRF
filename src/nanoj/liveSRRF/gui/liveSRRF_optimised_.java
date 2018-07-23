@@ -128,7 +128,7 @@ public class liveSRRF_optimised_ implements PlugIn {
         gd.addMessage("Warning: Rolling analysis may lead to long computation times.");
 
         gd.addMessage("-=-= GPU/CPU processing =-=-\n", headerFont);
-        gd.addChoice("Gradient estimation method", deviceNames, prefs.get("chosenDeviceName", "Default device"));
+        gd.addChoice("Processing device", deviceNames, prefs.get("chosenDeviceName", "Default device"));
         gd.addNumericField("Maximum amount of memory on GPU (MB, default: 1000)", prefs.get("maxMemoryGPU", 500), 2);
         gd.addMessage("Giving SRRF access to a lot of memory speeds up the reconstruction\n" +
                 "but may slow down the graphics card for your Minecraft game that you have \n" +
@@ -190,7 +190,7 @@ public class liveSRRF_optimised_ implements PlugIn {
         // Initialize variables
         int indexStartSRRFframe;
         int nFrameToLoad;
-        liveSRRF.initilise(width, height, magnification, fwhm, sensitivity, nFrameOnGPU, nFrameForSRRF, chosenDevice);
+        liveSRRF.initialise(width, height, magnification, fwhm, sensitivity, nFrameOnGPU, nFrameForSRRF, chosenDevice);
 
         shiftX = new float[nFrameForSRRF];
         shiftY = new float[nFrameForSRRF];
@@ -212,7 +212,7 @@ public class liveSRRF_optimised_ implements PlugIn {
         // Start looping trough SRRF frames --------------------------------------------
         for (int r = 1; r <= nSRRFframe; r++) {
             liveSRRF.resetFramePosition();
-            liveSRRF.loadShiftXYGPUbuffer(shiftX, shiftY);
+            liveSRRF.loadShiftXYGPUbuffer(shiftX, shiftY);   // TODO: is this in the wrong place? SHould it not go after calculating the shifts?
 
             IJ.log("--------");
             IJ.log("SRRF frame: " + r +"/"+nSRRFframe);

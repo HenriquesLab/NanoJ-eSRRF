@@ -65,7 +65,6 @@ public class liveSRRF_CL {
         IJ.log("--------");
         context = CLContext.create();
         System.out.println("created " + context);
-
     }
 
 
@@ -88,7 +87,7 @@ public class liveSRRF_CL {
 
 
     // --- Initialization method ---
-    public void initilise(int width, int height, int magnification, float fwhm, int sensitivity, int nFramesOnGPU, int nFrameForSRRF, CLDevice chosenDevice) {
+    public void initialise(int width, int height, int magnification, float fwhm, int sensitivity, int nFramesOnGPU, int nFrameForSRRF, CLDevice chosenDevice) {
 
         this.width = width;
         this.height = height;
@@ -98,12 +97,12 @@ public class liveSRRF_CL {
 
 
         if (chosenDevice == null) {
-            IJ.log("Looking for the fastest device...");
+            //IJ.log("Looking for the fastest device...");
             System.out.println("Looking for the fastest device...");
             chosenDevice = context.getMaxFlopsDevice();}
 
         System.out.println("using " + chosenDevice);
-        IJ.log("Using " + chosenDevice.getName());
+        //IJ.log("Using " + chosenDevice.getName());
 
         clBufferPx = context.createFloatBuffer(nFramesOnGPU * width * height, READ_ONLY);
         clBufferShiftXY = context.createFloatBuffer(2 * nFrameForSRRF, READ_ONLY);
