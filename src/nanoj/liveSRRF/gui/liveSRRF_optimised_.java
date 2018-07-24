@@ -212,13 +212,13 @@ public class liveSRRF_optimised_ implements PlugIn {
         // Start looping trough SRRF frames --------------------------------------------
         for (int r = 1; r <= nSRRFframe; r++) {
             liveSRRF.resetFramePosition();
-            liveSRRF.loadShiftXYGPUbuffer(shiftX, shiftY);   // TODO: is this in the wrong place? SHould it not go after calculating the shifts?
 
             IJ.log("--------");
             IJ.log("SRRF frame: " + r +"/"+nSRRFframe);
             indexStartSRRFframe = (r - 1) * frameGap + 1;
             IJ.log("Stack index start: " + indexStartSRRFframe);
             if (correctVibration) calculateShiftArray(indexStartSRRFframe);
+            liveSRRF.loadShiftXYGPUbuffer(shiftX, shiftY);
 
             IJ.showProgress(r, nSRRFframe);
 

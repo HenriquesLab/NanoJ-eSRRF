@@ -118,19 +118,12 @@ public class ParametersSweep_ implements PlugIn {
         cal.pixelHeight /= magnification;
         cal.setUnit(imp.getCalibration().getUnit());
 
-        ImageStack imsRawData = new ImageStack(width, height);
-        for (int f = 0; f < nSlices; f++) {
-            imp.setSlice(f);
-            imsRawData.addSlice(imp.getProcessor());
-        }
+        ImageStack imsRawData;
 
         int n_calculation = nframeArray.length * sensitivityArray.length * fwhmArray.length;
         IJ.log("Number of calculations planned: " + n_calculation);
         int r = 1;
 
-        for (int i=0; i<nframeArray.length; i++){
-            IJ.log("Frame array: "+ nframeArray[i]);
-        }
 
         for (int thisnf : nframeArray) {
             for (int thisSensitivity : sensitivityArray) {
@@ -146,11 +139,18 @@ public class ParametersSweep_ implements PlugIn {
                         return;
                     }
 
-                    IJ.log("Nframe: "+thisnf);
+                    IJ.log("Number of frame for SRRF: "+thisnf);
                     IJ.log("FWHM: "+thisfwhm + " pixels");
                     IJ.log("Sensitivity: "+thisSensitivity);
 
-                    liveSRRF.initialise(width, height, magnification, thisfwhm, thisSensitivity, nSlices, thisnf, null);
+                    imsRawData = new ImageStack(width, height);
+                    for (int f = 1; f <= thisnf; f++) {
+                        imp.setSlice(f);
+                        imsRawData.addSlice(imp.getProcessor());
+                    }
+
+                    liveSRRF.initialise(width, height, magnification, thisfwhm, thisSensitivity, thisnf, thisnf, null);
+                    liveSRRF.resetFramePosition();
                     liveSRRF.calculateSRRF(imsRawData);
                     imsBuffer = liveSRRF.readSRRFbuffer();
 
@@ -182,7 +182,7 @@ public class ParametersSweep_ implements PlugIn {
         }
 
 
-        ImagePlus impInt = new ImagePlus(imp.getTitle() + " - Interpolated image", imsSRRFavg);
+        ImagePlus impInt = new ImagePlus(imp.getTitle() + " - Interpolated image", imsInt);
         impInt.setCalibration(cal);
         IJ.run(impInt, "Enhance Contrast", "saturated=0.5");
         impInt.show();
@@ -217,8 +217,6 @@ public class ParametersSweep_ implements PlugIn {
         calculateAVG = gd.getNextBoolean();
         calculateSTD = gd.getNextBoolean();
 
-        IJ.log("fwhm0: "+ fwhm0);
-
         fwhmArray = new float[n_fwhm];
         for (int i = 0; i < n_fwhm; i++) {
             fwhmArray[i] = fwhm0 + i * deltafwhm;
@@ -229,7 +227,7 @@ public class ParametersSweep_ implements PlugIn {
             sensitivityArray[i] = S0 + i * deltaS;
         }
 
-        nframeArray = new int[n_fwhm];
+        nframeArray = new int[n_nf];
         for (int i = 0; i < n_nf; i++) {
             nframeArray[i] = nf0 + i * deltanf;
         }

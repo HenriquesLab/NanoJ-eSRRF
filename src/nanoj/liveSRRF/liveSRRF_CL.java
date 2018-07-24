@@ -265,7 +265,7 @@ public class liveSRRF_CL {
             dataSRRF[n] = bufferSRRF.get(n + widthM * heightM) - bufferSRRF.get(n) * bufferSRRF.get(n); // Var[X] = E[X^2] - (E[X])^2
             if (dataSRRF[n] < 0) {
                 dataSRRF[n] = 0;
-                IJ.log("!!Negative VAR value!!");
+                //IJ.log("!!Negative VAR value!!");
             }
             if (Float.isNaN(dataSRRF[n])) dataSRRF[n] = 0; // make sure we dont get any weirdness
             dataSRRF[n] = (float) math.sqrt(dataSRRF[n]);
