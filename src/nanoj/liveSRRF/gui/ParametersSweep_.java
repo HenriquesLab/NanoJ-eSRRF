@@ -10,6 +10,7 @@ import ij.gui.NonBlockingGenericDialog;
 import ij.measure.Calibration;
 import ij.plugin.PlugIn;
 import nanoj.core2.NanoJPrefs;
+import nanoj.liveSRRF.Build_RSE_RSP_maps;
 import nanoj.liveSRRF.liveSRRF_CL;
 
 import java.awt.*;
@@ -25,7 +26,8 @@ public class ParametersSweep_ implements PlugIn {
             height;
 
     private boolean calculateAVG,
-            calculateSTD;
+            calculateSTD,
+            doFRC;
 
     private float[] fwhmArray;
     private int[] sensitivityArray,
@@ -96,6 +98,9 @@ public class ParametersSweep_ implements PlugIn {
         gd.addCheckbox("AVG reconstruction (default: on)", prefs.get("calculateAVG", true));
         gd.addCheckbox("STD reconstruction (default: off)", prefs.get("calculateSTD", false));
 
+        gd.addMessage("-=-= Parameters =-=-\n", headerFont);
+        gd.addCheckbox("FRC analysis (default: off)", prefs.get("doFRC", false));
+
         gd.showDialog();
 
         // If the GUI was cancelled
@@ -111,6 +116,9 @@ public class ParametersSweep_ implements PlugIn {
         ImageStack imsSRRFavg = new ImageStack(width * magnification, height * magnification);
         ImageStack imsSRRFstd = new ImageStack(width * magnification, height * magnification);
 
+        ImageStack imsErrorMap = new ImageStack(width * magnification, height * magnification);
+
+
         ImagePlus impTemp = new ImagePlus();
         impTemp.copyScale(imp); // make sure we copy the pixel sizes correctly across
         Calibration cal = impTemp.getCalibration();
@@ -124,12 +132,15 @@ public class ParametersSweep_ implements PlugIn {
         IJ.log("Number of calculations planned: " + n_calculation);
         int r = 1;
 
+        Build_RSE_RSP_maps mapbuilder;
+
 
         for (int thisnf : nframeArray) {
             for (int thisSensitivity : sensitivityArray) {
                 for (float thisfwhm : fwhmArray) {
+
                     IJ.log("--------");
-                    IJ.log("SRRF frame: " + r +"/"+n_calculation);
+                    IJ.log("SRRF frame: " + r + "/" + n_calculation);
                     IJ.showProgress(r, n_calculation);
 
                     // Check if user is cancelling calculation
@@ -139,9 +150,9 @@ public class ParametersSweep_ implements PlugIn {
                         return;
                     }
 
-                    IJ.log("Number of frame for SRRF: "+thisnf);
-                    IJ.log("FWHM: "+thisfwhm + " pixels");
-                    IJ.log("Sensitivity: "+thisSensitivity);
+                    IJ.log("Number of frame for SRRF: " + thisnf);
+                    IJ.log("FWHM: " + thisfwhm + " pixels");
+                    IJ.log("Sensitivity: " + thisSensitivity);
 
                     imsRawData = new ImageStack(width, height);
                     for (int f = 1; f <= thisnf; f++) {
@@ -154,9 +165,17 @@ public class ParametersSweep_ implements PlugIn {
                     liveSRRF.calculateSRRF(imsRawData);
                     imsBuffer = liveSRRF.readSRRFbuffer();
 
-                    if (calculateAVG) imsSRRFavg.addSlice(imsBuffer.getProcessor(1));
-                    if (calculateSTD) imsSRRFstd.addSlice(imsBuffer.getProcessor(2));
-                    imsInt.addSlice(imsBuffer.getProcessor(3));
+                    if (calculateAVG)
+                        imsSRRFavg.addSlice("f=" + thisfwhm + "/s=" + thisSensitivity + "/nf=" + thisnf, imsBuffer.getProcessor(1));
+                    if (calculateSTD)
+                        imsSRRFstd.addSlice("f=" + thisfwhm + "/s=" + thisSensitivity + "/nf=" + thisnf, imsBuffer.getProcessor(2));
+                    imsInt.addSlice("f=" + thisfwhm + "/s=" + thisSensitivity + "/nf=" + thisnf, imsBuffer.getProcessor(3));
+
+//                    FloatProcessor fpSR = imsBuffer.getProcessor(1).convertToFloatProcessor();
+//                    FloatProcessor fpRef = imsBuffer.getProcessor(3).convertToFloatProcessor();
+
+//                    mapbuilder = new Build_RSE_RSP_maps(fpSR,  fpRef,magnification*width, magnification*height, magnification);
+//                    imsErrorMap.addSlice("f="+thisfwhm +"/s="+thisSensitivity+"/nf="+thisnf, mapbuilder.calculate());
 
                     r++;
                 }
@@ -187,6 +206,12 @@ public class ParametersSweep_ implements PlugIn {
         IJ.run(impInt, "Enhance Contrast", "saturated=0.5");
         impInt.show();
 
+//        ImagePlus impErrorMap = new ImagePlus(imp.getTitle() + " - Error maps", imsErrorMap);
+//        impInt.setCalibration(cal);
+//        IJ.run(impErrorMap, "Enhance Contrast", "saturated=0.5");
+//        impErrorMap.show();
+
+
         IJ.log("-------------------------------------");
         IJ.log("RAM used: " + IJ.freeMemory());
         IJ.log("Bye-bye !");
@@ -216,6 +241,7 @@ public class ParametersSweep_ implements PlugIn {
 
         calculateAVG = gd.getNextBoolean();
         calculateSTD = gd.getNextBoolean();
+        doFRC = gd.getNextBoolean();
 
         fwhmArray = new float[n_fwhm];
         for (int i = 0; i < n_fwhm; i++) {
@@ -227,6 +253,9 @@ public class ParametersSweep_ implements PlugIn {
             sensitivityArray[i] = S0 + i * deltaS;
         }
 
+
+        n_nf = Math.min(n_nf, (nSlices - nf0) / deltanf + 1);
+        IJ.log("Number of element in Frame Array: " + n_nf);
         nframeArray = new int[n_nf];
         for (int i = 0; i < n_nf; i++) {
             nframeArray[i] = nf0 + i * deltanf;
@@ -248,6 +277,7 @@ public class ParametersSweep_ implements PlugIn {
 
         prefs.set("calculateAVG", calculateAVG);
         prefs.set("calculateSTD", calculateSTD);
+        prefs.set("doFRC", doFRC);
 
         prefs.save();
 
