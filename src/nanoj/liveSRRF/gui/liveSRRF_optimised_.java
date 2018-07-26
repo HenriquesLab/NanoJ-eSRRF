@@ -50,7 +50,7 @@ public class liveSRRF_optimised_ implements PlugIn {
             previousWriteToDisk = false;
 
     private final int radiusCCM = 5;
-    private final String LiveSRRFVersion = "v0.7";
+    private final String LiveSRRFVersion = "v0.8";
     private String pathToDisk = "",
             fileName,
             chosenDeviceName;

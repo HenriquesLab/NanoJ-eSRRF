@@ -43,7 +43,7 @@ public class liveSRRF_CL {
     static private CLKernel kernelCalculateGradient,
             kernelInterpolateGradient,
             kernelCalculateSRRF,
-            kernelIncrementFramePosition,
+//            kernelIncrementFramePosition,
             kernelResetFramePosition;
 
     static private CLCommandQueue queue;
@@ -146,7 +146,7 @@ public class liveSRRF_CL {
         kernelCalculateGradient = programLiveSRRF.createCLKernel("calculateGradient_2point");
         kernelInterpolateGradient = programLiveSRRF.createCLKernel("calculateGradientInterpolation");
         kernelCalculateSRRF = programLiveSRRF.createCLKernel("calculateRadialGradientConvergence");
-        kernelIncrementFramePosition = programLiveSRRF.createCLKernel("kernelIncrementFramePosition");
+//        kernelIncrementFramePosition = programLiveSRRF.createCLKernel("kernelIncrementFramePosition");
         kernelResetFramePosition = programLiveSRRF.createCLKernel("kernelResetFramePosition");
 
         int argn;
@@ -233,10 +233,10 @@ public class liveSRRF_CL {
             queue.put2DRangeKernel(kernelCalculateSRRF, 0, 0, widthM, heightM, 0, 0);
             prof.recordTime("kernelCalculateSRRF", prof.endTimer(id));
 
-            id = prof.startTimer();
-            kernelIncrementFramePosition.setArg(0, clBufferCurrentFrame); // make sure type is the same !!
-            queue.put1DRangeKernel(kernelIncrementFramePosition, 0, 2, 0);
-            prof.recordTime("Increment frame count", prof.endTimer(id));
+//            id = prof.startTimer();
+//            kernelIncrementFramePosition.setArg(0, clBufferCurrentFrame); // make sure type is the same !!
+//            queue.put1DRangeKernel(kernelIncrementFramePosition, 0, 2, 0);
+//            prof.recordTime("Increment frame count", prof.endTimer(id));
         }
 
     }

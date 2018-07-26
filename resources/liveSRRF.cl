@@ -184,7 +184,7 @@ __kernel void calculateRadialGradientConvergence(
     __global int* nCurrentFrame
     // Current frame is a 2 element Int buffer:
             // nCurrentFrame[0] is the global current frame in the current SRRF frame (reset every SRRF frame)
-            // nCurrentFrame[1] is the local current frame in the current GPU-loaded dataset (reset every tun of the method calculateSRRF (within the gradient calculation))
+            // nCurrentFrame[1] is the local current frame in the current GPU-loaded dataset (reset every turn of the method calculateSRRF (within the gradient calculation))
 
 
     ) {
@@ -311,6 +311,13 @@ __kernel void calculateRadialGradientConvergence(
 
 //    else RGCArray[offset] = CGLH;
 
+    // if it's reached the end of the current frame, increment both frame numbers
+    if (xM == wM && yM == hM){
+        nCurrentFrame[0] = nCurrentFrame[0] + 1;
+        nCurrentFrame[1] = nCurrentFrame[1] + 1;
+    }
+
+
 }
 
 
@@ -337,12 +344,12 @@ __kernel void calculateRadialGradientConvergence(
 
 
 // Fourth kernel: increment the current frame number -----------------------------------------------------------------
-__kernel void kernelIncrementFramePosition(
-    __global int* nCurrentFrame
-    ){
-    const int i = get_global_id(0);
-    nCurrentFrame[i] = nCurrentFrame[i] + 1;
-}
+//__kernel void kernelIncrementFramePosition(
+//    __global int* nCurrentFrame
+//    ){
+//    const int i = get_global_id(0);
+//    nCurrentFrame[i] = nCurrentFrame[i] + 1;
+//}
 
 // Fifth kernel: reset the frame number -----------------------------------------------------------------
 __kernel void kernelResetFramePosition(
