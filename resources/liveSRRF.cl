@@ -343,17 +343,17 @@ __kernel void calculateRadialGradientConvergence(
 
 
 // Fourth kernel: increment the current frame number -----------------------------------------------------------------
-//__kernel void kernelIncrementFramePosition(
-//    __global int* nCurrentFrame
-//    ){
-//    const int i = get_global_id(0);
-//    nCurrentFrame[i] = nCurrentFrame[i] + 1;
-//}
+__kernel void kernelIncrementFramePosition(
+    __global int* nCurrentFrame
+    ){
+    const int i = get_global_id(0);
+    nCurrentFrame[i] = nCurrentFrame[i] + 1;
+}
 
 // Fifth kernel: reset the frame number -----------------------------------------------------------------
-//__kernel void kernelResetFramePosition(
-//    __global int* nCurrentFrame
-//    ){
-//    nCurrentFrame[0] = 0;
-//}
+__kernel void kernelResetFramePosition(
+    __global int* nCurrentFrame
+    ){
+    nCurrentFrame[0] = 0;
+}
 
