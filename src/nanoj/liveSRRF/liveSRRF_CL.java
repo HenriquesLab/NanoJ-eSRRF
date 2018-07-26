@@ -42,9 +42,9 @@ public class liveSRRF_CL {
     static private CLProgram programLiveSRRF;
     static private CLKernel kernelCalculateGradient,
             kernelInterpolateGradient,
-            kernelCalculateSRRF,
-//            kernelIncrementFramePosition,
-            kernelResetFramePosition;
+            kernelIncrementFramePosition,
+    //            kernelResetFramePosition,
+    kernelCalculateSRRF;
 
     static private CLCommandQueue queue;
 
@@ -69,7 +69,7 @@ public class liveSRRF_CL {
 
 
     // -- Check devices --
-    public CLDevice[] checkDevices(){
+    public CLDevice[] checkDevices() {
 
         CLDevice[] allCLdevice = context.getDevices();
 
@@ -99,7 +99,8 @@ public class liveSRRF_CL {
         if (chosenDevice == null) {
             //IJ.log("Looking for the fastest device...");
             System.out.println("Looking for the fastest device...");
-            chosenDevice = context.getMaxFlopsDevice();}
+            chosenDevice = context.getMaxFlopsDevice();
+        }
 
         System.out.println("using " + chosenDevice);
         //IJ.log("Using " + chosenDevice.getName());
@@ -146,8 +147,8 @@ public class liveSRRF_CL {
         kernelCalculateGradient = programLiveSRRF.createCLKernel("calculateGradient_2point");
         kernelInterpolateGradient = programLiveSRRF.createCLKernel("calculateGradientInterpolation");
         kernelCalculateSRRF = programLiveSRRF.createCLKernel("calculateRadialGradientConvergence");
-//        kernelIncrementFramePosition = programLiveSRRF.createCLKernel("kernelIncrementFramePosition");
-        kernelResetFramePosition = programLiveSRRF.createCLKernel("kernelResetFramePosition");
+        kernelIncrementFramePosition = programLiveSRRF.createCLKernel("kernelIncrementFramePosition");
+//        kernelResetFramePosition = programLiveSRRF.createCLKernel("kernelResetFramePosition");
 
         int argn;
         argn = 0;
@@ -233,10 +234,12 @@ public class liveSRRF_CL {
             queue.put2DRangeKernel(kernelCalculateSRRF, 0, 0, widthM, heightM, 0, 0);
             prof.recordTime("kernelCalculateSRRF", prof.endTimer(id));
 
-//            id = prof.startTimer();
-//            kernelIncrementFramePosition.setArg(0, clBufferCurrentFrame); // make sure type is the same !!
-//            queue.put1DRangeKernel(kernelIncrementFramePosition, 0, 2, 0);
-//            prof.recordTime("Increment frame count", prof.endTimer(id));
+            // This kernel needs to be done outaside of the previous kernel because of concommitent execution (you never know when each pixel is executed)
+            id = prof.startTimer();
+            kernelIncrementFramePosition.setArg(0, clBufferCurrentFrame); // make sure type is the same !!
+            queue.put1DRangeKernel(kernelIncrementFramePosition, 0, 2, 0);
+            prof.recordTime("Increment frame count", prof.endTimer(id));
+
         }
 
     }
@@ -289,12 +292,27 @@ public class liveSRRF_CL {
         context.release();
     }
 
+//    public float[] readCurrentFrame(){
+//
+//        queue.finish(); // Make sure everything is done
+//        queue.putReadBuffer(clBufferCurrentFrame, true);
+//        IntBuffer currFrameBuffer = clBufferCurrentFrame.getBuffer();
+//        float[] currFrameArray = new float[2];
+//
+//        currFrameArray[0] = currFrameBuffer.get(0);
+//        currFrameArray[1] = currFrameBuffer.get(1);
+//        IJ.log("Current SRRF frame: "+currFrameArray[0]);
+//        IJ.log("Current GPU frame: "+currFrameArray[1]);
+//
+//        return currFrameArray;
+//    }
+
 
     // --- Reset the SRRF frame counter ---
-    public void resetFramePosition() {
-        int id = prof.startTimer();
-        kernelResetFramePosition.setArg(0, clBufferCurrentFrame); // make sure type is the same !!
-        queue.put1DRangeKernel(kernelResetFramePosition, 0, 1, 0);
-        prof.recordTime("Reset SRRF frame counter", prof.endTimer(id));
-    }
+//    public void resetFramePosition() {
+//        int id = prof.startTimer();
+//        kernelResetFramePosition.setArg(0, clBufferCurrentFrame); // make sure type is the same !!
+//        queue.put1DRangeKernel(kernelResetFramePosition, 0, 1, 0);
+//        prof.recordTime("Reset SRRF frame counter", prof.endTimer(id));
+//    }
 }

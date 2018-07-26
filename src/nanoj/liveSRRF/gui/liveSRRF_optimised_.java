@@ -211,7 +211,7 @@ public class liveSRRF_optimised_ implements PlugIn {
 
         // Start looping trough SRRF frames --------------------------------------------
         for (int r = 1; r <= nSRRFframe; r++) {
-            liveSRRF.resetFramePosition();
+//            liveSRRF.resetFramePosition();
 
             IJ.log("--------");
             IJ.log("SRRF frame: " + r +"/"+nSRRFframe);
@@ -220,9 +220,15 @@ public class liveSRRF_optimised_ implements PlugIn {
             if (correctVibration) calculateShiftArray(indexStartSRRFframe);
             liveSRRF.loadShiftXYGPUbuffer(shiftX, shiftY);
 
+//            IJ.log("1");
+//            liveSRRF.readCurrentFrame();
+
             IJ.showProgress(r, nSRRFframe);
 
             for (int l = 0; l < nGPUloadPerSRRFframe; l++) {
+
+//                IJ.log("2");
+//                liveSRRF.readCurrentFrame();
 
                 // Check if user is cancelling calculation
                 if (IJ.escapePressed()) {

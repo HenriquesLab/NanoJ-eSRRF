@@ -161,7 +161,7 @@ public class ParametersSweep_ implements PlugIn {
                     }
 
                     liveSRRF.initialise(width, height, magnification, thisfwhm, thisSensitivity, thisnf, thisnf, null);
-                    liveSRRF.resetFramePosition();
+//                    liveSRRF.resetFramePosition();
                     liveSRRF.calculateSRRF(imsRawData);
                     imsBuffer = liveSRRF.readSRRFbuffer();
 

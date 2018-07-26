@@ -150,6 +150,11 @@ __kernel void calculateGradient_2point(
 
     // Reset the local current frame
     nCurrentFrame[1] = 0;
+    if (nCurrentFrame[0] == nFrameForSRRF) nCurrentFrame[0] = 0; // reset the frame number if it's reached the end
+
+        // Current frame is a 2 element Int buffer:
+                // nCurrentFrame[0] is the global current frame in the current SRRF frame (reset every SRRF frame)
+                // nCurrentFrame[1] is the local current frame in the current GPU-loaded dataset (reset every turn of the method calculateSRRF (within the gradient calculation))
 
 }
 
@@ -311,12 +316,6 @@ __kernel void calculateRadialGradientConvergence(
 
 //    else RGCArray[offset] = CGLH;
 
-    // if it's reached the end of the current frame, increment both frame numbers
-    if (xM == wM && yM == hM){
-        nCurrentFrame[0] = nCurrentFrame[0] + 1;
-        nCurrentFrame[1] = nCurrentFrame[1] + 1;
-    }
-
 
 }
 
@@ -352,9 +351,9 @@ __kernel void calculateRadialGradientConvergence(
 //}
 
 // Fifth kernel: reset the frame number -----------------------------------------------------------------
-__kernel void kernelResetFramePosition(
-    __global int* nCurrentFrame
-    ){
-    nCurrentFrame[0] = 0;
-}
+//__kernel void kernelResetFramePosition(
+//    __global int* nCurrentFrame
+//    ){
+//    nCurrentFrame[0] = 0;
+//}
 
