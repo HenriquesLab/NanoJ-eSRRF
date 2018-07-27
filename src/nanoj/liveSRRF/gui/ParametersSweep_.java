@@ -22,7 +22,8 @@ public class ParametersSweep_ implements PlugIn {
     private int magnification,
             nSlices,
             width,
-            height;
+            height,
+            blockSize;
 
     private boolean calculateAVG,
             calculateSTD;
@@ -96,6 +97,11 @@ public class ParametersSweep_ implements PlugIn {
         gd.addCheckbox("AVG reconstruction (default: on)", prefs.get("calculateAVG", true));
         gd.addCheckbox("STD reconstruction (default: off)", prefs.get("calculateSTD", false));
 
+        gd.addMessage("-=-= GPU processing =-=-\n", headerFont);
+        gd.addNumericField("Analysis block size (default: 20000)", prefs.get("blockSize", 20000), 0);
+        gd.addMessage("A large analysis block size will speed up the analysis but will use\n" +
+                "more resources and may slow down your computer.");
+
         gd.showDialog();
 
         // If the GUI was cancelled
@@ -149,7 +155,7 @@ public class ParametersSweep_ implements PlugIn {
                         imsRawData.addSlice(imp.getProcessor());
                     }
 
-                    liveSRRF.initialise(width, height, magnification, thisfwhm, thisSensitivity, thisnf, thisnf, null);
+                    liveSRRF.initialise(width, height, magnification, thisfwhm, thisSensitivity, thisnf, thisnf, blockSize,null);
                     liveSRRF.resetFramePosition();
                     liveSRRF.calculateSRRF(imsRawData);
                     imsBuffer = liveSRRF.readSRRFbuffer();
@@ -216,6 +222,7 @@ public class ParametersSweep_ implements PlugIn {
 
         calculateAVG = gd.getNextBoolean();
         calculateSTD = gd.getNextBoolean();
+        blockSize = (int) gd.getNextNumber();
 
         fwhmArray = new float[n_fwhm];
         for (int i = 0; i < n_fwhm; i++) {
@@ -248,6 +255,9 @@ public class ParametersSweep_ implements PlugIn {
 
         prefs.set("calculateAVG", calculateAVG);
         prefs.set("calculateSTD", calculateSTD);
+
+        prefs.set("blockSize", blockSize);
+
 
         prefs.save();
 

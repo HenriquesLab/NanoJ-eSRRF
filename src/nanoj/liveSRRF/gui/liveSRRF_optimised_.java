@@ -37,6 +37,7 @@ public class liveSRRF_optimised_ implements PlugIn {
             nSlices,
             width,
             height,
+            blockSize,
             nGPUloadPerSRRFframe;
 
     private float fwhm, maxMemoryGPU;
@@ -50,7 +51,7 @@ public class liveSRRF_optimised_ implements PlugIn {
             previousWriteToDisk = false;
 
     private final int radiusCCM = 5;
-    private final String LiveSRRFVersion = "v0.9";
+    private final String LiveSRRFVersion = "v0.10";
     private String pathToDisk = "",
             fileName,
             chosenDeviceName;
@@ -134,6 +135,10 @@ public class liveSRRF_optimised_ implements PlugIn {
                 "but may slow down the graphics card for your Minecraft game that you have \n" +
                 "running in parallel.");
 
+        gd.addNumericField("Analysis block size (default: 20000)", prefs.get("blockSize", 20000), 0);
+        gd.addMessage("A large analysis block size will speed up the analysis but will use\n" +
+                        "more resources and may slow down your computer.");
+
         gd.addMessage("-=-= Write to disk =-=-\n", headerFont);
         gd.addCheckbox("Directly write to disk (default: off)", false);
         gd.addMessage("Writing directly to disk will slow down the reconstruction but \n" +
@@ -190,7 +195,7 @@ public class liveSRRF_optimised_ implements PlugIn {
         // Initialize variables
         int indexStartSRRFframe;
         int nFrameToLoad;
-        liveSRRF.initialise(width, height, magnification, fwhm, sensitivity, nFrameOnGPU, nFrameForSRRF, chosenDevice);
+        liveSRRF.initialise(width, height, magnification, fwhm, sensitivity, nFrameOnGPU, nFrameForSRRF, blockSize, chosenDevice);
 
         shiftX = new float[nFrameForSRRF];
         shiftY = new float[nFrameForSRRF];
@@ -414,6 +419,8 @@ public class liveSRRF_optimised_ implements PlugIn {
         frameGap = (int) gd.getNextNumber();
         chosenDeviceName = gd.getNextChoice();
         maxMemoryGPU = (int) gd.getNextNumber();
+        blockSize = (int) gd.getNextNumber();
+
         writeToDisk = gd.getNextBoolean();
 
         // Calculate the parameters based on user inputs
@@ -613,6 +620,7 @@ public class liveSRRF_optimised_ implements PlugIn {
         prefs.set("frameGap", frameGap);
         prefs.set("chosenDeviceName", chosenDeviceName);
         prefs.set("maxMemoryGPU", maxMemoryGPU);
+        prefs.set("blockSize", blockSize);
 
         prefs.save();
 

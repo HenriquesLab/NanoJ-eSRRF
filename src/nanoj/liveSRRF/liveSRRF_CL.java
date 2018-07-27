@@ -13,6 +13,7 @@ import java.nio.IntBuffer;
 import static com.jogamp.opencl.CLMemory.Mem.READ_ONLY;
 import static com.jogamp.opencl.CLMemory.Mem.READ_WRITE;
 import static com.jogamp.opencl.CLMemory.Mem.WRITE_ONLY;
+import static java.lang.Math.min;
 import static nanoj.core2.NanoJCL.fillBuffer;
 import static nanoj.core2.NanoJCL.getResourceAsString;
 import static nanoj.core2.NanoJCL.replaceFirst;
@@ -24,7 +25,8 @@ public class liveSRRF_CL {
             height,
             widthM,
             heightM,
-            nFrameForSRRF;
+            nFrameForSRRF,
+            blockLength;
 
     private final int GxGyMagnification = 2;
     private final float vxy_offset = 0.5f;
@@ -87,13 +89,14 @@ public class liveSRRF_CL {
 
 
     // --- Initialization method ---
-    public void initialise(int width, int height, int magnification, float fwhm, int sensitivity, int nFramesOnGPU, int nFrameForSRRF, CLDevice chosenDevice) {
+    public void initialise(int width, int height, int magnification, float fwhm, int sensitivity, int nFramesOnGPU, int nFrameForSRRF, int blockLength, CLDevice chosenDevice) {
 
         this.width = width;
         this.height = height;
         this.heightM = height * magnification;
         this.widthM = width * magnification;
         this.nFrameForSRRF = nFrameForSRRF;
+        this.blockLength = blockLength;
 
 
         if (chosenDevice == null) {
@@ -230,13 +233,41 @@ public class liveSRRF_CL {
         // Make kernelCalculateSRRF assignment
 //        IJ.log("Calculating SRRF...");
 
+        int workSize;
 
         for (int f = 0; f < nFrameToLoad; f++) {
-            id = prof.startTimer();
-            queue.put2DRangeKernel(kernelCalculateSRRF, 0, 0, widthM, heightM, 0, 0);
-            prof.recordTime("kernelCalculateSRRF", prof.endTimer(id));
 
-            // This kernel needs to be done outaside of the previous kernel because of concommitent execution (you never know when each pixel is executed)
+//            int nXBlocks = widthM / 128 + ((widthM % 128 == 0) ? 0 : 1);
+//            int nYBlocks = heightM / 128 + ((heightM % 128 == 0) ? 0 : 1);
+//
+//            for (int nYB = 0; nYB < nYBlocks; nYB++) {
+//                int yWorkSize = min(128, heightM - nYB * 128);
+//                for (int nXB = 0; nXB < nXBlocks; nXB++) {
+//
+//                    int xWorkSize = min(128, widthM -nXB*128);
+//                    id = prof.startTimer();
+//                    queue.put2DRangeKernel(kernelCalculateSRRF, nXB*128, nYB*128, xWorkSize, yWorkSize, 0, 0);
+//                    prof.recordTime("kernelCalculateSRRF", prof.endTimer(id));
+//
+//                }
+//            }
+
+            int nBlocks = widthM * heightM / blockLength + ((widthM * heightM % blockLength == 0) ? 0 : 1);
+
+            for (int nB = 0; nB < nBlocks; nB++) {
+                workSize = min(blockLength, widthM * heightM - nB * blockLength);
+
+                id = prof.startTimer();
+                queue.put1DRangeKernel(kernelCalculateSRRF, nB * blockLength, workSize, 0);
+                prof.recordTime("kernelCalculateSRRF", prof.endTimer(id));
+
+            }
+
+//            id = prof.startTimer();
+//            queue.put2DRangeKernel(kernelCalculateSRRF, 0, 0, widthM, heightM, 0, 0);
+//            prof.recordTime("kernelCalculateSRRF", prof.endTimer(id));
+
+            // This kernel needs to be done outside of the previous kernel because of concommitent execution (you never know when each pixel is executed)
             id = prof.startTimer();
             queue.put1DRangeKernel(kernelIncrementFramePosition, 0, 2, 0);
             prof.recordTime("Increment frame count", prof.endTimer(id));

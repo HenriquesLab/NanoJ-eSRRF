@@ -194,10 +194,14 @@ __kernel void calculateRadialGradientConvergence(
 
     ) {
 
-    const int xM = get_global_id(0);
-    const int yM = get_global_id(1);
+//    const int xM = get_global_id(0);
+//    const int yM = get_global_id(1);
+//
+//    const int offset = yM * wM + xM;
 
-    const int offset = yM * wM + xM;
+    const int offset = get_global_id(0);
+    const int yM = offset/wM;
+    const int xM = offset - yM*wM;
 
     const float shiftX = shiftXY[nCurrentFrame[0]];
     const float shiftY = shiftXY[nCurrentFrame[0] + nFrameForSRRF];
