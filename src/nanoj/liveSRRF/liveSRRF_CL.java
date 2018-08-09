@@ -207,7 +207,7 @@ public class liveSRRF_CL {
 
 
     // --- Calculate SRRF images ---
-    public synchronized void calculateSRRF(ImageStack imsRawData) {
+    public synchronized boolean calculateSRRF(ImageStack imsRawData) { // returns boolean desribing whether it was cancelled by user or not
 
         assert (imsRawData.getWidth() == width && imsRawData.getHeight() == height);
         int nFrameToLoad = imsRawData.getSize();
@@ -236,21 +236,6 @@ public class liveSRRF_CL {
 
         for (int f = 0; f < nFrameToLoad; f++) {
 
-//            int nXBlocks = widthM / 128 + ((widthM % 128 == 0) ? 0 : 1);
-//            int nYBlocks = heightM / 128 + ((heightM % 128 == 0) ? 0 : 1);
-//
-//            for (int nYB = 0; nYB < nYBlocks; nYB++) {
-//                int yWorkSize = min(128, heightM - nYB * 128);
-//                for (int nXB = 0; nXB < nXBlocks; nXB++) {
-//
-//                    int xWorkSize = min(128, widthM -nXB*128);
-//                    id = prof.startTimer();
-//                    queue.put2DRangeKernel(kernelCalculateSRRF, nXB*128, nYB*128, xWorkSize, yWorkSize, 0, 0);
-//                    prof.recordTime("kernelCalculateSRRF", prof.endTimer(id));
-//
-//                }
-//            }
-
             int nBlocks = widthM * heightM / blockLength + ((widthM * heightM % blockLength == 0) ? 0 : 1);
 
             for (int nB = 0; nB < nBlocks; nB++) {
@@ -259,6 +244,12 @@ public class liveSRRF_CL {
                 id = prof.startTimer();
                 queue.put1DRangeKernel(kernelCalculateSRRF, nB * blockLength, workSize, 0);
                 prof.recordTime("kernelCalculateSRRF", prof.endTimer(id));
+
+                if (IJ.escapePressed()) {
+                    IJ.resetEscape();
+                    IJ.log("Aborted");
+                    return true;
+                }
 
             }
 
@@ -272,6 +263,8 @@ public class liveSRRF_CL {
             prof.recordTime("Increment frame count", prof.endTimer(id));
 
         }
+
+        return false;
 
     }
 
