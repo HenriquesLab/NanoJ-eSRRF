@@ -56,6 +56,8 @@ public class liveSRRF_optimised_ implements PlugIn {
             fileName,
             chosenDeviceName;
 
+    private String[] deviceNames;
+
     private float[] shiftX, shiftY;
 
     // Image formats
@@ -102,73 +104,26 @@ public class liveSRRF_optimised_ implements PlugIn {
         LocalDateTime now = LocalDateTime.now();
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
         IJ.log(now.format(formatter));
-//        liveSRRF = new liveSRRF_CL();
-////        CLDevice[] allDevices = liveSRRF.checkDevices();
-////
-////        // Initilizaing string for device choice
-////        String[] deviceNames = new String[allDevices.length + 1];
-////        deviceNames[0] = "Default device";
-////
-////        for (int i = 1; i <= allDevices.length; i++) {
-////            deviceNames[i] = allDevices[i - 1].getName();
-////        }
 
-//        // Build GUI
-//        Font headerFont = new Font("Arial", Font.BOLD, 16);
-//        NonBlockingGenericDialog gd = new NonBlockingGenericDialog("liveSRRF " + LiveSRRFVersion);
-//        gd.addMessage("-=-= SRRF parameters =-=-\n", headerFont);
-//        gd.addNumericField("Magnification (default: 5)", prefs.get("magnification", 5), 0);
-//        gd.addNumericField("Radius (pixels, default: 2)", prefs.get("fwhm", 2), 2);
-//        gd.addNumericField("Sensitivity (default: 1)", prefs.get("sensitivity", 1), 0);
-//        gd.addNumericField("# frames for SRRF (0 = auto)", prefs.get("nFrameForSRRF", 0), 0);
-//        gd.addCheckbox("Correct vibration", prefs.get("correctVibration", false));
-//
-//        gd.addMessage("-=-= Reconstructions =-=-\n", headerFont);
-//        gd.addCheckbox("AVG reconstruction (default: on)", prefs.get("calculateAVG", true));
-//        gd.addCheckbox("STD reconstruction (default: off)", prefs.get("calculateSTD", false));
-//        gd.addCheckbox("Wide-field interpolation (default: off)", prefs.get("getInterpolatedImage", false));
-//
-//        gd.addMessage("-=-= Advanced settings =-=-\n", headerFont);
-//        gd.addCheckbox("Show advanced settings", prefs.get("showAdvSettings", false));
-//
-//        gd.addMessage("-=-= Rolling analysis =-=-\n", headerFont);
-//        gd.addNumericField("# frame gap between SR frame (0 = auto)", prefs.get("frameGap", 0), 0);
-//        gd.addMessage("Warning: Rolling analysis may lead to long computation times.");
-//
-//        gd.addMessage("-=-= GPU/CPU processing =-=-\n", headerFont);
-//        gd.addChoice("Processing device", deviceNames, prefs.get("chosenDeviceName", "Default device"));
-//        gd.addNumericField("Maximum amount of memory on device (MB, default: 1000)", prefs.get("maxMemoryGPU", 500), 2);
-//        gd.addMessage("Giving liveSRRF access to a lot of memory speeds up the reconstruction\n" +
-//                "but may slow down the graphics card for your Minecraft game that you have \n" +
-//                "running in parallel.");
-//
-//        gd.addNumericField("Analysis block size (default: 20000)", prefs.get("blockSize", 20000), 0);
-//        gd.addMessage("A large analysis block size will speed up the analysis but will use\n" +
-//                "more resources and may slow down your computer.");
-//
-//        gd.addMessage("-=-= Write to disk =-=-\n", headerFont);
-//        gd.addCheckbox("Directly write to disk (default: off)", false);
-//        gd.addMessage("Writing directly to disk will slow down the reconstruction but \n" +
-//                "will allow for long time courses to be reconstructed without\n" +
-//                "exceeding RAM capacity.");
-//
-//        MyDialogListenerMainGUI dl = new MyDialogListenerMainGUI(); // this serves to estimate a few indicators such as RAM usage
-//        gd.addDialogListener(dl);
-//        gd.showDialog();
-//
-//        // If the GUI was cancelled
-//        if (gd.wasCanceled()) {
-//            liveSRRF.release();
-//            return;
-//        }
+        liveSRRF = new liveSRRF_CL();
+        CLDevice[] allDevices = liveSRRF.checkDevices();
 
+        // Initializing string for device choice
+        deviceNames = new String[allDevices.length + 1];
+        deviceNames[0] = "Default device";
+
+        for (int i = 1; i <= allDevices.length; i++) {
+            deviceNames[i] = allDevices[i - 1].getName();
+        }
+
+
+        // Main GUI
         mainGUI();
 
-//        // Get chosen device
-//        CLDevice chosenDevice = null;
-//        for (CLDevice allDevice : allDevices) {
-//            if (chosenDeviceName.equals(allDevice.getName())) chosenDevice = allDevice;
-//        }
+        // Get chosen device
+        for (CLDevice allDevice : allDevices) {
+            if (chosenDeviceName.equals(allDevice.getName())) chosenDevice = allDevice;
+        }
 
         // Save last user entries
         savePreferences();
@@ -399,21 +354,44 @@ public class liveSRRF_optimised_ implements PlugIn {
     //    -------------------------- Here lies dragons and functions --------------------------
     //    -------------------------------------------------------------------------------------
 
+
+    // -- Main GUI --
+    private void mainGUI(){
+        // Build GUI
+        Font headerFont = new Font("Arial", Font.BOLD, 16);
+        NonBlockingGenericDialog gd = new NonBlockingGenericDialog("liveSRRF " + LiveSRRFVersion);
+        gd.addMessage("-=-= SRRF parameters =-=-\n", headerFont);
+        gd.addNumericField("Magnification (default: 5)", prefs.get("magnification", 5), 0);
+        gd.addNumericField("Radius (pixels, default: 2)", prefs.get("fwhm", 2), 2);
+        gd.addNumericField("Sensitivity (default: 1)", prefs.get("sensitivity", 1), 0);
+        gd.addNumericField("# frames for SRRF (0 = auto)", prefs.get("nFrameForSRRF", 0), 0);
+        gd.addCheckbox("Correct vibration", prefs.get("correctVibration", false));
+
+        gd.addMessage("-=-= Reconstructions =-=-\n", headerFont);
+        gd.addCheckbox("AVG reconstruction (default: on)", prefs.get("calculateAVG", true));
+        gd.addCheckbox("STD reconstruction (default: off)", prefs.get("calculateSTD", false));
+        gd.addCheckbox("Wide-field interpolation (default: off)", prefs.get("getInterpolatedImage", false));
+
+        gd.addMessage("-=-= Advanced settings =-=-\n", headerFont);
+        gd.addCheckbox("Show advanced settings", prefs.get("showAdvSettings", false));
+
+        MyDialogListenerMainGUI dl = new MyDialogListenerMainGUI(); // this serves to estimate a few indicators such as RAM usage
+        gd.addDialogListener(dl);
+        gd.showDialog();
+
+        // If the GUI was cancelled
+        if (gd.wasCanceled()) {
+            liveSRRF.release();
+            return;
+        }
+    }
+
     // --- Main GUI Dialog listener ---
     class MyDialogListenerMainGUI implements DialogListener {
         @Override
         public boolean dialogItemChanged(GenericDialog gd, AWTEvent awtEvent) {
 
             return grabSettingsMainGUI(gd);
-        }
-    }
-
-    // --- Advanced GUI Dialog listener ---
-    class MyDialogListenerAdvancedGUI implements DialogListener {
-        @Override
-        public boolean dialogItemChanged(GenericDialog gd, AWTEvent awtEvent) {
-
-            return grabSettingsAdvancedGUI(gd);
         }
     }
 
@@ -433,63 +411,118 @@ public class liveSRRF_optimised_ implements PlugIn {
         calculateSTD = gd.getNextBoolean();
 
         getInterpolatedImage = gd.getNextBoolean();
+        if (gd.getNextBoolean()) advancedSettingsGUI();
+
+        return goodToGo;
+    }
 
 
-        boolean showAdvancedSettings = gd.getNextBoolean();
+    // -- Advanced settings GUI --
+    private void advancedSettingsGUI() {
 
-        if (showAdvancedSettings) advancedSettingsGUI();
+        // Build GUI
+        Font headerFont = new Font("Arial", Font.BOLD, 16);
+        NonBlockingGenericDialog gd = new NonBlockingGenericDialog("liveSRRF - Advanced settings");
+
+        gd.addMessage("-=-= Rolling analysis =-=-\n", headerFont);
+        gd.addNumericField("# frame gap between SR frame (0 = auto)", prefs.get("frameGap", 0), 0);
+        gd.addMessage("Warning: Rolling analysis may lead to long computation times.");
+
+        gd.addMessage("-=-= GPU/CPU processing =-=-\n", headerFont);
+        gd.addChoice("Processing device", deviceNames, prefs.get("chosenDeviceName", "Default device"));
+        gd.addNumericField("Maximum amount of memory on device (MB, default: 1000)", prefs.get("maxMemoryGPU", 500), 2);
+        gd.addMessage("Giving liveSRRF access to a lot of memory speeds up the reconstruction\n" +
+                "but may slow down the graphics card for your Minecraft game that you have \n" +
+                "running in parallel.");
+
+        gd.addNumericField("Analysis block size (default: 20000)", prefs.get("blockSize", 20000), 0);
+        gd.addMessage("A large analysis block size will speed up the analysis but will use\n" +
+                "more resources and may slow down your computer.");
+
+        gd.addMessage("-=-= Write to disk =-=-\n", headerFont);
+        gd.addCheckbox("Directly write to disk (default: off)", false);
+        gd.addMessage("Writing directly to disk will slow down the reconstruction but \n" +
+                "will allow for long time courses to be reconstructed without\n" +
+                "exceeding RAM capacity.");
+
+        MyDialogListenerAdvancedGUI dl = new MyDialogListenerAdvancedGUI(); // this serves to estimate a few indicators such as RAM usage
+        gd.addDialogListener(dl);
+        gd.showDialog();
+
+        // If the GUI was cancelled
+        if (gd.wasCanceled()) {
+            liveSRRF.release();
+            return;
+        }
 
 
-//        frameGap = (int) gd.getNextNumber();
-//        chosenDeviceName = gd.getNextChoice();
-//        maxMemoryGPU = (int) gd.getNextNumber();
-//        blockSize = (int) gd.getNextNumber();
-//
-//        writeToDisk = gd.getNextBoolean();
-//
-//        // Calculate the parameters based on user inputs
-//        if (nFrameForSRRF == 0) nFrameForSRRF = nSlices;
-//        nFrameForSRRF = min(nSlices, nFrameForSRRF);
-//        nSRRFframe = (int) ((float) (nSlices - nFrameForSRRF) / (float) frameGap) + 1;
-//
-//        if (frameGap == 0) frameGap = nFrameForSRRF;
-//
-//        int maxnFrameOnGPU = 0;
-//        double[] memUsed = new double[2];
-//        while (memUsed[0] < (double) maxMemoryGPU) {
-//            maxnFrameOnGPU = maxnFrameOnGPU + 1;
-//            memUsed = predictMemoryUsed(maxnFrameOnGPU);
-//        }
-//
-//        maxnFrameOnGPU = maxnFrameOnGPU - 1;
-//
-//        if (maxnFrameOnGPU > 0) {
-//            goodToGo = true;
-//            nFrameOnGPU = (int) math.ceil((float) nFrameForSRRF / (float) maxnFrameOnGPU);
-//            nFrameOnGPU = (int) math.ceil(((float) nFrameForSRRF / (float) nFrameOnGPU));
-//            nFrameOnGPU = min(nFrameForSRRF, nFrameOnGPU);
-//            memUsed = predictMemoryUsed(nFrameOnGPU);
-//
-//            IJ.showStatus("liveSRRF - Number of frames on device: " + (nFrameOnGPU) + " (" + Math.round(memUsed[0]) + " MB)");
-//        } else {
-//            memUsed = predictMemoryUsed(1);
-//            IJ.showStatus("liveSRRF - Minimum device memory: " + Math.round(memUsed[0]) + "MB");
-//        }
-//
-//        // Check for RAM on computer
-//        if (memUsed[1] > IJ.maxMemory()) {
-//            goodToGo = false;
-//            IJ.showStatus("liveSRRF - Max RAM available exceeded: (" + (Math.round(memUsed[1])) + "MB vs. " + (Math.round(IJ.maxMemory())) + "MB)");
-//        }
-//
-//        nGPUloadPerSRRFframe = (int) math.ceil((float) nFrameForSRRF / (float) nFrameOnGPU);
-//
-//        if (writeToDisk && !previousWriteToDisk) {
-//            pathToDisk = IJ.getDirectory("");
-//            if (pathToDisk == null) writeToDisk = false;
-//        }
-//
-//        previousWriteToDisk = writeToDisk;
+
+    }
+
+    // --- Advanced GUI Dialog listener ---
+    class MyDialogListenerAdvancedGUI implements DialogListener {
+        @Override
+        public boolean dialogItemChanged(GenericDialog gd, AWTEvent awtEvent) {
+            return grabSettingsAdvancedGUI(gd);
+        }
+    }
+
+
+    //    --- Grab settings from main GUI ---
+    private boolean grabSettingsAdvancedGUI(GenericDialog gd) {
+
+        boolean goodToGo = false;
+
+        frameGap = (int) gd.getNextNumber();
+        chosenDeviceName = gd.getNextChoice();
+        maxMemoryGPU = (int) gd.getNextNumber();
+        blockSize = (int) gd.getNextNumber();
+
+        writeToDisk = gd.getNextBoolean();
+
+        // Calculate the parameters based on user inputs
+        if (nFrameForSRRF == 0) nFrameForSRRF = nSlices;
+        nFrameForSRRF = min(nSlices, nFrameForSRRF);
+        nSRRFframe = (int) ((float) (nSlices - nFrameForSRRF) / (float) frameGap) + 1;
+
+        if (frameGap == 0) frameGap = nFrameForSRRF;
+
+        int maxnFrameOnGPU = 0;
+        double[] memUsed = new double[2];
+        while (memUsed[0] < (double) maxMemoryGPU) {
+            maxnFrameOnGPU = maxnFrameOnGPU + 1;
+            memUsed = predictMemoryUsed(maxnFrameOnGPU);
+        }
+
+        maxnFrameOnGPU = maxnFrameOnGPU - 1;
+
+        if (maxnFrameOnGPU > 0) {
+            goodToGo = true;
+            nFrameOnGPU = (int) math.ceil((float) nFrameForSRRF / (float) maxnFrameOnGPU);
+            nFrameOnGPU = (int) math.ceil(((float) nFrameForSRRF / (float) nFrameOnGPU));
+            nFrameOnGPU = min(nFrameForSRRF, nFrameOnGPU);
+            memUsed = predictMemoryUsed(nFrameOnGPU);
+
+            IJ.showStatus("liveSRRF - Number of frames on device: " + (nFrameOnGPU) + " (" + Math.round(memUsed[0]) + " MB)");
+        } else {
+            memUsed = predictMemoryUsed(1);
+            IJ.showStatus("liveSRRF - Minimum device memory: " + Math.round(memUsed[0]) + "MB");
+        }
+
+        // Check for RAM on computer
+        if (memUsed[1] > IJ.maxMemory()) {
+            goodToGo = false;
+            IJ.showStatus("liveSRRF - Max RAM available exceeded: (" + (Math.round(memUsed[1])) + "MB vs. " + (Math.round(IJ.maxMemory())) + "MB)");
+        }
+
+        nGPUloadPerSRRFframe = (int) math.ceil((float) nFrameForSRRF / (float) nFrameOnGPU);
+
+        if (writeToDisk && !previousWriteToDisk) {
+            pathToDisk = IJ.getDirectory("");
+            if (pathToDisk == null) writeToDisk = false;
+        }
+
+        previousWriteToDisk = writeToDisk;
 
         return goodToGo;
     }
@@ -641,154 +674,6 @@ public class liveSRRF_optimised_ implements PlugIn {
 
         prefs.save();
 
-    }
-
-    // -- Main GUI --
-
-    private void mainGUI(){
-        // Build GUI
-        Font headerFont = new Font("Arial", Font.BOLD, 16);
-        NonBlockingGenericDialog gd = new NonBlockingGenericDialog("liveSRRF " + LiveSRRFVersion);
-        gd.addMessage("-=-= SRRF parameters =-=-\n", headerFont);
-        gd.addNumericField("Magnification (default: 5)", prefs.get("magnification", 5), 0);
-        gd.addNumericField("Radius (pixels, default: 2)", prefs.get("fwhm", 2), 2);
-        gd.addNumericField("Sensitivity (default: 1)", prefs.get("sensitivity", 1), 0);
-        gd.addNumericField("# frames for SRRF (0 = auto)", prefs.get("nFrameForSRRF", 0), 0);
-        gd.addCheckbox("Correct vibration", prefs.get("correctVibration", false));
-
-        gd.addMessage("-=-= Reconstructions =-=-\n", headerFont);
-        gd.addCheckbox("AVG reconstruction (default: on)", prefs.get("calculateAVG", true));
-        gd.addCheckbox("STD reconstruction (default: off)", prefs.get("calculateSTD", false));
-        gd.addCheckbox("Wide-field interpolation (default: off)", prefs.get("getInterpolatedImage", false));
-
-        gd.addMessage("-=-= Advanced settings =-=-\n", headerFont);
-        gd.addCheckbox("Show advanced settings", prefs.get("showAdvSettings", false));
-
-        MyDialogListenerMainGUI dl = new MyDialogListenerMainGUI(); // this serves to estimate a few indicators such as RAM usage
-        gd.addDialogListener(dl);
-        gd.showDialog();
-
-        // If the GUI was cancelled
-        if (gd.wasCanceled()) {
-            liveSRRF.release();
-            return;
-        }
-    }
-
-    // -- Advanced settings GUI --
-    private void advancedSettingsGUI() {
-
-        CLDevice[] allDevices = liveSRRF.checkDevices();
-
-        // Initializing string for device choice
-        String[] deviceNames = new String[allDevices.length + 1];
-        deviceNames[0] = "Default device";
-
-        for (int i = 1; i <= allDevices.length; i++) {
-            deviceNames[i] = allDevices[i - 1].getName();
-        }
-
-        // Build GUI
-        Font headerFont = new Font("Arial", Font.BOLD, 16);
-        NonBlockingGenericDialog gd = new NonBlockingGenericDialog("liveSRRF - Advanced settings");
-
-        gd.addMessage("-=-= Rolling analysis =-=-\n", headerFont);
-        gd.addNumericField("# frame gap between SR frame (0 = auto)", prefs.get("frameGap", 0), 0);
-        gd.addMessage("Warning: Rolling analysis may lead to long computation times.");
-
-        gd.addMessage("-=-= GPU/CPU processing =-=-\n", headerFont);
-        gd.addChoice("Processing device", deviceNames, prefs.get("chosenDeviceName", "Default device"));
-        gd.addNumericField("Maximum amount of memory on device (MB, default: 1000)", prefs.get("maxMemoryGPU", 500), 2);
-        gd.addMessage("Giving liveSRRF access to a lot of memory speeds up the reconstruction\n" +
-                "but may slow down the graphics card for your Minecraft game that you have \n" +
-                "running in parallel.");
-
-        gd.addNumericField("Analysis block size (default: 20000)", prefs.get("blockSize", 20000), 0);
-        gd.addMessage("A large analysis block size will speed up the analysis but will use\n" +
-                "more resources and may slow down your computer.");
-
-        gd.addMessage("-=-= Write to disk =-=-\n", headerFont);
-        gd.addCheckbox("Directly write to disk (default: off)", false);
-        gd.addMessage("Writing directly to disk will slow down the reconstruction but \n" +
-                "will allow for long time courses to be reconstructed without\n" +
-                "exceeding RAM capacity.");
-
-        MyDialogListenerAdvancedGUI dl = new MyDialogListenerAdvancedGUI(); // this serves to estimate a few indicators such as RAM usage
-        gd.addDialogListener(dl);
-        gd.showDialog();
-
-        // If the GUI was cancelled
-        if (gd.wasCanceled()) {
-            liveSRRF.release();
-            return;
-        }
-
-        // Get chosen device
-        for (CLDevice allDevice : allDevices) {
-            if (chosenDeviceName.equals(allDevice.getName())) chosenDevice = allDevice;
-        }
-
-    }
-
-
-
-    //    --- Grab settings from main GUI ---
-    private boolean grabSettingsAdvancedGUI(GenericDialog gd) {
-
-        boolean goodToGo = false;
-
-        frameGap = (int) gd.getNextNumber();
-        chosenDeviceName = gd.getNextChoice();
-        maxMemoryGPU = (int) gd.getNextNumber();
-        blockSize = (int) gd.getNextNumber();
-
-        writeToDisk = gd.getNextBoolean();
-
-        // Calculate the parameters based on user inputs
-        if (nFrameForSRRF == 0) nFrameForSRRF = nSlices;
-        nFrameForSRRF = min(nSlices, nFrameForSRRF);
-        nSRRFframe = (int) ((float) (nSlices - nFrameForSRRF) / (float) frameGap) + 1;
-
-        if (frameGap == 0) frameGap = nFrameForSRRF;
-
-        int maxnFrameOnGPU = 0;
-        double[] memUsed = new double[2];
-        while (memUsed[0] < (double) maxMemoryGPU) {
-            maxnFrameOnGPU = maxnFrameOnGPU + 1;
-            memUsed = predictMemoryUsed(maxnFrameOnGPU);
-        }
-
-        maxnFrameOnGPU = maxnFrameOnGPU - 1;
-
-        if (maxnFrameOnGPU > 0) {
-            goodToGo = true;
-            nFrameOnGPU = (int) math.ceil((float) nFrameForSRRF / (float) maxnFrameOnGPU);
-            nFrameOnGPU = (int) math.ceil(((float) nFrameForSRRF / (float) nFrameOnGPU));
-            nFrameOnGPU = min(nFrameForSRRF, nFrameOnGPU);
-            memUsed = predictMemoryUsed(nFrameOnGPU);
-
-            IJ.showStatus("liveSRRF - Number of frames on device: " + (nFrameOnGPU) + " (" + Math.round(memUsed[0]) + " MB)");
-        } else {
-            memUsed = predictMemoryUsed(1);
-            IJ.showStatus("liveSRRF - Minimum device memory: " + Math.round(memUsed[0]) + "MB");
-        }
-
-        // Check for RAM on computer
-        if (memUsed[1] > IJ.maxMemory()) {
-            goodToGo = false;
-            IJ.showStatus("liveSRRF - Max RAM available exceeded: (" + (Math.round(memUsed[1])) + "MB vs. " + (Math.round(IJ.maxMemory())) + "MB)");
-        }
-
-        nGPUloadPerSRRFframe = (int) math.ceil((float) nFrameForSRRF / (float) nFrameOnGPU);
-
-        if (writeToDisk && !previousWriteToDisk) {
-            pathToDisk = IJ.getDirectory("");
-            if (pathToDisk == null) writeToDisk = false;
-        }
-
-        previousWriteToDisk = writeToDisk;
-
-        return goodToGo;
     }
 
 }
