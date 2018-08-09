@@ -63,7 +63,6 @@ public class liveSRRF_CL {
 
     // --- Constructor ---
     public liveSRRF_CL() {
-
         IJ.log("--------");
         context = CLContext.create();
         System.out.println("created " + context);

@@ -51,7 +51,7 @@ public class liveSRRF_optimised_ implements PlugIn {
             previousWriteToDisk = false;
 
     private final int radiusCCM = 5;
-    private final String LiveSRRFVersion = "v0.10";
+    private final String LiveSRRFVersion = "v1.0";
     private String pathToDisk = "",
             fileName,
             chosenDeviceName;
@@ -71,7 +71,7 @@ public class liveSRRF_optimised_ implements PlugIn {
     private NanoJPrefs prefs = new NanoJPrefs(this.getClass().getName());
     private NanoJProfiler prof = new NanoJProfiler();
 
-    liveSRRF_CL liveSRRF;
+    private liveSRRF_CL liveSRRF;
 
     private SaveFileInZip saveFileInZip;
 
@@ -101,11 +101,11 @@ public class liveSRRF_optimised_ implements PlugIn {
         CLDevice[] allDevices = liveSRRF.checkDevices();
 
         // Initilizaing string for device choice
-        String[] deviceNames = new String[allDevices.length+1];
+        String[] deviceNames = new String[allDevices.length + 1];
         deviceNames[0] = "Default device";
 
         for (int i = 1; i <= allDevices.length; i++) {
-            deviceNames[i] = allDevices[i-1].getName();
+            deviceNames[i] = allDevices[i - 1].getName();
         }
 
         // Build GUI
@@ -113,9 +113,11 @@ public class liveSRRF_optimised_ implements PlugIn {
         NonBlockingGenericDialog gd = new NonBlockingGenericDialog("liveSRRF " + LiveSRRFVersion);
         gd.addMessage("-=-= SRRF parameters =-=-\n", headerFont);
         gd.addNumericField("Magnification (default: 5)", prefs.get("magnification", 5), 0);
-        gd.addNumericField("FWHM (pixels, default: 2)", prefs.get("fwhm", 2), 2);
-        gd.addNumericField("Sensitivity (default: 3)", prefs.get("sensitivity", 3), 0);
+        gd.addNumericField("Radius (pixels, default: 2)", prefs.get("fwhm", 2), 2);
+        gd.addNumericField("Sensitivity (default: 1)", prefs.get("sensitivity", 1), 0);
         gd.addNumericField("# frames for SRRF (0 = auto)", prefs.get("nFrameForSRRF", 0), 0);
+
+        gd.addMessage("-=-= Vibration correction =-=-\n", headerFont);
         gd.addCheckbox("Correct vibration", prefs.get("correctVibration", false));
 
         gd.addMessage("-=-= Reconstructions =-=-\n", headerFont);
@@ -125,19 +127,19 @@ public class liveSRRF_optimised_ implements PlugIn {
         gd.addCheckbox("Wide-field interpolation (default: off)", prefs.get("getInterpolatedImage", false));
 
         gd.addMessage("-=-= Rolling analysis =-=-\n", headerFont);
-        gd.addNumericField("Gap between SR frame (frames, default: 50)", prefs.get("frameGap", 50), 0);
+        gd.addNumericField("# frame gap between SR frame (0 = auto)", prefs.get("frameGap", 0), 0);
         gd.addMessage("Warning: Rolling analysis may lead to long computation times.");
 
         gd.addMessage("-=-= GPU/CPU processing =-=-\n", headerFont);
         gd.addChoice("Processing device", deviceNames, prefs.get("chosenDeviceName", "Default device"));
-        gd.addNumericField("Maximum amount of memory on GPU (MB, default: 1000)", prefs.get("maxMemoryGPU", 500), 2);
-        gd.addMessage("Giving SRRF access to a lot of memory speeds up the reconstruction\n" +
+        gd.addNumericField("Maximum amount of memory on device (MB, default: 1000)", prefs.get("maxMemoryGPU", 500), 2);
+        gd.addMessage("Giving liveSRRF access to a lot of memory speeds up the reconstruction\n" +
                 "but may slow down the graphics card for your Minecraft game that you have \n" +
                 "running in parallel.");
 
         gd.addNumericField("Analysis block size (default: 20000)", prefs.get("blockSize", 20000), 0);
         gd.addMessage("A large analysis block size will speed up the analysis but will use\n" +
-                        "more resources and may slow down your computer.");
+                "more resources and may slow down your computer.");
 
         gd.addMessage("-=-= Write to disk =-=-\n", headerFont);
         gd.addCheckbox("Directly write to disk (default: off)", false);
@@ -219,13 +221,13 @@ public class liveSRRF_optimised_ implements PlugIn {
             liveSRRF.resetFramePosition();
 
             IJ.log("--------");
-            IJ.log("SRRF frame: " + r +"/"+nSRRFframe);
+            IJ.log("SRRF frame: " + r + "/" + nSRRFframe);
             indexStartSRRFframe = (r - 1) * frameGap + 1;
             IJ.log("Stack index start: " + indexStartSRRFframe);
             if (correctVibration) calculateShiftArray(indexStartSRRFframe);
             liveSRRF.loadShiftXYGPUbuffer(shiftX, shiftY);
 
-            IJ.showProgress(r, nSRRFframe);
+            IJ.showProgress(r-1, nSRRFframe);
 
             for (int l = 0; l < nGPUloadPerSRRFframe; l++) {
 
@@ -303,9 +305,8 @@ public class liveSRRF_optimised_ implements PlugIn {
             try {
                 if (calculateAVG) {
                     FullFramesVirtualStack vsimsSRRFavg = new FullFramesVirtualStack(fileName, true);
-                    for (int f = 0; f < nSRRFframe; f++) {
-                        vsimsSRRFavg.deleteSlice((nSRRFframe - f) * 3);
-                        vsimsSRRFavg.deleteSlice((nSRRFframe - f) * 3 - 1);
+                    for (int f = vsimsSRRFavg.getSize(); f > 0; f--) {
+                        if (!vsimsSRRFavg.getSliceLabel(f).contains("AVG")) vsimsSRRFavg.deleteSlice(f);
                     }
 
                     impSRRFavg = new ImagePlus(imp.getTitle() + " - liveSRRF (AVG)", vsimsSRRFavg);
@@ -316,9 +317,8 @@ public class liveSRRF_optimised_ implements PlugIn {
 
                 if (calculateSTD) {
                     FullFramesVirtualStack vsimsSRRFstd = new FullFramesVirtualStack(fileName, true);
-                    for (int f = 0; f < nSRRFframe; f++) {
-                        vsimsSRRFstd.deleteSlice((nSRRFframe - f) * 3);
-                        vsimsSRRFstd.deleteSlice((nSRRFframe - f) * 3 - 2);
+                    for (int f = vsimsSRRFstd.getSize(); f > 0; f--) {
+                        if (!vsimsSRRFstd.getSliceLabel(f).contains("STD")) vsimsSRRFstd.deleteSlice(f);
                     }
 
                     impSRRFstd = new ImagePlus(imp.getTitle() + " - liveSRRF (STD)", vsimsSRRFstd);
@@ -329,9 +329,8 @@ public class liveSRRF_optimised_ implements PlugIn {
 
                 if (getInterpolatedImage) {
                     FullFramesVirtualStack vsimsRawInterpolated = new FullFramesVirtualStack(fileName, true);
-                    for (int f = 0; f < nSRRFframe; f++) {
-                        vsimsRawInterpolated.deleteSlice((nSRRFframe - f) * 3 - 1);
-                        vsimsRawInterpolated.deleteSlice((nSRRFframe - f) * 3 - 2);
+                    for (int f = vsimsRawInterpolated.getSize(); f > 0; f--) {
+                        if (!vsimsRawInterpolated.getSliceLabel(f).contains("INT")) vsimsRawInterpolated.deleteSlice(f);
                     }
 
                     impRawInterpolated = new ImagePlus(imp.getTitle() + " - interpolated image", vsimsRawInterpolated);
@@ -347,7 +346,6 @@ public class liveSRRF_optimised_ implements PlugIn {
 
 
         } else {
-
 
             //Display results
             if (calculateAVG || doFusion) {
@@ -388,8 +386,8 @@ public class liveSRRF_optimised_ implements PlugIn {
         IJ.log("Thank you for your custom on this beautiful day !");
         now = LocalDateTime.now();
         IJ.log(now.format(formatter));
-        IJ.log("-------------------------------------");
-        IJ.log(prof.report());
+//        IJ.log("-------------------------------------");
+//        IJ.log(prof.report());
     }
 
 

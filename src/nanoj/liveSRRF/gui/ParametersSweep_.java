@@ -26,7 +26,10 @@ public class ParametersSweep_ implements PlugIn {
             blockSize;
 
     private boolean calculateAVG,
-            calculateSTD;
+            calculateSTD,
+            showRecons,
+            calculateFRC,
+            calculateRSE;
 
     private float[] fwhmArray;
     private int[] sensitivityArray,
@@ -93,6 +96,15 @@ public class ParametersSweep_ implements PlugIn {
         gd.addNumericField("Delta", prefs.get("deltanf", 25), 0);
         gd.addNumericField("Number", prefs.get("n_nf", 3), 0);
 
+        gd.addMessage("-=-= Output =-=-\n", headerFont);
+        gd.addCheckbox("Show all reconstructions (default: on)", prefs.get("showRecons", true));
+        gd.addCheckbox("Calculate FRC (default: off)", prefs.get("calculateFRC", false));
+        gd.addCheckbox("Calculate RSE (default: off)", prefs.get("calculateRSE", false));
+
+        gd.addMessage("Calculating FRC will split all dataset in two halves and therefore\n" +
+                "the maximum number of frames will be half of the total frames\n" +
+                "available in the dataset.");
+
         gd.addMessage("-=-= Reconstructions =-=-\n", headerFont);
         gd.addCheckbox("AVG reconstruction (default: on)", prefs.get("calculateAVG", true));
         gd.addCheckbox("STD reconstruction (default: off)", prefs.get("calculateSTD", false));
@@ -135,7 +147,7 @@ public class ParametersSweep_ implements PlugIn {
             for (int thisSensitivity : sensitivityArray) {
                 for (float thisfwhm : fwhmArray) {
                     IJ.log("--------");
-                    IJ.log("SRRF frame: " + r +"/"+n_calculation);
+                    IJ.log("SRRF frame: " + r + "/" + n_calculation);
                     IJ.showProgress(r, n_calculation);
 
                     // Check if user is cancelling calculation
@@ -145,9 +157,9 @@ public class ParametersSweep_ implements PlugIn {
                         return;
                     }
 
-                    IJ.log("Number of frame for SRRF: "+thisnf);
-                    IJ.log("FWHM: "+thisfwhm + " pixels");
-                    IJ.log("Sensitivity: "+thisSensitivity);
+                    IJ.log("Number of frame for SRRF: " + thisnf);
+                    IJ.log("FWHM: " + thisfwhm + " pixels");
+                    IJ.log("Sensitivity: " + thisSensitivity);
 
                     imsRawData = new ImageStack(width, height);
                     for (int f = 1; f <= thisnf; f++) {
@@ -155,14 +167,16 @@ public class ParametersSweep_ implements PlugIn {
                         imsRawData.addSlice(imp.getProcessor());
                     }
 
-                    liveSRRF.initialise(width, height, magnification, thisfwhm, thisSensitivity, thisnf, thisnf, blockSize,null);
+                    liveSRRF.initialise(width, height, magnification, thisfwhm, thisSensitivity, thisnf, thisnf, blockSize, null);
                     liveSRRF.resetFramePosition();
                     liveSRRF.calculateSRRF(imsRawData);
                     imsBuffer = liveSRRF.readSRRFbuffer();
 
-                    if (calculateAVG) imsSRRFavg.addSlice(imsBuffer.getProcessor(1));
-                    if (calculateSTD) imsSRRFstd.addSlice(imsBuffer.getProcessor(2));
-                    imsInt.addSlice(imsBuffer.getProcessor(3));
+                    if (calculateAVG)
+                        imsSRRFavg.addSlice("f=" + thisfwhm + "/S=" + thisSensitivity + "/#f=" + thisnf, imsBuffer.getProcessor(1));
+                    if (calculateSTD)
+                        imsSRRFstd.addSlice("f=" + thisfwhm + "/S=" + thisSensitivity + "/#f=" + thisnf, imsBuffer.getProcessor(2));
+                    imsInt.addSlice("f=" + thisfwhm + "/S=" + thisSensitivity + "/#f=" + thisnf, imsBuffer.getProcessor(3));
 
                     r++;
                 }
@@ -222,6 +236,11 @@ public class ParametersSweep_ implements PlugIn {
 
         calculateAVG = gd.getNextBoolean();
         calculateSTD = gd.getNextBoolean();
+
+        showRecons = gd.getNextBoolean();
+        calculateFRC = gd.getNextBoolean();
+        calculateRSE = gd.getNextBoolean();
+
         blockSize = (int) gd.getNextNumber();
 
         fwhmArray = new float[n_fwhm];
@@ -255,6 +274,10 @@ public class ParametersSweep_ implements PlugIn {
 
         prefs.set("calculateAVG", calculateAVG);
         prefs.set("calculateSTD", calculateSTD);
+
+        prefs.set("showRecons", showRecons);
+        prefs.set("calculateFRC", calculateFRC);
+        prefs.set("calculateRSE", calculateRSE);
 
         prefs.set("blockSize", blockSize);
 
