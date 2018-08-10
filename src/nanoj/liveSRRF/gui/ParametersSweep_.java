@@ -7,14 +7,21 @@ import ij.ImageStack;
 import ij.WindowManager;
 import ij.gui.GenericDialog;
 import ij.gui.NonBlockingGenericDialog;
+import ij.gui.PointRoi;
 import ij.measure.Calibration;
 import ij.plugin.PlugIn;
+import ij.process.FloatProcessor;
+import ij.process.ImageProcessor;
 import nanoj.core2.NanoJPrefs;
+import nanoj.core2.NanoJProfiler;
 import nanoj.liveSRRF.liveSRRF_CL;
 
 import java.awt.*;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+
+import static java.lang.Math.min;
+import static nanoj.core2.NanoJCrossCorrelation.calculateCrossCorrelationMap;
 
 public class ParametersSweep_ implements PlugIn {
 
@@ -27,21 +34,28 @@ public class ParametersSweep_ implements PlugIn {
 
     private boolean calculateAVG,
             calculateSTD,
-            showRecons,
-            calculateFRC,
-            calculateRSE;
+    //            showRecons,
+//            calculateFRC,
+//            calculateRSE,
+    correctVibration;
 
     private float[] fwhmArray;
     private int[] sensitivityArray,
             nframeArray;
 
+    private final int radiusCCM = 5;
+    private final String LiveSRRFVersion = "v0.1";
+
+    private float[] shiftX, shiftY;
+
     // Image formats
     private ImagePlus imp;
+    private ImagePlus impCCM = null;
 
     // Advanced formats
     private NanoJPrefs prefs = new NanoJPrefs(this.getClass().getName());
-    liveSRRF_CL liveSRRF;
-
+    private NanoJProfiler prof = new NanoJProfiler();
+    private liveSRRF_CL liveSRRF;
 
     public void run(String arg) {
 
@@ -59,7 +73,7 @@ public class ParametersSweep_ implements PlugIn {
         IJ.log("\\Clear");  // Clear the log window
         IJ.log("-------------------------------------");
         IJ.log("-------------------------------------");
-        IJ.log("liveSRRF - Parameters sweep");
+        IJ.log("liveSRRF - Parameters sweep " + LiveSRRFVersion);
         LocalDateTime now = LocalDateTime.now();
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
         IJ.log(now.format(formatter));
@@ -76,12 +90,13 @@ public class ParametersSweep_ implements PlugIn {
 
         // Build GUI
         Font headerFont = new Font("Arial", Font.BOLD, 16);
-        NonBlockingGenericDialog gd = new NonBlockingGenericDialog("liveSRRF - Parameters sweep");
+        NonBlockingGenericDialog gd = new NonBlockingGenericDialog("liveSRRF - Parameters sweep " + LiveSRRFVersion);
         gd.addMessage("-=-= Fixed SRRF parameters =-=-\n", headerFont);
         gd.addNumericField("Magnification (default: 5)", prefs.get("magnification", 5), 0);
+        gd.addCheckbox("Correct vibration (default: off)", prefs.get("correctVibration", false));
 
         gd.addMessage("-=-= Sweeping SRRF parameters =-=-\n", headerFont);
-        gd.addMessage("FWHM\n", headerFont);
+        gd.addMessage("Radius\n", headerFont);
         gd.addNumericField("Start", prefs.get("fwhm0", 2), 2);
         gd.addNumericField("Delta", prefs.get("deltafwhm", 0.5f), 2);
         gd.addNumericField("Number", prefs.get("n_fwhm", 5), 0);
@@ -96,14 +111,14 @@ public class ParametersSweep_ implements PlugIn {
         gd.addNumericField("Delta", prefs.get("deltanf", 25), 0);
         gd.addNumericField("Number", prefs.get("n_nf", 3), 0);
 
-        gd.addMessage("-=-= Output =-=-\n", headerFont);
-        gd.addCheckbox("Show all reconstructions (default: on)", prefs.get("showRecons", true));
-        gd.addCheckbox("Calculate FRC (default: off)", prefs.get("calculateFRC", false));
-        gd.addCheckbox("Calculate RSE (default: off)", prefs.get("calculateRSE", false));
-
-        gd.addMessage("Calculating FRC will split all dataset in two halves and therefore\n" +
-                "the maximum number of frames will be half of the total frames\n" +
-                "available in the dataset.");
+//        gd.addMessage("-=-= Output =-=-\n", headerFont);
+//        gd.addCheckbox("Show all reconstructions (default: on)", prefs.get("showRecons", true));
+//        gd.addCheckbox("Calculate FRC (default: off)", prefs.get("calculateFRC", false));
+//        gd.addCheckbox("Calculate RSE (default: off)", prefs.get("calculateRSE", false));
+//
+//        gd.addMessage("Calculating FRC will split all dataset in two halves and therefore\n" +
+//                "the maximum number of frames will be half of the total frames\n" +
+//                "available in the dataset.");
 
         gd.addMessage("-=-= Reconstructions =-=-\n", headerFont);
         gd.addCheckbox("AVG reconstruction (default: on)", prefs.get("calculateAVG", true));
@@ -139,9 +154,21 @@ public class ParametersSweep_ implements PlugIn {
         ImageStack imsRawData;
 
         int n_calculation = nframeArray.length * sensitivityArray.length * fwhmArray.length;
+
+        IJ.log("Magnification: " + magnification);
+        if (correctVibration) IJ.log("Vibration correction: on");
+        else IJ.log("Vibration correction: off");
+
         IJ.log("Number of calculations planned: " + n_calculation);
         int r = 1;
 
+        boolean userPressedEscape = false;
+
+        int maxnFrame = nframeArray[nframeArray.length - 1];
+        shiftX = new float[maxnFrame];
+        shiftY = new float[maxnFrame];
+
+        if (correctVibration) calculateShiftArray(1, maxnFrame);
 
         for (int thisnf : nframeArray) {
             for (int thisSensitivity : sensitivityArray) {
@@ -158,25 +185,46 @@ public class ParametersSweep_ implements PlugIn {
                     }
 
                     IJ.log("Number of frame for SRRF: " + thisnf);
-                    IJ.log("FWHM: " + thisfwhm + " pixels");
+                    IJ.log("Radius: " + thisfwhm + " pixels");
                     IJ.log("Sensitivity: " + thisSensitivity);
 
-                    imsRawData = new ImageStack(width, height);
-                    for (int f = 1; f <= thisnf; f++) {
-                        imp.setSlice(f);
-                        imsRawData.addSlice(imp.getProcessor());
+                    liveSRRF.initialise(width, height, magnification, thisfwhm, thisSensitivity, 1, thisnf, blockSize, null);
+
+                    float[] shiftXtemp = new float[thisnf];
+                    float[] shiftYtemp = new float[thisnf];
+
+                    for (int i = 0; i < thisnf; i++) {
+                        shiftXtemp[i] = shiftX[i];
+                        shiftYtemp[i] = shiftY[i];
                     }
 
-                    liveSRRF.initialise(width, height, magnification, thisfwhm, thisSensitivity, thisnf, thisnf, blockSize, null);
+                    liveSRRF.loadShiftXYGPUbuffer(shiftXtemp, shiftYtemp);
+
                     liveSRRF.resetFramePosition();
-                    liveSRRF.calculateSRRF(imsRawData);
+
+                    for (int f = 1; f <= thisnf; f++) {
+                        imp.setSlice(f);
+                        imsRawData = new ImageStack(width, height);
+                        imsRawData.addSlice(imp.getProcessor());
+                        userPressedEscape = liveSRRF.calculateSRRF(imsRawData);
+                    }
+
+                    // Check if user is cancelling calculation
+                    if (userPressedEscape) {
+                        liveSRRF.release();
+                        IJ.log("-------------------------------------");
+                        IJ.log("Reconstruction aborted by user.");
+                        return;
+                    }
+
+//                    liveSRRF.calculateSRRF(imsRawData);
                     imsBuffer = liveSRRF.readSRRFbuffer();
 
                     if (calculateAVG)
-                        imsSRRFavg.addSlice("f=" + thisfwhm + "/S=" + thisSensitivity + "/#f=" + thisnf, imsBuffer.getProcessor(1));
+                        imsSRRFavg.addSlice("R=" + thisfwhm + "/S=" + thisSensitivity + "/#f=" + thisnf, imsBuffer.getProcessor(1));
                     if (calculateSTD)
-                        imsSRRFstd.addSlice("f=" + thisfwhm + "/S=" + thisSensitivity + "/#f=" + thisnf, imsBuffer.getProcessor(2));
-                    imsInt.addSlice("f=" + thisfwhm + "/S=" + thisSensitivity + "/#f=" + thisnf, imsBuffer.getProcessor(3));
+                        imsSRRFstd.addSlice("R=" + thisfwhm + "/S=" + thisSensitivity + "/#f=" + thisnf, imsBuffer.getProcessor(2));
+                    imsInt.addSlice("R=" + thisfwhm + "/S=" + thisSensitivity + "/#f=" + thisnf, imsBuffer.getProcessor(3));
 
                     r++;
                 }
@@ -222,6 +270,8 @@ public class ParametersSweep_ implements PlugIn {
     private void grabSettings(GenericDialog gd) {
 
         magnification = (int) gd.getNextNumber();
+        correctVibration = gd.getNextBoolean();
+
         float fwhm0 = (float) gd.getNextNumber();
         float deltafwhm = (float) gd.getNextNumber();
         int n_fwhm = (int) gd.getNextNumber();
@@ -237,9 +287,9 @@ public class ParametersSweep_ implements PlugIn {
         calculateAVG = gd.getNextBoolean();
         calculateSTD = gd.getNextBoolean();
 
-        showRecons = gd.getNextBoolean();
-        calculateFRC = gd.getNextBoolean();
-        calculateRSE = gd.getNextBoolean();
+//        showRecons = gd.getNextBoolean();
+//        calculateFRC = gd.getNextBoolean();
+//        calculateRSE = gd.getNextBoolean();
 
         blockSize = (int) gd.getNextNumber();
 
@@ -275,15 +325,108 @@ public class ParametersSweep_ implements PlugIn {
         prefs.set("calculateAVG", calculateAVG);
         prefs.set("calculateSTD", calculateSTD);
 
-        prefs.set("showRecons", showRecons);
-        prefs.set("calculateFRC", calculateFRC);
-        prefs.set("calculateRSE", calculateRSE);
+//        prefs.set("showRecons", showRecons);
+//        prefs.set("calculateFRC", calculateFRC);
+//        prefs.set("calculateRSE", calculateRSE);
 
         prefs.set("blockSize", blockSize);
 
 
         prefs.save();
+    }
 
+
+    // --- Calculate shift using Cross-correlation matrix ---
+    private float[] calculateShift(ImageProcessor ipRef, ImageProcessor ipData) {
+
+        FloatProcessor fpCCM = (FloatProcessor) calculateCrossCorrelationMap(ipRef, ipData, false);
+
+        int windowSize = radiusCCM * 2 + 1;
+        int xStart = fpCCM.getWidth() / 2 - radiusCCM;
+        int yStart = fpCCM.getHeight() / 2 - radiusCCM;
+        fpCCM.setRoi(xStart, yStart, windowSize, windowSize);
+        fpCCM = (FloatProcessor) fpCCM.crop();
+
+        double vMax = -Double.MAX_VALUE;
+        double vMin = Double.MAX_VALUE;
+        double xMax = 0;
+        double yMax = 0;
+
+        // first do coarse search for max
+        for (int y = 1; y < windowSize - 1; y++) {
+            for (int x = 1; x < windowSize - 1; x++) {
+                double v = fpCCM.getf(x, y);
+                if (v > vMax) {
+                    vMax = v;
+                    xMax = x;
+                    yMax = y;
+                }
+                vMin = min(v, vMin);
+            }
+        }
+        //System.out.println("xMax="+xMax+" yMax="+yMax);
+
+        //vMax = -Double.MAX_VALUE;
+        // do fine search for max
+        for (double y = yMax; y < yMax + 1; y += 0.01) {
+            for (double x = xMax; x < xMax + 1; x += 0.01) {
+                double v = fpCCM.getBicubicInterpolatedPixel(x, y, fpCCM);
+                if (v > vMax) {
+                    vMax = v;
+                    xMax = x;
+                    yMax = y;
+                }
+            }
+        }
+
+        // recenter pixels
+        float shiftX = (float) xMax - radiusCCM;
+        float shiftY = (float) yMax - radiusCCM;
+
+        if (impCCM == null) {
+            impCCM = new ImagePlus("CCM Vibration Stabilisation", fpCCM);
+            impCCM.show();
+        }
+
+        impCCM.setProcessor(fpCCM);
+        impCCM.setRoi(new PointRoi(xMax + .5, yMax + .5));
+        impCCM.setDisplayRange(vMin, vMax);
+
+        return new float[]{shiftX, shiftY};
+    }
+
+    // -- Calculate shift Array using Cross-correlation matrix --
+    private void calculateShiftArray(int indexStart, int nFrameForSRRF) {
+
+        imp.setSlice(indexStart);
+        ImageProcessor ipRef = imp.getProcessor().duplicate();
+        ImageProcessor ipData;
+
+        for (int s = 0; s < nFrameForSRRF; s++) {
+
+            // Check if user is cancelling calculation
+            IJ.showProgress(s, nFrameForSRRF);
+            if (IJ.escapePressed()) {
+                liveSRRF.release();
+                IJ.resetEscape();
+                IJ.log("-------------------------------------");
+                IJ.log("Reconstruction aborted by user.");
+                return;
+            }
+
+            // Grab the new frame from the list
+            imp.setSlice(s + indexStart);
+            ipData = imp.getProcessor();
+
+            // Estimate vibrations
+            int id = prof.startTimer();
+            float[] shift = calculateShift(ipRef, ipData);
+            shiftX[s] = shift[0];
+            shiftY[s] = shift[1];
+
+            System.out.println("Frame=" + s + " shiftX=" + shiftX[s] + " shiftY=" + shiftY[s]);
+            prof.recordTime("Drift Estimation", prof.endTimer(id));
+        }
 
     }
 

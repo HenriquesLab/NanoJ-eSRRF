@@ -247,7 +247,6 @@ public class liveSRRF_CL {
 
                 if (IJ.escapePressed()) {
                     IJ.resetEscape();
-                    IJ.log("Aborted");
                     return true;
                 }
 

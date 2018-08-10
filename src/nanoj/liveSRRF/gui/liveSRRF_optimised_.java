@@ -32,7 +32,8 @@ public class liveSRRF_optimised_ implements PlugIn {
     private int magnification,
             nFrameForSRRF,
             sensitivity,
-            frameGap,
+            frameGapToUse,
+            frameGapFromUser,
             nFrameOnGPU,
             nSRRFframe,
             nSlices,
@@ -48,10 +49,12 @@ public class liveSRRF_optimised_ implements PlugIn {
             calculateSTD,
             getInterpolatedImage,
             writeToDisk,
-            previousWriteToDisk = false;
+            doRollingAnalysis,
+            previousWriteToDisk = false,
+            previousAdvSettings = false;
 
     private final int radiusCCM = 5;
-    private final String LiveSRRFVersion = "v1.0";
+    private final String LiveSRRFVersion = "v1.1";
     private String pathToDisk = "",
             fileName,
             chosenDeviceName;
@@ -74,7 +77,7 @@ public class liveSRRF_optimised_ implements PlugIn {
     private NanoJProfiler prof = new NanoJProfiler();
     private liveSRRF_CL liveSRRF;
     private SaveFileInZip saveFileInZip;
-    CLDevice chosenDevice = null;
+    private CLDevice chosenDevice = null;
 
     // Tracker
     private String user = "FijiUpdater";
@@ -97,7 +100,7 @@ public class liveSRRF_optimised_ implements PlugIn {
         width = imp.getImageStack().getWidth();
         height = imp.getImageStack().getHeight();
 
-        frameGap = (int) prefs.get("frameGap", 0);
+        frameGapToUse = (int) prefs.get("frameGapToUse", 0);
         chosenDeviceName = prefs.get("chosenDeviceName", "Default device");
         maxMemoryGPU = (int) prefs.get("maxMemoryGPU", 500);
         blockSize = (int) prefs.get("blockSize", 20000);
@@ -128,7 +131,12 @@ public class liveSRRF_optimised_ implements PlugIn {
 
 
         // Main GUI
-        mainGUI();
+        boolean cancelled = mainGUI();
+        if (cancelled) {
+            liveSRRF.release();
+            IJ.log("Cancelled by user.");
+            return;
+        }
 
         // Get chosen device
         if (chosenDeviceName == null) chosenDeviceName = "Default device";
@@ -142,16 +150,16 @@ public class liveSRRF_optimised_ implements PlugIn {
         IJ.log("-------------------------------------");
         IJ.log("Parameters:");
         IJ.log("Magnification: " + magnification);
-        IJ.log("FWHM: " + fwhm + " pixels");
+        IJ.log("Radius: " + fwhm + " pixels");
         IJ.log("Sensitivity: " + sensitivity);
         IJ.log("# frames for SRRF: " + nFrameForSRRF);
-        IJ.log("# frames gap: " + frameGap);
-        IJ.log("# frames on GPU: " + nFrameOnGPU);
-        IJ.log("Estimated GPU memory usage: " + Math.round(predictMemoryUsed(nFrameOnGPU)[0]) + " MB");
+        IJ.log("# frames gap: " + frameGapToUse);
+        IJ.log("# frames on device: " + nFrameOnGPU);
+        IJ.log("Estimated device memory usage: " + Math.round(predictMemoryUsed(nFrameOnGPU)[0]) + " MB");
         IJ.log("Estimated RAM usage: " + Math.round(predictMemoryUsed(nFrameOnGPU)[1]) + " MB");
         IJ.log("Running on: " + chosenDeviceName);
         IJ.log("# reconstructed frames: " + nSRRFframe);
-        IJ.log("# GPU load / SRRF frame: " + nGPUloadPerSRRFframe);
+        IJ.log("# device load / SRRF frame: " + nGPUloadPerSRRFframe);
 
         // Initialize ZipSaver in case we're writing to disk
         if (writeToDisk) {
@@ -190,6 +198,16 @@ public class liveSRRF_optimised_ implements PlugIn {
         cal.setUnit(imp.getCalibration().getUnit());
 
         boolean userPressedEscape;
+        long loopStart = System.nanoTime();
+
+        // For measuring the remaining time
+        double singleLoadTime;
+        double remainingTime;
+        int _h;
+        int _m;
+        int _s;
+        int currentNLoad;
+
 
         // Start looping trough SRRF frames --------------------------------------------
         for (int r = 1; r <= nSRRFframe; r++) {
@@ -197,7 +215,7 @@ public class liveSRRF_optimised_ implements PlugIn {
 
             IJ.log("--------");
             IJ.log("SRRF frame: " + r + "/" + nSRRFframe);
-            indexStartSRRFframe = (r - 1) * frameGap + 1;
+            indexStartSRRFframe = (r - 1) * frameGapToUse + 1;
             IJ.log("Stack index start: " + indexStartSRRFframe);
             if (correctVibration) calculateShiftArray(indexStartSRRFframe);
             liveSRRF.loadShiftXYGPUbuffer(shiftX, shiftY);
@@ -205,9 +223,6 @@ public class liveSRRF_optimised_ implements PlugIn {
             IJ.showProgress(r - 1, nSRRFframe);
 
             for (int l = 0; l < nGPUloadPerSRRFframe; l++) {
-
-                IJ.showStatus("Estimated time remaining: ");
-
 
 //                IJ.log("----------------------------");
                 nFrameToLoad = min(nFrameOnGPU, nFrameForSRRF - nFrameOnGPU * l);
@@ -229,6 +244,12 @@ public class liveSRRF_optimised_ implements PlugIn {
                     IJ.log("Reconstruction aborted by user.");
                     return;
                 }
+
+                // Estimating the remaining time
+                currentNLoad = nGPUloadPerSRRFframe*(r-1) + l+1;
+                singleLoadTime = ((System.nanoTime() - loopStart) / currentNLoad) / 1e9;
+                remainingTime = singleLoadTime * (nSRRFframe * nGPUloadPerSRRFframe - currentNLoad);
+                IJ.showStatus("LiveSRRF - Remaining time: " + timeToString(remainingTime));
 
             }
 
@@ -356,6 +377,12 @@ public class liveSRRF_optimised_ implements PlugIn {
         IJ.log("Thank you for your custom on this beautiful day !");
         now = LocalDateTime.now();
         IJ.log(now.format(formatter));
+
+        long executionEndTime = System.nanoTime();
+        double executionTime = (executionEndTime - loopStart)/1e9;
+        IJ.log("Execution time: " + timeToString(executionTime));
+
+
 //        IJ.log("-------------------------------------");
 //        IJ.log(prof.report());
     }
@@ -367,7 +394,7 @@ public class liveSRRF_optimised_ implements PlugIn {
 
 
     // -- Main GUI --
-    private void mainGUI(){
+    private boolean mainGUI() {
         // Build GUI
         Font headerFont = new Font("Arial", Font.BOLD, 16);
         NonBlockingGenericDialog gd = new NonBlockingGenericDialog("liveSRRF " + LiveSRRFVersion);
@@ -383,18 +410,22 @@ public class liveSRRF_optimised_ implements PlugIn {
         gd.addCheckbox("STD reconstruction (default: off)", prefs.get("calculateSTD", false));
         gd.addCheckbox("Wide-field interpolation (default: off)", prefs.get("getInterpolatedImage", false));
 
+        gd.addMessage("-=-= Rolling analysis =-=-\n", headerFont);
+        gd.addCheckbox("Perform rolling analysis (default: off)", prefs.get("doRollingAnalysis", false));
+        gd.addNumericField("# frame gap between SR frame (0 = auto)", prefs.get("frameGapToUse", 0), 0);
+
         gd.addMessage("-=-= Advanced settings =-=-\n", headerFont);
-        gd.addCheckbox("Show advanced settings", prefs.get("showAdvSettings", false));
+        gd.addCheckbox("Show advanced settings", false);
 
         MyDialogListenerMainGUI dl = new MyDialogListenerMainGUI(); // this serves to estimate a few indicators such as RAM usage
         gd.addDialogListener(dl);
         gd.showDialog();
 
         // If the GUI was cancelled
-        if (gd.wasCanceled()) {
-            liveSRRF.release();
-            return;
-        }
+        if (gd.wasCanceled()) return true;
+        else return false;
+
+
     }
 
     // --- Main GUI Dialog listener ---
@@ -408,8 +439,6 @@ public class liveSRRF_optimised_ implements PlugIn {
     //    --- Grab settings from main GUI ---
     private boolean grabSettingsMainGUI(GenericDialog gd) {
 
-        boolean goodToGo = false;
-
         magnification = (int) gd.getNextNumber();
         fwhm = (float) gd.getNextNumber();
         sensitivity = (int) gd.getNextNumber();
@@ -419,44 +448,25 @@ public class liveSRRF_optimised_ implements PlugIn {
 
         calculateAVG = gd.getNextBoolean();
         calculateSTD = gd.getNextBoolean();
-
         getInterpolatedImage = gd.getNextBoolean();
-        if (gd.getNextBoolean()) advancedSettingsGUI();
+
+        doRollingAnalysis = gd.getNextBoolean();
+        frameGapFromUser = (int) gd.getNextNumber();
 
         // Calculate the parameters based on user inputs
         if (nFrameForSRRF == 0) nFrameForSRRF = nSlices;
         nFrameForSRRF = min(nSlices, nFrameForSRRF);
-        nSRRFframe = (int) ((float) (nSlices - nFrameForSRRF) / (float) frameGap) + 1;
 
-        if (frameGap == 0) frameGap = nFrameForSRRF;
+        if (frameGapFromUser == 0 || doRollingAnalysis == false) frameGapToUse = nFrameForSRRF;
+        else frameGapToUse = frameGapFromUser;
 
-        int maxnFrameOnGPU = 0;
-        double[] memUsed = new double[2];
-        while (memUsed[0] < (double) maxMemoryGPU) {
-            maxnFrameOnGPU = maxnFrameOnGPU + 1;
-            memUsed = predictMemoryUsed(maxnFrameOnGPU);
-        }
+        nSRRFframe = (int) ((float) (nSlices - nFrameForSRRF) / (float) frameGapToUse) + 1;
 
-        maxnFrameOnGPU = maxnFrameOnGPU - 1;
+        boolean goodToGo = calculatenFrameOnGPU();
 
-        if (maxnFrameOnGPU > 0) {
-            goodToGo = true;
-            nFrameOnGPU = (int) math.ceil((float) nFrameForSRRF / (float) maxnFrameOnGPU);
-            nFrameOnGPU = (int) math.ceil(((float) nFrameForSRRF / (float) nFrameOnGPU));
-            nFrameOnGPU = min(nFrameForSRRF, nFrameOnGPU);
-            memUsed = predictMemoryUsed(nFrameOnGPU);
-
-            IJ.showStatus("liveSRRF - Number of frames on device: " + (nFrameOnGPU) + " (" + Math.round(memUsed[0]) + " MB)");
-        } else {
-            memUsed = predictMemoryUsed(1);
-            IJ.showStatus("liveSRRF - Minimum device memory: " + Math.round(memUsed[0]) + "MB");
-        }
-
-        // Check for RAM on computer
-        if (memUsed[1] > IJ.maxMemory()) {
-            goodToGo = false;
-            IJ.showStatus("liveSRRF - Max RAM available exceeded: (" + (Math.round(memUsed[1])) + "MB vs. " + (Math.round(IJ.maxMemory())) + "MB)");
-        }
+        boolean showAdvancedSettings = gd.getNextBoolean();
+        if (showAdvancedSettings && !previousAdvSettings) advancedSettingsGUI();
+        previousAdvSettings = showAdvancedSettings;
 
         nGPUloadPerSRRFframe = (int) math.ceil((float) nFrameForSRRF / (float) nFrameOnGPU);
 
@@ -473,14 +483,10 @@ public class liveSRRF_optimised_ implements PlugIn {
         Font headerFont = new Font("Arial", Font.BOLD, 16);
         GenericDialog gd = new GenericDialog("liveSRRF - Advanced settings");
 
-        gd.addMessage("-=-= Rolling analysis =-=-\n", headerFont);
-        gd.addNumericField("# frame gap between SR frame (0 = auto)", prefs.get("frameGap", 0), 0);
-        gd.addMessage("Warning: Rolling analysis may lead to long computation times.");
-
         gd.addMessage("-=-= GPU/CPU processing =-=-\n", headerFont);
         gd.addChoice("Processing device", deviceNames, prefs.get("chosenDeviceName", "Default device"));
         gd.addNumericField("Maximum amount of memory on device (MB, default: 1000)", prefs.get("maxMemoryGPU", 500), 2);
-        gd.addMessage("Minimum device memory necessary: " + Math.round(memUsed[0]*10)/10 + "MB");
+        gd.addMessage("Minimum device memory necessary: " + Math.round(memUsed[0] * 10) / 10 + "MB");
 
         gd.addNumericField("Analysis block size (default: 20000)", prefs.get("blockSize", 20000), 0);
         gd.addMessage("A large analysis block size will speed up the analysis but will use\n" +
@@ -498,20 +504,16 @@ public class liveSRRF_optimised_ implements PlugIn {
 
         // If the GUI was cancelled
         if (gd.wasCanceled()) {
-            frameGap = (int) prefs.get("frameGap", 0);
             chosenDeviceName = prefs.get("chosenDeviceName", "Default device");
             maxMemoryGPU = (int) prefs.get("maxMemoryGPU", 500);
             blockSize = (int) prefs.get("blockSize", 20000);
             writeToDisk = false;
-        }
-        else{
-            prefs.set("frameGap", frameGap);
+        } else {
             prefs.set("chosenDeviceName", chosenDeviceName);
             prefs.set("maxMemoryGPU", maxMemoryGPU);
             prefs.set("blockSize", blockSize);
             prefs.save();
         }
-
 
 
     }
@@ -520,22 +522,19 @@ public class liveSRRF_optimised_ implements PlugIn {
     class MyDialogListenerAdvancedGUI implements DialogListener {
         @Override
         public boolean dialogItemChanged(GenericDialog gd, AWTEvent awtEvent) {
-
             return grabSettingsAdvancedGUI(gd);
         }
     }
 
 
-    //    --- Grab settings from main GUI ---
+    // --- Grab settings from main GUI ---
     private boolean grabSettingsAdvancedGUI(GenericDialog gd) {
 
-
-        boolean goodToGo = true;
-
-        frameGap = (int) gd.getNextNumber();
         chosenDeviceName = gd.getNextChoice();
         maxMemoryGPU = (int) gd.getNextNumber();
         blockSize = (int) gd.getNextNumber();
+
+        boolean goodToGo = calculatenFrameOnGPU();
 
         writeToDisk = gd.getNextBoolean();
 
@@ -545,7 +544,6 @@ public class liveSRRF_optimised_ implements PlugIn {
         }
 
         previousWriteToDisk = writeToDisk;
-
         return goodToGo;
     }
 
@@ -567,7 +565,7 @@ public class liveSRRF_optimised_ implements PlugIn {
         memUsed[0] += 2 * width * height * magnification * magnification; // clBufferRGC
         memUsed[0] += width * height * magnification * magnification; // clBufferInt
 
-        // Memory on CPU ----
+        // Memory on CPU ---- (largely underestimated)
         memUsed[1] = 0;
         memUsed[1] += width * height * nSlices; // clBufferPx
         memUsed[1] += 2 * nSRRFframe * width * height * magnification * magnification; // clBufferSRRF
@@ -689,12 +687,68 @@ public class liveSRRF_optimised_ implements PlugIn {
         prefs.set("calculateSTD", calculateSTD);
         prefs.set("getInterpolatedImage", getInterpolatedImage);
 
-        prefs.set("frameGap", frameGap);
+        prefs.set("doRollingAnalysis", doRollingAnalysis);
+        prefs.set("frameGapToUse", frameGapFromUser);
+
         prefs.set("chosenDeviceName", chosenDeviceName);
         prefs.set("maxMemoryGPU", maxMemoryGPU);
         prefs.set("blockSize", blockSize);
 
         prefs.save();
+
+    }
+
+    // --- Check the settings ---
+    private boolean calculatenFrameOnGPU() {
+
+        boolean goodToGo = false;
+
+        int maxnFrameOnGPU = 0;
+        double[] memUsed = new double[2];
+        while (memUsed[0] < (double) maxMemoryGPU) {
+            maxnFrameOnGPU = maxnFrameOnGPU + 1;
+            memUsed = predictMemoryUsed(maxnFrameOnGPU);
+        }
+
+        maxnFrameOnGPU = maxnFrameOnGPU - 1;
+
+        if (maxnFrameOnGPU > 0) {
+            goodToGo = true;
+            nFrameOnGPU = (int) math.ceil((float) nFrameForSRRF / (float) maxnFrameOnGPU);
+            nFrameOnGPU = (int) math.ceil(((float) nFrameForSRRF / (float) nFrameOnGPU));
+            nFrameOnGPU = min(nFrameForSRRF, nFrameOnGPU);
+            memUsed = predictMemoryUsed(nFrameOnGPU);
+
+            IJ.showStatus("liveSRRF - Number of frames on device: " + (nFrameOnGPU) + " (" + Math.round(memUsed[0]) + " MB)");
+        } else {
+            memUsed = predictMemoryUsed(1);
+            IJ.showStatus("liveSRRF - Minimum device memory: " + Math.round(memUsed[0]) + "MB");
+        }
+
+        // Check for RAM on computer
+        if (memUsed[1] > IJ.maxMemory()) {
+            goodToGo = false;
+            IJ.showStatus("liveSRRF - Max RAM available exceeded: (" + (Math.round(memUsed[1])) + "MB vs. " + (Math.round(IJ.maxMemory())) + "MB)");
+        }
+
+        return goodToGo;
+    }
+
+
+    // -- Convert time to string --
+    public String timeToString(double time){
+
+        String timeString;
+        int _h = (int) (time / 3600);
+        int _m = (int) (((time % 86400) % 3600) / 60);
+        int _s = (int) (((time % 86400) % 3600) % 60);
+        if (_h > 0) timeString = _h+"h "+_m+"m "+_s+"s";
+        else {
+            if (_m > 0) timeString = _m+"m "+_s+"s";
+            else timeString = _s+"s";
+        }
+
+        return timeString;
 
     }
 
