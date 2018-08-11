@@ -14,6 +14,7 @@ import ij.process.FloatProcessor;
 import ij.process.ImageProcessor;
 import nanoj.core2.NanoJPrefs;
 import nanoj.core2.NanoJProfiler;
+import nanoj.liveSRRF.ErrorMapLiveSRRF;
 import nanoj.liveSRRF.liveSRRF_CL;
 
 import java.awt.*;
@@ -21,6 +22,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
 import static java.lang.Math.min;
+import static nanoj.core.java.tools.NJ_LUT.applyLUT_SQUIRREL_Errors;
 import static nanoj.core2.NanoJCrossCorrelation.calculateCrossCorrelationMap;
 
 public class ParametersSweep_ implements PlugIn {
@@ -34,18 +36,18 @@ public class ParametersSweep_ implements PlugIn {
 
     private boolean calculateAVG,
             calculateSTD,
-    //            showRecons,
-//            calculateFRC,
-//            calculateRSE,
-    rescaleRecons,
-    correctVibration;
+            showRecons,
+            showErrorMaps,
+            calculateFRC,
+            calculateRSE,
+            correctVibration;
 
     private float[] fwhmArray;
     private int[] sensitivityArray,
             nframeArray;
 
     private final int radiusCCM = 5;
-    private final String LiveSRRFVersion = "v0.1";
+    private final String LiveSRRFVersion = "v0.2";
 
     private float[] shiftX, shiftY;
 
@@ -112,19 +114,19 @@ public class ParametersSweep_ implements PlugIn {
         gd.addNumericField("Delta", prefs.get("deltanf", 25), 0);
         gd.addNumericField("Number", prefs.get("n_nf", 3), 0);
 
-//        gd.addMessage("-=-= Output =-=-\n", headerFont);
-//        gd.addCheckbox("Show all reconstructions (default: on)", prefs.get("showRecons", true));
-//        gd.addCheckbox("Calculate FRC (default: off)", prefs.get("calculateFRC", false));
-//        gd.addCheckbox("Calculate RSE (default: off)", prefs.get("calculateRSE", false));
-//
-//        gd.addMessage("Calculating FRC will split all dataset in two halves and therefore\n" +
-//                "the maximum number of frames will be half of the total frames\n" +
-//                "available in the dataset.");
-
         gd.addMessage("-=-= Reconstructions =-=-\n", headerFont);
         gd.addCheckbox("AVG reconstruction (default: on)", prefs.get("calculateAVG", true));
         gd.addCheckbox("STD reconstruction (default: off)", prefs.get("calculateSTD", false));
-        gd.addCheckbox("Rescale reconstructions for display (default: off)", prefs.get("rescaleRecons", false));
+
+        gd.addMessage("-=-= Output =-=-\n", headerFont);
+        gd.addCheckbox("Show all reconstructions (default: on)", prefs.get("showRecons", true));
+        gd.addCheckbox("Show all error maps (default: on)", prefs.get("showErrorMaps", true));
+        gd.addCheckbox("Calculate FRC (default: off)", prefs.get("calculateFRC", false));
+        gd.addCheckbox("Calculate RSE (default: off)", prefs.get("calculateRSE", false));
+
+        gd.addMessage("Calculating FRC will split all dataset in two halves and therefore\n" +
+                "the maximum number of frames will be half of the total frames\n" +
+                "available in the dataset.");
 
         gd.addMessage("-=-= GPU processing =-=-\n", headerFont);
         gd.addNumericField("Analysis block size (default: 20000)", prefs.get("blockSize", 20000), 0);
@@ -146,6 +148,8 @@ public class ParametersSweep_ implements PlugIn {
         ImageStack imsSRRFavg = new ImageStack(width * magnification, height * magnification);
         ImageStack imsSRRFstd = new ImageStack(width * magnification, height * magnification);
 
+        ImageStack imsErrorMap = new ImageStack(width * magnification, height * magnification);
+
         ImagePlus impTemp = new ImagePlus();
         impTemp.copyScale(imp); // make sure we copy the pixel sizes correctly across
         Calibration cal = impTemp.getCalibration();
@@ -164,7 +168,9 @@ public class ParametersSweep_ implements PlugIn {
         IJ.log("Number of calculations planned: " + n_calculation);
         int r = 1;
 
-        boolean userPressedEscape = false;
+        boolean userPressedEscape;
+        ErrorMapLiveSRRF errorMapCalculator = new ErrorMapLiveSRRF();
+        FloatProcessor fpErrorMap;
 
         int maxnFrame = nframeArray[nframeArray.length - 1];
         shiftX = new float[maxnFrame];
@@ -209,19 +215,25 @@ public class ParametersSweep_ implements PlugIn {
                         imsRawData = new ImageStack(width, height);
                         imsRawData.addSlice(imp.getProcessor());
                         userPressedEscape = liveSRRF.calculateSRRF(imsRawData);
+
+                        // Check if user is cancelling calculation
+                        if (userPressedEscape) {
+                            liveSRRF.release();
+                            IJ.log("-------------------------------------");
+                            IJ.log("Reconstruction aborted by user.");
+                            return;
+                        }
                     }
 
-                    // Check if user is cancelling calculation
-                    if (userPressedEscape) {
-                        liveSRRF.release();
-                        IJ.log("-------------------------------------");
-                        IJ.log("Reconstruction aborted by user.");
-                        return;
-                    }
 
 //                    liveSRRF.calculateSRRF(imsRawData);
                     imsBuffer = liveSRRF.readSRRFbuffer();
 
+                    errorMapCalculator.optimise(imsBuffer.getProcessor(3), imsBuffer.getProcessor(1), magnification);
+                    fpErrorMap = errorMapCalculator.calculateErrorMap();
+
+                    if (showErrorMaps)
+                        imsErrorMap.addSlice("R=" + thisfwhm + "/S=" + thisSensitivity + "/#f=" + thisnf, fpErrorMap);
                     if (calculateAVG)
                         imsSRRFavg.addSlice("R=" + thisfwhm + "/S=" + thisSensitivity + "/#f=" + thisnf, imsBuffer.getProcessor(1));
                     if (calculateSTD)
@@ -257,6 +269,14 @@ public class ParametersSweep_ implements PlugIn {
         IJ.run(impInt, "Enhance Contrast", "saturated=0.5");
         impInt.show();
 
+        if (showErrorMaps) {
+            ImagePlus impErrorMap = new ImagePlus(imp.getTitle() + " - ErrorMap", imsErrorMap);
+            impErrorMap.setCalibration(cal);
+            IJ.run(impErrorMap, "Enhance Contrast", "saturated=0.5");
+            applyLUT_SQUIRREL_Errors(impErrorMap);
+            impErrorMap.show();
+        }
+
         IJ.log("-------------------------------------");
         IJ.log("RAM used: " + IJ.freeMemory());
         IJ.log("Bye-bye !");
@@ -288,12 +308,12 @@ public class ParametersSweep_ implements PlugIn {
 
         calculateAVG = gd.getNextBoolean();
         calculateSTD = gd.getNextBoolean();
-        rescaleRecons = gd.getNextBoolean();
 
+        showRecons = gd.getNextBoolean();
+        showErrorMaps = gd.getNextBoolean();
 
-//        showRecons = gd.getNextBoolean();
-//        calculateFRC = gd.getNextBoolean();
-//        calculateRSE = gd.getNextBoolean();
+        calculateFRC = gd.getNextBoolean();
+        calculateRSE = gd.getNextBoolean();
 
         blockSize = (int) gd.getNextNumber();
 
@@ -312,11 +332,8 @@ public class ParametersSweep_ implements PlugIn {
             nframeArray[i] = nf0 + i * deltanf;
         }
 
-
         prefs.set("magnification", magnification);
         prefs.set("correctVibration", correctVibration);
-        prefs.set("rescaleRecons", rescaleRecons);
-
 
         prefs.set("fwhm0", fwhm0);
         prefs.set("deltafwhm", deltafwhm);
@@ -333,9 +350,11 @@ public class ParametersSweep_ implements PlugIn {
         prefs.set("calculateAVG", calculateAVG);
         prefs.set("calculateSTD", calculateSTD);
 
-//        prefs.set("showRecons", showRecons);
-//        prefs.set("calculateFRC", calculateFRC);
-//        prefs.set("calculateRSE", calculateRSE);
+        prefs.set("showRecons", showRecons);
+        prefs.set("showErrorMaps", showErrorMaps);
+        prefs.set("calculateFRC", calculateFRC);
+        prefs.set("calculateRSE", calculateRSE);
+
 
         prefs.set("blockSize", blockSize);
 
