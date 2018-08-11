@@ -37,6 +37,7 @@ public class ParametersSweep_ implements PlugIn {
     //            showRecons,
 //            calculateFRC,
 //            calculateRSE,
+    rescaleRecons,
     correctVibration;
 
     private float[] fwhmArray;
@@ -123,6 +124,7 @@ public class ParametersSweep_ implements PlugIn {
         gd.addMessage("-=-= Reconstructions =-=-\n", headerFont);
         gd.addCheckbox("AVG reconstruction (default: on)", prefs.get("calculateAVG", true));
         gd.addCheckbox("STD reconstruction (default: off)", prefs.get("calculateSTD", false));
+        gd.addCheckbox("Rescale reconstructions for display (default: off)", prefs.get("rescaleRecons", false));
 
         gd.addMessage("-=-= GPU processing =-=-\n", headerFont);
         gd.addNumericField("Analysis block size (default: 20000)", prefs.get("blockSize", 20000), 0);
@@ -286,6 +288,8 @@ public class ParametersSweep_ implements PlugIn {
 
         calculateAVG = gd.getNextBoolean();
         calculateSTD = gd.getNextBoolean();
+        rescaleRecons = gd.getNextBoolean();
+
 
 //        showRecons = gd.getNextBoolean();
 //        calculateFRC = gd.getNextBoolean();
@@ -309,7 +313,11 @@ public class ParametersSweep_ implements PlugIn {
         }
 
 
-        prefs.set("magnification", (float) magnification);
+        prefs.set("magnification", magnification);
+        prefs.set("correctVibration", correctVibration);
+        prefs.set("rescaleRecons", rescaleRecons);
+
+
         prefs.set("fwhm0", fwhm0);
         prefs.set("deltafwhm", deltafwhm);
         prefs.set("n_fwhm", n_fwhm);
