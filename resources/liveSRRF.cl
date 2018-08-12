@@ -51,19 +51,67 @@ static float getInterpolatedValue(__global float* array, int const width, int co
         }
     }
 
-    // Bilinear interpolation & extrapolation // TODO: with large shifts extrapolation goes wild
-    else  {
-//        else if (x >= 0 && x < w && y >= 0 && y < h) {
+//    // Bilinear interpolation
+//    else if (x >= 0 && x < w-1 && y >= 0 && y < h-1) {
+//
+//        int xbase = (int)x;
+//        int ybase = (int)y;
+//        int xbase1 = min(xbase+1, w-1);
+//        int ybase1 = min(ybase+1, h-1);
+//
+//        float xFraction = x - (float) xbase;
+//        float yFraction = y - (float) ybase;
+//        xFraction = fmax(xFraction, 0);
+//        yFraction = fmax(yFraction, 0);
+//
+//        float lowerLeft = array[whf + ybase * width + xbase];
+//        float lowerRight = array[whf + ybase * width + xbase1];
+//        float upperRight = array[whf + ybase1 * width + xbase1];
+//        float upperLeft = array[whf + ybase1 * width + xbase];
+//        float upperAverage = upperLeft + xFraction * (upperRight - upperLeft);
+//        float lowerAverage = lowerLeft + xFraction * (lowerRight - lowerLeft);
+//        q = lowerAverage + yFraction * (upperAverage - lowerAverage);
+//    }
 
-        int xbase = (int)x;
-        int ybase = (int)y;
-        int xbase1 = min(xbase+1, w-1);
-        int ybase1 = min(ybase+1, h-1);
+    // Extrapolation
+    else {
+
+//        if (x < 0){
+//            xbase = 0;
+//            xbase1 = 1
+//            }
+//        else if (x >= w-1){
+//            xbase = w-2;
+//            xbase1 = w-1;
+//            }
+//        else {
+//            xbase = (int)x;
+//            xbase1 = xbase+1;
+//            }
+//
+//        if (y < 0){
+//            ybase = 0;
+//            ybase1 = 1
+//            }
+//        else if (y >= h-1){
+//            ybase = h-2;
+//            ybase1 = h-1;
+//            }
+//        else {
+//            ybase = (int)y;
+//            ybase1 = ybase+1;
+//            }
+
+        int xbase = (int) fmin((float) w-2, fmax(x,0.0f));
+        int xbase1 = xbase+1;
+
+        int ybase = (int) fmin((float) h-2, fmax(y,0.0f));
+        int ybase1 = ybase+1;
 
         float xFraction = x - (float) xbase;
         float yFraction = y - (float) ybase;
-        xFraction = fmax(xFraction, 0);
-        yFraction = fmax(yFraction, 0);
+//        xFraction = fmax(xFraction, 0);
+//        yFraction = fmax(yFraction, 0);
 
         float lowerLeft = array[whf + ybase * width + xbase];
         float lowerRight = array[whf + ybase * width + xbase1];
@@ -72,6 +120,7 @@ static float getInterpolatedValue(__global float* array, int const width, int co
         float upperAverage = upperLeft + xFraction * (upperRight - upperLeft);
         float lowerAverage = lowerLeft + xFraction * (lowerRight - lowerLeft);
         q = lowerAverage + yFraction * (upperAverage - lowerAverage);
+
     }
 
     return q;

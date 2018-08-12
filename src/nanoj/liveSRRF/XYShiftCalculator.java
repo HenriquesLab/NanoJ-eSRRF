@@ -15,7 +15,7 @@ public class XYShiftCalculator {
 
     private ImagePlus impCCM = null;
     private ImageStack ims;
-    private final int radiusCCM = 8;
+    private final int radiusCCM = 8; // TODO: add this parameter as advanced parameter?
 
     public float[] shiftX, shiftY;
 
