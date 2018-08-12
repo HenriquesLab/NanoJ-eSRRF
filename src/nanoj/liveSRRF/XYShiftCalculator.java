@@ -14,7 +14,7 @@ import static nanoj.core2.NanoJCrossCorrelation.calculateCrossCorrelationMap;
 public class XYShiftCalculator {
 
     private ImagePlus impCCM = null;
-    private ImageStack ims;
+    private ImageStack ims; // TODO: does this duplicate the memory used then ??
     private final int radiusCCM = 8; // TODO: add this parameter as advanced parameter?
 
     public float[] shiftX, shiftY;

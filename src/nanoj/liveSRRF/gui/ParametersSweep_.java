@@ -47,14 +47,11 @@ public class ParametersSweep_ implements PlugIn {
     private int[] sensitivityArray,
             nframeArray;
 
-    private final int radiusCCM = 8;
-    private final String LiveSRRFVersion = "v0.3";
-
+    private final String LiveSRRFVersion = "v0.4";
     private float[] shiftX, shiftY;
 
     // Image formats
     private ImagePlus imp;
-    private ImagePlus impCCM = null;
 
     // Advanced formats
     private NanoJPrefs prefs = new NanoJPrefs(this.getClass().getName());
@@ -135,6 +132,9 @@ public class ParametersSweep_ implements PlugIn {
 
         grabSettings(gd);
 
+        ImageStack imsAllRawData = imp.getImageStack();
+        ImageStack imsThisRawData;
+
         ImageStack imsBuffer;
         ImageStack imsInt = new ImageStack(width * magnification, height * magnification);
         ImageStack imsSRRFavg = new ImageStack(width * magnification, height * magnification);
@@ -150,7 +150,6 @@ public class ParametersSweep_ implements PlugIn {
         cal.pixelHeight /= magnification;
         cal.setUnit(imp.getCalibration().getUnit());
 
-        ImageStack imsRawData;
 
         int n_calculation = nframeArray.length * sensitivityArray.length * fwhmArray.length;
 
@@ -159,7 +158,7 @@ public class ParametersSweep_ implements PlugIn {
         else IJ.log("Vibration correction: off");
 
         IJ.log("Number of calculations planned: " + n_calculation);
-        int r = 1;
+        int r = 0;
 
         boolean userPressedEscape;
         ErrorMapLiveSRRF errorMapCalculator = new ErrorMapLiveSRRF();
@@ -219,10 +218,11 @@ public class ParametersSweep_ implements PlugIn {
 
                     IJ.showStatus("Calculating SRRF image...");
                     for (int f = 1; f <= nframeArray[nfi]; f++) {
-                        imp.setSlice(f);
-                        imsRawData = new ImageStack(width, height);
-                        imsRawData.addSlice(imp.getProcessor());
-                        userPressedEscape = liveSRRF.calculateSRRF(imsRawData);
+//                        imp.setSlice(f);
+                        imsThisRawData = new ImageStack(width, height);
+//                        imsThisRawData.addSlice(imp.getProcessor());
+                        imsThisRawData.addSlice(imsAllRawData.getProcessor(f));
+                        userPressedEscape = liveSRRF.calculateSRRF(imsThisRawData);
 
                         // Check if user is cancelling calculation
                         if (userPressedEscape) {
@@ -304,6 +304,9 @@ public class ParametersSweep_ implements PlugIn {
         IJ.log("RAM used: " + IJ.freeMemory());
         IJ.log("Bye-bye !");
 
+        // Run garbage collector
+        System.gc();
+
     }
 
     //    -------------------------------------------------------------------------------------
@@ -384,101 +387,6 @@ public class ParametersSweep_ implements PlugIn {
 
         prefs.save();
     }
-
-
-//    // --- Calculate shift using Cross-correlation matrix ---
-//    private float[] calculateShift(ImageProcessor ipRef, ImageProcessor ipData) {
-//
-//        FloatProcessor fpCCM = (FloatProcessor) calculateCrossCorrelationMap(ipRef, ipData, false);
-//
-//        int windowSize = radiusCCM * 2 + 1;
-//        int xStart = fpCCM.getWidth() / 2 - radiusCCM;
-//        int yStart = fpCCM.getHeight() / 2 - radiusCCM;
-//        fpCCM.setRoi(xStart, yStart, windowSize, windowSize);
-//        fpCCM = (FloatProcessor) fpCCM.crop();
-//
-//        double vMax = -Double.MAX_VALUE;
-//        double vMin = Double.MAX_VALUE;
-//        double xMax = 0;
-//        double yMax = 0;
-//
-//        // first do coarse search for max
-//        for (int y = 1; y < windowSize - 1; y++) {
-//            for (int x = 1; x < windowSize - 1; x++) {
-//                double v = fpCCM.getf(x, y);
-//                if (v > vMax) {
-//                    vMax = v;
-//                    xMax = x;
-//                    yMax = y;
-//                }
-//                vMin = min(v, vMin);
-//            }
-//        }
-//        //System.out.println("xMax="+xMax+" yMax="+yMax);
-//
-//        //vMax = -Double.MAX_VALUE;
-//        // do fine search for max
-//        for (double y = yMax; y < yMax + 1; y += 0.01) {
-//            for (double x = xMax; x < xMax + 1; x += 0.01) {
-//                double v = fpCCM.getBicubicInterpolatedPixel(x, y, fpCCM);
-//                if (v > vMax) {
-//                    vMax = v;
-//                    xMax = x;
-//                    yMax = y;
-//                }
-//            }
-//        }
-//
-//        // recenter pixels
-//        float shiftX = (float) xMax - radiusCCM;
-//        float shiftY = (float) yMax - radiusCCM;
-//
-//        if (impCCM == null) {
-//            impCCM = new ImagePlus("CCM Vibration Stabilisation", fpCCM);
-//            impCCM.show();
-//        }
-//
-//        impCCM.setProcessor(fpCCM);
-//        impCCM.setRoi(new PointRoi(xMax + .5, yMax + .5));
-//        impCCM.setDisplayRange(vMin, vMax);
-//
-//        return new float[]{shiftX, shiftY};
-//    }
-//
-//    // -- Calculate shift Array using Cross-correlation matrix --
-//    private void calculateShiftArray(int indexStart, int nFrameForSRRF) {
-//
-//        imp.setSlice(indexStart);
-//        ImageProcessor ipRef = imp.getProcessor().duplicate();
-//        ImageProcessor ipData;
-//
-//        for (int s = 0; s < nFrameForSRRF; s++) {
-//
-//            // Check if user is cancelling calculation
-//            IJ.showProgress(s, nFrameForSRRF);
-//            if (IJ.escapePressed()) {
-//                liveSRRF.release();
-//                IJ.resetEscape();
-//                IJ.log("-------------------------------------");
-//                IJ.log("Reconstruction aborted by user.");
-//                return;
-//            }
-//
-//            // Grab the new frame from the list
-//            imp.setSlice(s + indexStart);
-//            ipData = imp.getProcessor();
-//
-//            // Estimate vibrations
-//            int id = prof.startTimer();
-//            float[] shift = calculateShift(ipRef, ipData);
-//            shiftX[s] = shift[0];
-//            shiftY[s] = shift[1];
-//
-//            System.out.println("Frame=" + s + " shiftX=" + shiftX[s] + " shiftY=" + shiftY[s]);
-//            prof.recordTime("Drift Estimation", prof.endTimer(id));
-//        }
-//
-//    }
 
 
 }

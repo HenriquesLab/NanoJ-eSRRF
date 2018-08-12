@@ -30,7 +30,7 @@ static float cubic(float x) {
     return z;
 }
 
-// Interpolation function: interpolate in continuous space with respect to the reference of the array
+// Interpolation function: interpolate in continuous space with respect to the reference of the array // TODO: check confusion between width and w height and h
 static float getInterpolatedValue(__global float* array, int const width, int const height, float const x, float const y, int const f) {
     const int u0 = (int) floor(x);
     const int v0 = (int) floor(y);
@@ -126,7 +126,7 @@ static float getInterpolatedValue(__global float* array, int const width, int co
     return q;
 }
 
-// Check boundaries of the image and returns the gradient value
+// Check boundaries of the image and returns the gradient value // TODO: extrapolate instead of boundary check?
 static float getVBoundaryCheck(__global float* array, int const width, int const height, int const x, int const y, int const f) {
     const int _x = min(max(x, 0), width-1);
     const int _y = min(max(y, 0), height-1);

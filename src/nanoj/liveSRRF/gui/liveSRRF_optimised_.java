@@ -25,7 +25,6 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
 import static java.lang.Math.min;
-import static nanoj.core2.NanoJCrossCorrelation.calculateCrossCorrelationMap;
 
 public class liveSRRF_optimised_ implements PlugIn {
 
@@ -54,8 +53,7 @@ public class liveSRRF_optimised_ implements PlugIn {
             previousWriteToDisk = false,
             previousAdvSettings = false;
 
-    private final int radiusCCM = 8;
-    private final String LiveSRRFVersion = "v1.1";
+    private final String LiveSRRFVersion = "v1.2";
     private String pathToDisk = "",
             fileName,
             chosenDeviceName;
@@ -66,7 +64,6 @@ public class liveSRRF_optimised_ implements PlugIn {
 
     // Image formats
     private ImagePlus imp;
-    private ImagePlus impCCM = null;
 
     private ImagePlus impSRRFavg,
             impSRRFstd,
@@ -178,6 +175,9 @@ public class liveSRRF_optimised_ implements PlugIn {
         // Initialize variables
         int indexStartSRRFframe;
         int nFrameToLoad;
+
+        ImageStack imsAllRawData = imp.getImageStack();
+
         liveSRRF.initialise(width, height, magnification, fwhm, sensitivity, nFrameOnGPU, nFrameForSRRF, blockSize, chosenDevice);
 
         shiftX = new float[nFrameForSRRF];
@@ -235,8 +235,9 @@ public class liveSRRF_optimised_ implements PlugIn {
 
                 imsRawData = new ImageStack(width, height);
                 for (int f = 0; f < nFrameToLoad; f++) {
-                    imp.setSlice(indexStartSRRFframe + nFrameOnGPU * l + f);
-                    imsRawData.addSlice(imp.getProcessor());
+//                    imp.setSlice(indexStartSRRFframe + nFrameOnGPU * l + f); // TODO: does this slow down the execution?
+//                    imsRawData.addSlice(imp.getProcessor());
+                    imsRawData.addSlice(imsAllRawData.getProcessor(indexStartSRRFframe + nFrameOnGPU * l + f));
                 }
 
                 userPressedEscape = liveSRRF.calculateSRRF(imsRawData); // resets the local GPU load frame counter
@@ -384,6 +385,9 @@ public class liveSRRF_optimised_ implements PlugIn {
         long executionEndTime = System.nanoTime();
         double executionTime = (executionEndTime - loopStart)/1e9;
         IJ.log("Execution time: " + timeToString(executionTime));
+
+        // Run garbage collector
+        System.gc();
 
 
 //        IJ.log("-------------------------------------");
