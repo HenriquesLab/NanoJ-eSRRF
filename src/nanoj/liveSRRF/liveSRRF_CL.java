@@ -218,14 +218,16 @@ public class liveSRRF_CL {
         queue.putWriteBuffer(clBufferPx, false);
         prof.recordTime("Uploading data to GPU", prof.endTimer(id));
 
-        // Make kernelCalculateGradient assignment
+        // Make kernelCalculateGradient assignment (this kernel also resets the local GPU load frame counter)
 //        IJ.log("Calculating gradient...");
         id = prof.startTimer();
+        queue.finish(); // Make sure everything is done
         queue.put3DRangeKernel(kernelCalculateGradient, 0, 0, 0, width, height, nFrameToLoad, 0, 0, 0);
         prof.recordTime("kernelCalculateGradient", prof.endTimer(id));
 
 //        IJ.log("Interpolating gradient...");
         id = prof.startTimer();
+        queue.finish(); // Make sure everything is done
         queue.put3DRangeKernel(kernelInterpolateGradient, 0, 0, 0, GxGyMagnification * width, GxGyMagnification * height, nFrameToLoad, 0, 0, 0);
         prof.recordTime("kernelInterpolateGradient", prof.endTimer(id));
 
@@ -258,6 +260,7 @@ public class liveSRRF_CL {
 
             // This kernel needs to be done outside of the previous kernel because of concommitent execution (you never know when each pixel is executed)
             id = prof.startTimer();
+            queue.finish(); // Make sure everything is done
             queue.put1DRangeKernel(kernelIncrementFramePosition, 0, 2, 0);
             prof.recordTime("Increment frame count", prof.endTimer(id));
 

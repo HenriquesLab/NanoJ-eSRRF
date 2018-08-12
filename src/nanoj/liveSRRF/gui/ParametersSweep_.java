@@ -15,6 +15,7 @@ import ij.process.ImageProcessor;
 import nanoj.core2.NanoJPrefs;
 import nanoj.core2.NanoJProfiler;
 import nanoj.liveSRRF.ErrorMapLiveSRRF;
+import nanoj.liveSRRF.XYShiftCalculator;
 import nanoj.liveSRRF.liveSRRF_CL;
 
 import java.awt.*;
@@ -46,8 +47,8 @@ public class ParametersSweep_ implements PlugIn {
     private int[] sensitivityArray,
             nframeArray;
 
-    private final int radiusCCM = 5;
-    private final String LiveSRRFVersion = "v0.2";
+    private final int radiusCCM = 8;
+    private final String LiveSRRFVersion = "v0.3";
 
     private float[] shiftX, shiftY;
 
@@ -69,7 +70,7 @@ public class ParametersSweep_ implements PlugIn {
         if (imp == null) return;
         imp.show();
 
-        nSlices = imp.getImageStack().getSize();
+        nSlices = imp.getImageStack().getSize(); // TODO: use nSlices to set maximum on #frames
         width = imp.getImageStack().getWidth();
         height = imp.getImageStack().getHeight();
 
@@ -81,15 +82,6 @@ public class ParametersSweep_ implements PlugIn {
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
         IJ.log(now.format(formatter));
         liveSRRF = new liveSRRF_CL();
-        CLDevice[] allDevices = liveSRRF.checkDevices();
-
-        // Initilizaing string for device choice
-        String[] deviceNames = new String[allDevices.length + 1];
-        deviceNames[0] = "Default device";
-
-        for (int i = 1; i <= allDevices.length; i++) {
-            deviceNames[i] = allDevices[i - 1].getName();
-        }
 
         // Build GUI
         Font headerFont = new Font("Arial", Font.BOLD, 16);
@@ -147,8 +139,9 @@ public class ParametersSweep_ implements PlugIn {
         ImageStack imsInt = new ImageStack(width * magnification, height * magnification);
         ImageStack imsSRRFavg = new ImageStack(width * magnification, height * magnification);
         ImageStack imsSRRFstd = new ImageStack(width * magnification, height * magnification);
-
         ImageStack imsErrorMap = new ImageStack(width * magnification, height * magnification);
+
+        ImageStack imsRMSE = new ImageStack(fwhmArray.length, sensitivityArray.length, nframeArray.length);
 
         ImagePlus impTemp = new ImagePlus();
         impTemp.copyScale(imp); // make sure we copy the pixel sizes correctly across
@@ -171,16 +164,40 @@ public class ParametersSweep_ implements PlugIn {
         boolean userPressedEscape;
         ErrorMapLiveSRRF errorMapCalculator = new ErrorMapLiveSRRF();
         FloatProcessor fpErrorMap;
+        float[] pixelsRMSE;
 
         int maxnFrame = nframeArray[nframeArray.length - 1];
         shiftX = new float[maxnFrame];
         shiftY = new float[maxnFrame];
+        XYShiftCalculator shiftCalculator = new XYShiftCalculator(imp, prof);
 
-        if (correctVibration) calculateShiftArray(1, maxnFrame);
+//        if (correctVibration) calculateShiftArray(1, maxnFrame);
+        if (correctVibration) {
+            shiftCalculator.calculateShiftArray(1, maxnFrame);
+            shiftX = shiftCalculator.shiftX;
+            shiftY = shiftCalculator.shiftY;
+        }
 
-        for (int thisnf : nframeArray) {
-            for (int thisSensitivity : sensitivityArray) {
-                for (float thisfwhm : fwhmArray) {
+        float[] shiftXtemp;
+        float[] shiftYtemp;
+
+
+        for (int nfi = 0; nfi < nframeArray.length; nfi++) {
+            pixelsRMSE = new float[(fwhmArray.length) * (sensitivityArray.length)];
+
+            shiftXtemp = new float[nframeArray[nfi]];
+            shiftYtemp = new float[nframeArray[nfi]];
+
+            for (int i = 0; i < nframeArray[nfi]; i++) {
+                shiftXtemp[i] = shiftX[i];
+//                IJ.log("ShiftX="+shiftXtemp[i]);
+                shiftYtemp[i] = shiftY[i];
+//                IJ.log("ShiftY="+shiftYtemp[i]);
+            }
+
+            for (int si = 0; si < sensitivityArray.length; si++) {
+                for (int fi = 0; fi < fwhmArray.length; fi++) {
+
                     IJ.log("--------");
                     IJ.log("SRRF frame: " + r + "/" + n_calculation);
                     IJ.showProgress(r, n_calculation);
@@ -192,25 +209,16 @@ public class ParametersSweep_ implements PlugIn {
                         return;
                     }
 
-                    IJ.log("Number of frame for SRRF: " + thisnf);
-                    IJ.log("Radius: " + thisfwhm + " pixels");
-                    IJ.log("Sensitivity: " + thisSensitivity);
+                    IJ.log("Number of frame for SRRF: " + nframeArray[nfi]);
+                    IJ.log("Radius: " + fwhmArray[fi] + " pixels");
+                    IJ.log("Sensitivity: " + sensitivityArray[si]);
 
-                    liveSRRF.initialise(width, height, magnification, thisfwhm, thisSensitivity, 1, thisnf, blockSize, null);
-
-                    float[] shiftXtemp = new float[thisnf];
-                    float[] shiftYtemp = new float[thisnf];
-
-                    for (int i = 0; i < thisnf; i++) {
-                        shiftXtemp[i] = shiftX[i];
-                        shiftYtemp[i] = shiftY[i];
-                    }
-
+                    liveSRRF.initialise(width, height, magnification, fwhmArray[fi], sensitivityArray[si], 1, nframeArray[nfi], blockSize, null);
+                    liveSRRF.resetFramePosition();
                     liveSRRF.loadShiftXYGPUbuffer(shiftXtemp, shiftYtemp);
 
-                    liveSRRF.resetFramePosition();
-
-                    for (int f = 1; f <= thisnf; f++) {
+                    IJ.showStatus("Calculating SRRF image...");
+                    for (int f = 1; f <= nframeArray[nfi]; f++) {
                         imp.setSlice(f);
                         imsRawData = new ImageStack(width, height);
                         imsRawData.addSlice(imp.getProcessor());
@@ -225,24 +233,31 @@ public class ParametersSweep_ implements PlugIn {
                         }
                     }
 
-
-//                    liveSRRF.calculateSRRF(imsRawData);
+                    IJ.showStatus("Reading SRRF image...");
                     imsBuffer = liveSRRF.readSRRFbuffer();
 
+                    IJ.showStatus("Optimising Sigma...");
                     errorMapCalculator.optimise(imsBuffer.getProcessor(3), imsBuffer.getProcessor(1), magnification);
-                    fpErrorMap = errorMapCalculator.calculateErrorMap();
 
+                    IJ.showStatus("Calculating error map...");
+                    fpErrorMap = errorMapCalculator.calculateErrorMap();
+                    pixelsRMSE[fwhmArray.length * si + fi] = (float) errorMapCalculator.globalRMSE;
+
+                    String label = "R=" + fwhmArray[fi] + "/S=" + sensitivityArray[si] + "/#fr=" + nframeArray[nfi];
                     if (showErrorMaps)
-                        imsErrorMap.addSlice("R=" + thisfwhm + "/S=" + thisSensitivity + "/#f=" + thisnf, fpErrorMap);
+                        imsErrorMap.addSlice(label, fpErrorMap);
                     if (calculateAVG)
-                        imsSRRFavg.addSlice("R=" + thisfwhm + "/S=" + thisSensitivity + "/#f=" + thisnf, imsBuffer.getProcessor(1));
+                        imsSRRFavg.addSlice(label, imsBuffer.getProcessor(1));
                     if (calculateSTD)
-                        imsSRRFstd.addSlice("R=" + thisfwhm + "/S=" + thisSensitivity + "/#f=" + thisnf, imsBuffer.getProcessor(2));
-                    imsInt.addSlice("R=" + thisfwhm + "/S=" + thisSensitivity + "/#f=" + thisnf, imsBuffer.getProcessor(3));
+                        imsSRRFstd.addSlice(label, imsBuffer.getProcessor(2));
+                    imsInt.addSlice(label, imsBuffer.getProcessor(3));
 
                     r++;
                 }
             }
+            imsRMSE.setProcessor(new FloatProcessor(fwhmArray.length, sensitivityArray.length, pixelsRMSE), nfi + 1);
+            imsRMSE.setSliceLabel("#fr=" + nframeArray[nfi], nfi + 1);
+
         }
 
         // Release the GPU
@@ -275,6 +290,14 @@ public class ParametersSweep_ implements PlugIn {
             IJ.run(impErrorMap, "Enhance Contrast", "saturated=0.5");
             applyLUT_SQUIRREL_Errors(impErrorMap);
             impErrorMap.show();
+        }
+
+        if (calculateRSE) {
+            ImagePlus impRMSE = new ImagePlus(imp.getTitle() + " - RMSE sweep map", imsRMSE);
+            impRMSE.setCalibration(cal);
+            IJ.run(impRMSE, "Enhance Contrast", "saturated=0.5");
+            applyLUT_SQUIRREL_Errors(impRMSE);
+            impRMSE.show();
         }
 
         IJ.log("-------------------------------------");
@@ -363,99 +386,99 @@ public class ParametersSweep_ implements PlugIn {
     }
 
 
-    // --- Calculate shift using Cross-correlation matrix ---
-    private float[] calculateShift(ImageProcessor ipRef, ImageProcessor ipData) {
-
-        FloatProcessor fpCCM = (FloatProcessor) calculateCrossCorrelationMap(ipRef, ipData, false);
-
-        int windowSize = radiusCCM * 2 + 1;
-        int xStart = fpCCM.getWidth() / 2 - radiusCCM;
-        int yStart = fpCCM.getHeight() / 2 - radiusCCM;
-        fpCCM.setRoi(xStart, yStart, windowSize, windowSize);
-        fpCCM = (FloatProcessor) fpCCM.crop();
-
-        double vMax = -Double.MAX_VALUE;
-        double vMin = Double.MAX_VALUE;
-        double xMax = 0;
-        double yMax = 0;
-
-        // first do coarse search for max
-        for (int y = 1; y < windowSize - 1; y++) {
-            for (int x = 1; x < windowSize - 1; x++) {
-                double v = fpCCM.getf(x, y);
-                if (v > vMax) {
-                    vMax = v;
-                    xMax = x;
-                    yMax = y;
-                }
-                vMin = min(v, vMin);
-            }
-        }
-        //System.out.println("xMax="+xMax+" yMax="+yMax);
-
-        //vMax = -Double.MAX_VALUE;
-        // do fine search for max
-        for (double y = yMax; y < yMax + 1; y += 0.01) {
-            for (double x = xMax; x < xMax + 1; x += 0.01) {
-                double v = fpCCM.getBicubicInterpolatedPixel(x, y, fpCCM);
-                if (v > vMax) {
-                    vMax = v;
-                    xMax = x;
-                    yMax = y;
-                }
-            }
-        }
-
-        // recenter pixels
-        float shiftX = (float) xMax - radiusCCM;
-        float shiftY = (float) yMax - radiusCCM;
-
-        if (impCCM == null) {
-            impCCM = new ImagePlus("CCM Vibration Stabilisation", fpCCM);
-            impCCM.show();
-        }
-
-        impCCM.setProcessor(fpCCM);
-        impCCM.setRoi(new PointRoi(xMax + .5, yMax + .5));
-        impCCM.setDisplayRange(vMin, vMax);
-
-        return new float[]{shiftX, shiftY};
-    }
-
-    // -- Calculate shift Array using Cross-correlation matrix --
-    private void calculateShiftArray(int indexStart, int nFrameForSRRF) {
-
-        imp.setSlice(indexStart);
-        ImageProcessor ipRef = imp.getProcessor().duplicate();
-        ImageProcessor ipData;
-
-        for (int s = 0; s < nFrameForSRRF; s++) {
-
-            // Check if user is cancelling calculation
-            IJ.showProgress(s, nFrameForSRRF);
-            if (IJ.escapePressed()) {
-                liveSRRF.release();
-                IJ.resetEscape();
-                IJ.log("-------------------------------------");
-                IJ.log("Reconstruction aborted by user.");
-                return;
-            }
-
-            // Grab the new frame from the list
-            imp.setSlice(s + indexStart);
-            ipData = imp.getProcessor();
-
-            // Estimate vibrations
-            int id = prof.startTimer();
-            float[] shift = calculateShift(ipRef, ipData);
-            shiftX[s] = shift[0];
-            shiftY[s] = shift[1];
-
-            System.out.println("Frame=" + s + " shiftX=" + shiftX[s] + " shiftY=" + shiftY[s]);
-            prof.recordTime("Drift Estimation", prof.endTimer(id));
-        }
-
-    }
+//    // --- Calculate shift using Cross-correlation matrix ---
+//    private float[] calculateShift(ImageProcessor ipRef, ImageProcessor ipData) {
+//
+//        FloatProcessor fpCCM = (FloatProcessor) calculateCrossCorrelationMap(ipRef, ipData, false);
+//
+//        int windowSize = radiusCCM * 2 + 1;
+//        int xStart = fpCCM.getWidth() / 2 - radiusCCM;
+//        int yStart = fpCCM.getHeight() / 2 - radiusCCM;
+//        fpCCM.setRoi(xStart, yStart, windowSize, windowSize);
+//        fpCCM = (FloatProcessor) fpCCM.crop();
+//
+//        double vMax = -Double.MAX_VALUE;
+//        double vMin = Double.MAX_VALUE;
+//        double xMax = 0;
+//        double yMax = 0;
+//
+//        // first do coarse search for max
+//        for (int y = 1; y < windowSize - 1; y++) {
+//            for (int x = 1; x < windowSize - 1; x++) {
+//                double v = fpCCM.getf(x, y);
+//                if (v > vMax) {
+//                    vMax = v;
+//                    xMax = x;
+//                    yMax = y;
+//                }
+//                vMin = min(v, vMin);
+//            }
+//        }
+//        //System.out.println("xMax="+xMax+" yMax="+yMax);
+//
+//        //vMax = -Double.MAX_VALUE;
+//        // do fine search for max
+//        for (double y = yMax; y < yMax + 1; y += 0.01) {
+//            for (double x = xMax; x < xMax + 1; x += 0.01) {
+//                double v = fpCCM.getBicubicInterpolatedPixel(x, y, fpCCM);
+//                if (v > vMax) {
+//                    vMax = v;
+//                    xMax = x;
+//                    yMax = y;
+//                }
+//            }
+//        }
+//
+//        // recenter pixels
+//        float shiftX = (float) xMax - radiusCCM;
+//        float shiftY = (float) yMax - radiusCCM;
+//
+//        if (impCCM == null) {
+//            impCCM = new ImagePlus("CCM Vibration Stabilisation", fpCCM);
+//            impCCM.show();
+//        }
+//
+//        impCCM.setProcessor(fpCCM);
+//        impCCM.setRoi(new PointRoi(xMax + .5, yMax + .5));
+//        impCCM.setDisplayRange(vMin, vMax);
+//
+//        return new float[]{shiftX, shiftY};
+//    }
+//
+//    // -- Calculate shift Array using Cross-correlation matrix --
+//    private void calculateShiftArray(int indexStart, int nFrameForSRRF) {
+//
+//        imp.setSlice(indexStart);
+//        ImageProcessor ipRef = imp.getProcessor().duplicate();
+//        ImageProcessor ipData;
+//
+//        for (int s = 0; s < nFrameForSRRF; s++) {
+//
+//            // Check if user is cancelling calculation
+//            IJ.showProgress(s, nFrameForSRRF);
+//            if (IJ.escapePressed()) {
+//                liveSRRF.release();
+//                IJ.resetEscape();
+//                IJ.log("-------------------------------------");
+//                IJ.log("Reconstruction aborted by user.");
+//                return;
+//            }
+//
+//            // Grab the new frame from the list
+//            imp.setSlice(s + indexStart);
+//            ipData = imp.getProcessor();
+//
+//            // Estimate vibrations
+//            int id = prof.startTimer();
+//            float[] shift = calculateShift(ipRef, ipData);
+//            shiftX[s] = shift[0];
+//            shiftY[s] = shift[1];
+//
+//            System.out.println("Frame=" + s + " shiftX=" + shiftX[s] + " shiftY=" + shiftY[s]);
+//            prof.recordTime("Drift Estimation", prof.endTimer(id));
+//        }
+//
+//    }
 
 
 }

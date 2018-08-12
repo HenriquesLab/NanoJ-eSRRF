@@ -14,7 +14,6 @@ import java.text.DecimalFormat;
 import java.util.ArrayList;
 
 import static java.lang.Math.*;
-import static nanoj.core.java.array.ArrayCasting.toArray;
 import static nanoj.core.java.array.ArrayMath.calculateMSE;
 import static nanoj.core.java.array.ArrayMath.calculatePPMCC;
 
@@ -26,15 +25,15 @@ public class ErrorMapLiveSRRF {
     int width,
             height;
 
-    float maxSigmaBoundary,
+    private float maxSigmaBoundary,
             alpha,
             beta,
             sigma_linear;
 
-    double globalRMSE,
+    public double globalRMSE,
             globalPPMCC;
 
-    float[] pixelsRef, ones;
+    private float[] pixelsRef, ones;
 
     // Image formats
     FloatProcessor fpSR;
@@ -210,18 +209,12 @@ public class ErrorMapLiveSRRF {
             blurredFp.blurGaussian(sigma);
             blurredOnes.blurGaussian(sigma);
 
-//            blurredFp = (FloatProcessor) blurredFp.resize(w_Ref, h_Ref);
-//            blurredOnes = (FloatProcessor) blurredOnes.resize(w_Ref, h_Ref);
-
             float[] aB = calculateAlphaBeta((float[]) blurredFp.getPixels(), pixelsRef, (float[]) blurredOnes.getPixels());
 
             FloatProcessor finalFpSR = (FloatProcessor) fpSR.duplicate();
             finalFpSR.multiply(aB[0]);
             finalFpSR.add(aB[1]);
             finalFpSR.blurGaussian(sigma);
-
-//            FloatProcessor finalFpSRResized = (FloatProcessor) finalFpSR.resize(w_Ref, h_Ref);
-//            double error = calculateRMSE(pixelsRef, (float[]) finalFpSRResized.getPixels());
 
             double error = calculateRMSE(pixelsRef, (float[]) finalFpSR.getPixels());
 

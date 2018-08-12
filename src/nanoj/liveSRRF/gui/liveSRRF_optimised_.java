@@ -15,6 +15,7 @@ import nanoj.core.java.io.zip.virtualStacks.FullFramesVirtualStack;
 import nanoj.core2.NanoJPrefs;
 import nanoj.core2.NanoJProfiler;
 import nanoj.core2.NanoJUsageTracker;
+import nanoj.liveSRRF.XYShiftCalculator;
 import org.python.modules.math;
 import nanoj.liveSRRF.liveSRRF_CL;
 
@@ -53,7 +54,7 @@ public class liveSRRF_optimised_ implements PlugIn {
             previousWriteToDisk = false,
             previousAdvSettings = false;
 
-    private final int radiusCCM = 5;
+    private final int radiusCCM = 8;
     private final String LiveSRRFVersion = "v1.1";
     private String pathToDisk = "",
             fileName,
@@ -106,10 +107,6 @@ public class liveSRRF_optimised_ implements PlugIn {
         blockSize = (int) prefs.get("blockSize", 20000);
         writeToDisk = false;
 
-        // Calculate the parameters based on user inputs
-        if (nFrameForSRRF == 0) nFrameForSRRF = nSlices;
-
-
         IJ.log("\\Clear");  // Clear the log window
         IJ.log("-------------------------------------");
         IJ.log("-------------------------------------");
@@ -118,6 +115,7 @@ public class liveSRRF_optimised_ implements PlugIn {
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
         IJ.log(now.format(formatter));
 
+        // Initialize the liveSRRF class and check the devices
         liveSRRF = new liveSRRF_CL();
         CLDevice[] allDevices = liveSRRF.checkDevices();
 
@@ -129,8 +127,10 @@ public class liveSRRF_optimised_ implements PlugIn {
             deviceNames[i] = allDevices[i - 1].getName();
         }
 
+        // This needs to be there
+        if (nFrameForSRRF == 0) nFrameForSRRF = nSlices;
 
-        // Main GUI
+        // Main GUI ----
         boolean cancelled = mainGUI();
         if (cancelled) {
             liveSRRF.release();
@@ -183,6 +183,8 @@ public class liveSRRF_optimised_ implements PlugIn {
         shiftX = new float[nFrameForSRRF];
         shiftY = new float[nFrameForSRRF];
 
+        XYShiftCalculator shiftCalculator = new XYShiftCalculator(imp, prof);
+
         ImageStack imsBuffer;
 
         ImageStack imsRawData;
@@ -203,21 +205,26 @@ public class liveSRRF_optimised_ implements PlugIn {
         // For measuring the remaining time
         double singleLoadTime;
         double remainingTime;
-        int _h;
-        int _m;
-        int _s;
         int currentNLoad;
 
 
         // Start looping trough SRRF frames --------------------------------------------
         for (int r = 1; r <= nSRRFframe; r++) {
-            liveSRRF.resetFramePosition();
+            liveSRRF.resetFramePosition();  // resets only the global SRRF counter
 
             IJ.log("--------");
             IJ.log("SRRF frame: " + r + "/" + nSRRFframe);
             indexStartSRRFframe = (r - 1) * frameGapToUse + 1;
             IJ.log("Stack index start: " + indexStartSRRFframe);
-            if (correctVibration) calculateShiftArray(indexStartSRRFframe);
+
+//            if (correctVibration) calculateShiftArray(indexStartSRRFframe);
+
+            if (correctVibration) {
+                shiftCalculator.calculateShiftArray(indexStartSRRFframe, nFrameForSRRF);
+                shiftX = shiftCalculator.shiftX;
+                shiftY = shiftCalculator.shiftY;
+            }
+
             liveSRRF.loadShiftXYGPUbuffer(shiftX, shiftY);
 
             IJ.showProgress(r - 1, nSRRFframe);
@@ -235,7 +242,7 @@ public class liveSRRF_optimised_ implements PlugIn {
                     imsRawData.addSlice(imp.getProcessor());
                 }
 
-                userPressedEscape = liveSRRF.calculateSRRF(imsRawData);
+                userPressedEscape = liveSRRF.calculateSRRF(imsRawData); // resets the local GPU load frame counter
 
                 // Check if user is cancelling calculation
                 if (userPressedEscape) {
@@ -250,7 +257,6 @@ public class liveSRRF_optimised_ implements PlugIn {
                 singleLoadTime = ((System.nanoTime() - loopStart) / currentNLoad) / 1e9;
                 remainingTime = singleLoadTime * (nSRRFframe * nGPUloadPerSRRFframe - currentNLoad);
                 IJ.showStatus("LiveSRRF - Remaining time: " + timeToString(remainingTime));
-
             }
 
             imsBuffer = liveSRRF.readSRRFbuffer();
@@ -417,8 +423,11 @@ public class liveSRRF_optimised_ implements PlugIn {
         gd.addMessage("-=-= Advanced settings =-=-\n", headerFont);
         gd.addCheckbox("Show advanced settings", false);
 
+        gd.addHelp("https://www.youtube.com/watch?v=PJQVlVHsFF8"); // If you're hooked on a feeling
+
         MyDialogListenerMainGUI dl = new MyDialogListenerMainGUI(); // this serves to estimate a few indicators such as RAM usage
         gd.addDialogListener(dl);
+
         gd.showDialog();
 
         // If the GUI was cancelled
@@ -486,7 +495,7 @@ public class liveSRRF_optimised_ implements PlugIn {
         gd.addMessage("-=-= GPU/CPU processing =-=-\n", headerFont);
         gd.addChoice("Processing device", deviceNames, prefs.get("chosenDeviceName", "Default device"));
         gd.addNumericField("Maximum amount of memory on device (MB, default: 1000)", prefs.get("maxMemoryGPU", 500), 2);
-        gd.addMessage("Minimum device memory necessary: " + Math.round(memUsed[0] * 10) / 10 + "MB");
+        gd.addMessage("Minimum device memory necessary: " + Math.round(memUsed[0] * 10) / 10 + "MB\n");
 
         gd.addNumericField("Analysis block size (default: 20000)", prefs.get("blockSize", 20000), 0);
         gd.addMessage("A large analysis block size will speed up the analysis but will use\n" +
@@ -497,6 +506,8 @@ public class liveSRRF_optimised_ implements PlugIn {
         gd.addMessage("Writing directly to disk will slow down the reconstruction but \n" +
                 "will allow for long time courses to be reconstructed without\n" +
                 "exceeding RAM capacity.");
+
+        gd.addHelp("https://www.youtube.com/watch?v=otCpCn0l4Wo"); // it's Hammer time
 
         MyDialogListenerAdvancedGUI dl = new MyDialogListenerAdvancedGUI(); // this serves to estimate a few indicators such as RAM usage
         gd.addDialogListener(dl);
@@ -514,7 +525,6 @@ public class liveSRRF_optimised_ implements PlugIn {
             prefs.set("blockSize", blockSize);
             prefs.save();
         }
-
 
     }
 
@@ -579,100 +589,100 @@ public class liveSRRF_optimised_ implements PlugIn {
     }
 
 
-    // --- Calculate shift using Cross-correlation matrix ---
-    private float[] calculateShift(ImageProcessor ipRef, ImageProcessor ipData) {
-
-        FloatProcessor fpCCM = (FloatProcessor) calculateCrossCorrelationMap(ipRef, ipData, false);
-
-        int windowSize = radiusCCM * 2 + 1;
-        int xStart = fpCCM.getWidth() / 2 - radiusCCM;
-        int yStart = fpCCM.getHeight() / 2 - radiusCCM;
-        fpCCM.setRoi(xStart, yStart, windowSize, windowSize);
-        fpCCM = (FloatProcessor) fpCCM.crop();
-
-        double vMax = -Double.MAX_VALUE;
-        double vMin = Double.MAX_VALUE;
-        double xMax = 0;
-        double yMax = 0;
-
-        // first do coarse search for max
-        for (int y = 1; y < windowSize - 1; y++) {
-            for (int x = 1; x < windowSize - 1; x++) {
-                double v = fpCCM.getf(x, y);
-                if (v > vMax) {
-                    vMax = v;
-                    xMax = x;
-                    yMax = y;
-                }
-                vMin = min(v, vMin);
-            }
-        }
-        //System.out.println("xMax="+xMax+" yMax="+yMax);
-
-        //vMax = -Double.MAX_VALUE;
-        // do fine search for max
-        for (double y = yMax; y < yMax + 1; y += 0.01) {
-            for (double x = xMax; x < xMax + 1; x += 0.01) {
-                double v = fpCCM.getBicubicInterpolatedPixel(x, y, fpCCM);
-                if (v > vMax) {
-                    vMax = v;
-                    xMax = x;
-                    yMax = y;
-                }
-            }
-        }
-
-        // recenter pixels
-        float shiftX = (float) xMax - radiusCCM;
-        float shiftY = (float) yMax - radiusCCM;
-
-        if (impCCM == null) {
-            impCCM = new ImagePlus("CCM Vibration Stabilisation", fpCCM);
-            impCCM.show();
-        }
-
-        impCCM.setProcessor(fpCCM);
-        impCCM.setRoi(new PointRoi(xMax + .5, yMax + .5));
-        impCCM.setDisplayRange(vMin, vMax);
-
-        return new float[]{shiftX, shiftY};
-    }
-
-
-    // -- Calculate shift Array using Cross-correlation matrix --
-    private void calculateShiftArray(int indexStart) {
-
-        imp.setSlice(indexStart);
-        ImageProcessor ipRef = imp.getProcessor().duplicate();
-        ImageProcessor ipData;
-
-        for (int s = 0; s < nFrameForSRRF; s++) {
-
-            // Check if user is cancelling calculation
-            IJ.showProgress(s, nFrameForSRRF);
-            if (IJ.escapePressed()) {
-                liveSRRF.release();
-                IJ.resetEscape();
-                IJ.log("-------------------------------------");
-                IJ.log("Reconstruction aborted by user.");
-                return;
-            }
-
-            // Grab the new frame from the list
-            imp.setSlice(s + indexStart);
-            ipData = imp.getProcessor();
-
-            // Estimate vibrations
-            int id = prof.startTimer();
-            float[] shift = calculateShift(ipRef, ipData);
-            shiftX[s] = shift[0];
-            shiftY[s] = shift[1];
-
-            System.out.println("Frame=" + s + " shiftX=" + shiftX[s] + " shiftY=" + shiftY[s]);
-            prof.recordTime("Drift Estimation", prof.endTimer(id));
-        }
-
-    }
+//    // --- Calculate shift using Cross-correlation matrix ---
+//    private float[] calculateShift(ImageProcessor ipRef, ImageProcessor ipData) {
+//
+//        FloatProcessor fpCCM = (FloatProcessor) calculateCrossCorrelationMap(ipRef, ipData, false);
+//
+//        int windowSize = radiusCCM * 2 + 1;
+//        int xStart = fpCCM.getWidth() / 2 - radiusCCM;
+//        int yStart = fpCCM.getHeight() / 2 - radiusCCM;
+//        fpCCM.setRoi(xStart, yStart, windowSize, windowSize);
+//        fpCCM = (FloatProcessor) fpCCM.crop();
+//
+//        double vMax = -Double.MAX_VALUE;
+//        double vMin = Double.MAX_VALUE;
+//        double xMax = 0;
+//        double yMax = 0;
+//
+//        // first do coarse search for max
+//        for (int y = 1; y < windowSize - 1; y++) {
+//            for (int x = 1; x < windowSize - 1; x++) {
+//                double v = fpCCM.getf(x, y);
+//                if (v > vMax) {
+//                    vMax = v;
+//                    xMax = x;
+//                    yMax = y;
+//                }
+//                vMin = min(v, vMin);
+//            }
+//        }
+//        //System.out.println("xMax="+xMax+" yMax="+yMax);
+//
+//        //vMax = -Double.MAX_VALUE;
+//        // do fine search for max
+//        for (double y = yMax; y < yMax + 1; y += 0.01) {
+//            for (double x = xMax; x < xMax + 1; x += 0.01) {
+//                double v = fpCCM.getBicubicInterpolatedPixel(x, y, fpCCM);
+//                if (v > vMax) {
+//                    vMax = v;
+//                    xMax = x;
+//                    yMax = y;
+//                }
+//            }
+//        }
+//
+//        // recenter pixels
+//        float shiftX = (float) xMax - radiusCCM;
+//        float shiftY = (float) yMax - radiusCCM;
+//
+//        if (impCCM == null) {
+//            impCCM = new ImagePlus("CCM Vibration Stabilisation", fpCCM);
+//            impCCM.show();
+//        }
+//
+//        impCCM.setProcessor(fpCCM);
+//        impCCM.setRoi(new PointRoi(xMax + .5, yMax + .5));
+//        impCCM.setDisplayRange(vMin, vMax);
+//
+//        return new float[]{shiftX, shiftY};
+//    }
+//
+//
+//    // -- Calculate shift Array using Cross-correlation matrix --
+//    private void calculateShiftArray(int indexStart) {
+//
+//        imp.setSlice(indexStart);
+//        ImageProcessor ipRef = imp.getProcessor().duplicate();
+//        ImageProcessor ipData;
+//
+//        for (int s = 0; s < nFrameForSRRF; s++) {
+//
+//            // Check if user is cancelling calculation
+//            IJ.showProgress(s, nFrameForSRRF);
+//            if (IJ.escapePressed()) {
+//                liveSRRF.release();
+//                IJ.resetEscape();
+//                IJ.log("-------------------------------------");
+//                IJ.log("Reconstruction aborted by user.");
+//                return;
+//            }
+//
+//            // Grab the new frame from the list
+//            imp.setSlice(s + indexStart);
+//            ipData = imp.getProcessor();
+//
+//            // Estimate vibrations
+//            int id = prof.startTimer();
+//            float[] shift = calculateShift(ipRef, ipData);
+//            shiftX[s] = shift[0];
+//            shiftY[s] = shift[1];
+//
+//            System.out.println("Frame=" + s + " shiftX=" + shiftX[s] + " shiftY=" + shiftY[s]);
+//            prof.recordTime("Drift Estimation", prof.endTimer(id));
+//        }
+//
+//    }
 
     // -- Save user's last parameter set --
     private void savePreferences() {

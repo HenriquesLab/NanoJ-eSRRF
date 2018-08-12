@@ -51,7 +51,7 @@ static float getInterpolatedValue(__global float* array, int const width, int co
         }
     }
 
-    // Bilinear interpolation & extrapolation
+    // Bilinear interpolation & extrapolation // TODO: with large shifts extrapolation goes wild
     else  {
 //        else if (x >= 0 && x < w && y >= 0 && y < h) {
 
@@ -150,7 +150,7 @@ __kernel void calculateGradient_2point(
 
     // Reset the local current frame
     nCurrentFrame[1] = 0;
-    if (nCurrentFrame[0] == nFrameForSRRF) nCurrentFrame[0] = 0; // reset the frame number if it's reached the end
+//    if (nCurrentFrame[0] == nFrameForSRRF) nCurrentFrame[0] = 0; // reset the frame number if it's reached the end
 
         // Current frame is a 2 element Int buffer:
                 // nCurrentFrame[0] is the global current frame in the current SRRF frame (reset every SRRF frame)
@@ -352,6 +352,11 @@ __kernel void kernelIncrementFramePosition(
     ){
     const int i = get_global_id(0);
     nCurrentFrame[i] = nCurrentFrame[i] + 1;
+
+        // Current frame is a 2 element Int buffer:
+                // nCurrentFrame[0] is the global current frame in the current SRRF frame (reset every SRRF frame)
+                // nCurrentFrame[1] is the local current frame in the current GPU-loaded dataset (reset every turn of the method calculateSRRF (within the gradient calculation))
+
 }
 
 // Fifth kernel: reset the frame number -----------------------------------------------------------------
@@ -359,5 +364,10 @@ __kernel void kernelResetFramePosition(
     __global int* nCurrentFrame
     ){
     nCurrentFrame[0] = 0;
+
+        // Current frame is a 2 element Int buffer:
+                // nCurrentFrame[0] is the global current frame in the current SRRF frame (reset every SRRF frame)
+                // nCurrentFrame[1] is the local current frame in the current GPU-loaded dataset (reset every turn of the method calculateSRRF (within the gradient calculation))
+
 }
 
