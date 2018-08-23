@@ -198,7 +198,7 @@ public class ParametersSweep_ implements PlugIn {
                 for (int fi = 0; fi < fwhmArray.length; fi++) {
 
                     IJ.log("--------");
-                    IJ.log("SRRF frame: " + r + "/" + n_calculation);
+                    IJ.log("SRRF frame: " + r+1 + "/" + n_calculation);
                     IJ.showProgress(r, n_calculation);
 
                     // Check if user is cancelling calculation

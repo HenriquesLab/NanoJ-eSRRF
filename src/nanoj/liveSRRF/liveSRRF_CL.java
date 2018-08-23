@@ -77,7 +77,7 @@ public class liveSRRF_CL {
         for (int i = 0; i < allCLdevice.length; i++) {
             IJ.log("Device #" + i);
             IJ.log("Max clock: " + allCLdevice[i].getMaxClockFrequency() + " MHz");
-            IJ.log("Max cores: " + allCLdevice[i].getMaxComputeUnits() + " cores");
+            IJ.log("Number of compute units: " + allCLdevice[i].getMaxComputeUnits());
             IJ.log("Device type: " + allCLdevice[i].getType());
             IJ.log("Device name: " + allCLdevice[i].getName());
             IJ.log("--------");

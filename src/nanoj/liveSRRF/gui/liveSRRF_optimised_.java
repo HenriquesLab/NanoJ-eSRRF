@@ -5,11 +5,8 @@ import ij.*;
 import ij.gui.DialogListener;
 import ij.gui.GenericDialog;
 import ij.gui.NonBlockingGenericDialog;
-import ij.gui.PointRoi;
 import ij.measure.Calibration;
 import ij.plugin.PlugIn;
-import ij.process.FloatProcessor;
-import ij.process.ImageProcessor;
 import nanoj.core.java.io.zip.SaveFileInZip;
 import nanoj.core.java.io.zip.virtualStacks.FullFramesVirtualStack;
 import nanoj.core2.NanoJPrefs;
@@ -30,7 +27,8 @@ public class liveSRRF_optimised_ implements PlugIn {
 
     // Basic formats
     private int magnification,
-            nFrameForSRRF,
+            nFrameForSRRFtoUse,
+            nFrameForSRRFfromUser,
             sensitivity,
             frameGapToUse,
             frameGapFromUser,
@@ -42,16 +40,19 @@ public class liveSRRF_optimised_ implements PlugIn {
             blockSize,
             nGPUloadPerSRRFframe;
 
-    private float fwhm, maxMemoryGPU;
+    private float fwhm, maxMemoryGPU,
+            maxMemoryRAMij = (float) IJ.maxMemory()/1e6f; // maximum RAM set for Fiji in MB
 
     private boolean correctVibration,
             calculateAVG,
             calculateSTD,
             getInterpolatedImage,
-            writeToDisk,
+            writeToDiskToUse,
+            writeToDiskTemp,
             doRollingAnalysis,
             previousWriteToDisk = false,
-            previousAdvSettings = false;
+            previousAdvSettings = false,
+            writeSuggestOKeyed = false;
 
     private final String LiveSRRFVersion = "v1.2";
     private String pathToDisk = "",
@@ -98,16 +99,18 @@ public class liveSRRF_optimised_ implements PlugIn {
         width = imp.getImageStack().getWidth();
         height = imp.getImageStack().getHeight();
 
-        frameGapToUse = (int) prefs.get("frameGapToUse", 0);
+        // initialization of advanced settings (in case advanced settings are not selected)
         chosenDeviceName = prefs.get("chosenDeviceName", "Default device");
-        maxMemoryGPU = (int) prefs.get("maxMemoryGPU", 500);
+        maxMemoryGPU = (float) prefs.get("maxMemoryGPU", 500);
         blockSize = (int) prefs.get("blockSize", 20000);
-        writeToDisk = false;
+        writeToDiskToUse = false;
 
         IJ.log("\\Clear");  // Clear the log window
         IJ.log("-------------------------------------");
         IJ.log("-------------------------------------");
         IJ.log("liveSRRF " + LiveSRRFVersion);
+        IJ.log("Max RAM available: "+ (float) Math.round(maxMemoryRAMij*100)/100 + " MB");
+
         LocalDateTime now = LocalDateTime.now();
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
         IJ.log(now.format(formatter));
@@ -124,14 +127,18 @@ public class liveSRRF_optimised_ implements PlugIn {
             deviceNames[i] = allDevices[i - 1].getName();
         }
 
-        // This needs to be there
-        if (nFrameForSRRF == 0) nFrameForSRRF = nSlices;
-
         // Main GUI ----
         boolean cancelled = mainGUI();
         if (cancelled) {
             liveSRRF.release();
             IJ.log("Cancelled by user.");
+            return;
+        }
+
+        // Check if something has gone wrong with the momory
+        if (!calculatenFrameOnGPU()){
+            liveSRRF.release();
+            IJ.log("Problems with memory. Check advanced settings or else...");
             return;
         }
 
@@ -149,17 +156,17 @@ public class liveSRRF_optimised_ implements PlugIn {
         IJ.log("Magnification: " + magnification);
         IJ.log("Radius: " + fwhm + " pixels");
         IJ.log("Sensitivity: " + sensitivity);
-        IJ.log("# frames for SRRF: " + nFrameForSRRF);
+        IJ.log("# frames for SRRF: " + nFrameForSRRFtoUse);
         IJ.log("# frames gap: " + frameGapToUse);
         IJ.log("# frames on device: " + nFrameOnGPU);
-        IJ.log("Estimated device memory usage: " + Math.round(predictMemoryUsed(nFrameOnGPU)[0]) + " MB");
-        IJ.log("Estimated RAM usage: " + Math.round(predictMemoryUsed(nFrameOnGPU)[1]) + " MB");
+        IJ.log("Estimated device memory usage: " + (float) Math.ceil(predictMemoryUsed(nFrameOnGPU)[0] * 100)/100 + " MB");
+        IJ.log("Estimated RAM usage: " + (float) Math.ceil(predictMemoryUsed(nFrameOnGPU)[1] * 100)/100 + " MB");
         IJ.log("Running on: " + chosenDeviceName);
         IJ.log("# reconstructed frames: " + nSRRFframe);
         IJ.log("# device load / SRRF frame: " + nGPUloadPerSRRFframe);
 
         // Initialize ZipSaver in case we're writing to disk
-        if (writeToDisk) {
+        if (writeToDiskToUse) {
             fileName = pathToDisk + imp.getTitle() + " - liveSRRF.zip";
             IJ.log("Write to disk enabled");
             IJ.log(fileName);
@@ -178,10 +185,10 @@ public class liveSRRF_optimised_ implements PlugIn {
 
         ImageStack imsAllRawData = imp.getImageStack();
 
-        liveSRRF.initialise(width, height, magnification, fwhm, sensitivity, nFrameOnGPU, nFrameForSRRF, blockSize, chosenDevice);
+        liveSRRF.initialise(width, height, magnification, fwhm, sensitivity, nFrameOnGPU, nFrameForSRRFtoUse, blockSize, chosenDevice);
 
-        shiftX = new float[nFrameForSRRF];
-        shiftY = new float[nFrameForSRRF];
+        shiftX = new float[nFrameForSRRFtoUse];
+        shiftY = new float[nFrameForSRRFtoUse];
 
         XYShiftCalculator shiftCalculator = new XYShiftCalculator(imp, prof);
         ImageStack imsBuffer;
@@ -217,7 +224,7 @@ public class liveSRRF_optimised_ implements PlugIn {
             IJ.log("Stack index start: " + indexStartSRRFframe);
 
             if (correctVibration) {
-                shiftCalculator.calculateShiftArray(indexStartSRRFframe, nFrameForSRRF);
+                shiftCalculator.calculateShiftArray(indexStartSRRFframe, nFrameForSRRFtoUse);
                 shiftX = shiftCalculator.shiftX;
                 shiftY = shiftCalculator.shiftY;
             }
@@ -229,14 +236,12 @@ public class liveSRRF_optimised_ implements PlugIn {
             for (int l = 0; l < nGPUloadPerSRRFframe; l++) {
 
 //                IJ.log("----------------------------");
-                nFrameToLoad = min(nFrameOnGPU, nFrameForSRRF - nFrameOnGPU * l);
+                nFrameToLoad = min(nFrameOnGPU, nFrameForSRRFtoUse - nFrameOnGPU * l);
 //                IJ.log("Number of frames to load: " + nFrameToLoad);
 //                IJ.log("Index start: " + (indexStartSRRFframe + nFrameOnGPU * l));
 
                 imsRawData = new ImageStack(width, height);
                 for (int f = 0; f < nFrameToLoad; f++) {
-//                    imp.setSlice(indexStartSRRFframe + nFrameOnGPU * l + f); // TODO: does this slow down the execution?
-//                    imsRawData.addSlice(imp.getProcessor());
                     imsRawData.addSlice(imsAllRawData.getProcessor(indexStartSRRFframe + nFrameOnGPU * l + f));
                 }
 
@@ -259,7 +264,7 @@ public class liveSRRF_optimised_ implements PlugIn {
 
             imsBuffer = liveSRRF.readSRRFbuffer();
 
-            if (writeToDisk) {
+            if (writeToDiskToUse) {
                 try {
                     if (calculateAVG) {
                         impTemp = new ImagePlus("\"liveSRRF (AVG) - frame=" + r + ".tif", imsBuffer.getProcessor(1));
@@ -297,7 +302,7 @@ public class liveSRRF_optimised_ implements PlugIn {
 
         IJ.log("-------------------------------------");
         // Close the ZipSaver & display stack as virtual stacks
-        if (writeToDisk) {
+        if (writeToDiskToUse) {
             IJ.log("Results displayed as virtual stacks.");
 
             try {
@@ -409,7 +414,7 @@ public class liveSRRF_optimised_ implements PlugIn {
         gd.addNumericField("Magnification (default: 5)", prefs.get("magnification", 5), 0);
         gd.addNumericField("Radius (pixels, default: 2)", prefs.get("fwhm", 2), 2);
         gd.addNumericField("Sensitivity (default: 1)", prefs.get("sensitivity", 1), 0);
-        gd.addNumericField("# frames for SRRF (0 = auto)", prefs.get("nFrameForSRRF", 0), 0);
+        gd.addNumericField("# frames for SRRF (0 = auto)", prefs.get("nFrameForSRRFfromUser", 0), 0);
         gd.addCheckbox("Correct vibration", prefs.get("correctVibration", false));
 
         gd.addMessage("-=-= Reconstructions =-=-\n", headerFont);
@@ -419,7 +424,7 @@ public class liveSRRF_optimised_ implements PlugIn {
 
         gd.addMessage("-=-= Rolling analysis =-=-\n", headerFont);
         gd.addCheckbox("Perform rolling analysis (default: off)", prefs.get("doRollingAnalysis", false));
-        gd.addNumericField("# frame gap between SR frame (0 = auto)", prefs.get("frameGapToUse", 0), 0);
+        gd.addNumericField("# frame gap between SR frame (0 = auto)", prefs.get("frameGapFromUser", 0), 0);
 
         gd.addMessage("-=-= Advanced settings =-=-\n", headerFont);
         gd.addCheckbox("Show advanced settings", false);
@@ -452,7 +457,7 @@ public class liveSRRF_optimised_ implements PlugIn {
         magnification = (int) gd.getNextNumber();
         fwhm = (float) gd.getNextNumber();
         sensitivity = (int) gd.getNextNumber();
-        nFrameForSRRF = (int) gd.getNextNumber();
+        nFrameForSRRFfromUser = (int) gd.getNextNumber();
 
         correctVibration = gd.getNextBoolean();
 
@@ -464,13 +469,13 @@ public class liveSRRF_optimised_ implements PlugIn {
         frameGapFromUser = (int) gd.getNextNumber();
 
         // Calculate the parameters based on user inputs
-        if (nFrameForSRRF == 0) nFrameForSRRF = nSlices;
-        nFrameForSRRF = min(nSlices, nFrameForSRRF);
+        if (nFrameForSRRFfromUser == 0) nFrameForSRRFtoUse = nSlices;
+        else nFrameForSRRFtoUse = min(nSlices, nFrameForSRRFfromUser);;
 
-        if (frameGapFromUser == 0 || doRollingAnalysis == false) frameGapToUse = nFrameForSRRF;
+        if (frameGapFromUser == 0 || doRollingAnalysis == false) frameGapToUse = nFrameForSRRFtoUse;
         else frameGapToUse = frameGapFromUser;
 
-        nSRRFframe = (int) ((float) (nSlices - nFrameForSRRF) / (float) frameGapToUse) + 1;
+        nSRRFframe = (int) ((float) (nSlices - nFrameForSRRFtoUse) / (float) frameGapToUse) + 1;
 
         boolean goodToGo = calculatenFrameOnGPU();
 
@@ -478,7 +483,7 @@ public class liveSRRF_optimised_ implements PlugIn {
         if (showAdvancedSettings && !previousAdvSettings) advancedSettingsGUI();
         previousAdvSettings = showAdvancedSettings;
 
-        nGPUloadPerSRRFframe = (int) math.ceil((float) nFrameForSRRF / (float) nFrameOnGPU);
+        nGPUloadPerSRRFframe = (int) math.ceil((float) nFrameForSRRFtoUse / (float) nFrameOnGPU);
 
         return goodToGo;
     }
@@ -496,14 +501,14 @@ public class liveSRRF_optimised_ implements PlugIn {
         gd.addMessage("-=-= GPU/CPU processing =-=-\n", headerFont);
         gd.addChoice("Processing device", deviceNames, prefs.get("chosenDeviceName", "Default device"));
         gd.addNumericField("Maximum amount of memory on device (MB, default: 1000)", prefs.get("maxMemoryGPU", 500), 2);
-        gd.addMessage("Minimum device memory necessary: " + Math.round(memUsed[0] * 10) / 10 + "MB\n");
+        gd.addMessage("Minimum device memory necessary: " + (float) Math.ceil(memUsed[0] * 100) / 100 + "MB\n");
 
         gd.addNumericField("Analysis block size (default: 20000)", prefs.get("blockSize", 20000), 0);
         gd.addMessage("A large analysis block size will speed up the analysis but will use\n" +
                 "more resources and may slow down your computer.");
 
         gd.addMessage("-=-= Write to disk =-=-\n", headerFont);
-        gd.addCheckbox("Directly write to disk (default: off)", false);
+        gd.addCheckbox("Directly write to disk (default: off)", writeToDiskToUse);
         gd.addMessage("Writing directly to disk will slow down the reconstruction but \n" +
                 "will allow for long time courses to be reconstructed without\n" +
                 "exceeding RAM capacity.");
@@ -517,10 +522,14 @@ public class liveSRRF_optimised_ implements PlugIn {
         // If the GUI was cancelled
         if (gd.wasCanceled()) {
             chosenDeviceName = prefs.get("chosenDeviceName", "Default device");
-            maxMemoryGPU = (int) prefs.get("maxMemoryGPU", 500);
+            maxMemoryGPU = prefs.get("maxMemoryGPU", 500);
             blockSize = (int) prefs.get("blockSize", 20000);
-            writeToDisk = false;
+
+            // re-initialises to how it was before entering advanced GUI
+            writeToDiskToUse = writeToDiskTemp;
+            previousWriteToDisk = writeToDiskTemp;
         } else {
+            writeToDiskToUse = writeToDiskTemp;
             prefs.set("chosenDeviceName", chosenDeviceName);
             prefs.set("maxMemoryGPU", maxMemoryGPU);
             prefs.set("blockSize", blockSize);
@@ -542,19 +551,19 @@ public class liveSRRF_optimised_ implements PlugIn {
     private boolean grabSettingsAdvancedGUI(GenericDialog gd) {
 
         chosenDeviceName = gd.getNextChoice();
-        maxMemoryGPU = (int) gd.getNextNumber();
+        maxMemoryGPU = (float) gd.getNextNumber();
         blockSize = (int) gd.getNextNumber();
 
         boolean goodToGo = calculatenFrameOnGPU();
 
-        writeToDisk = gd.getNextBoolean();
+        writeToDiskTemp = gd.getNextBoolean();
 
-        if (writeToDisk && !previousWriteToDisk) {
+        if (writeToDiskTemp && !previousWriteToDisk) {
             pathToDisk = IJ.getDirectory("");
-            if (pathToDisk == null) writeToDisk = false;
+            if (pathToDisk == null) writeToDiskTemp = false;
         }
 
-        previousWriteToDisk = writeToDisk;
+        previousWriteToDisk = writeToDiskTemp;
         return goodToGo;
     }
 
@@ -584,7 +593,7 @@ public class liveSRRF_optimised_ implements PlugIn {
 
         memUsed[0] *= Float.SIZE / 8000000d;
         memUsed[1] *= Float.SIZE / 8000000d;
-        // TODO: if allocated RAM to Fiji is exceeded, suggest using WriteToDisk !
+
 
         return memUsed;
     }
@@ -594,7 +603,7 @@ public class liveSRRF_optimised_ implements PlugIn {
 
         prefs.set("magnification", (float) magnification);
         prefs.set("fwhm", fwhm);
-        prefs.set("nFrameForSRRF", nFrameForSRRF);
+        prefs.set("nFrameForSRRFfromUser", nFrameForSRRFfromUser);
         prefs.set("sensitivity", sensitivity);
         prefs.set("correctVibration", correctVibration);
 
@@ -603,7 +612,7 @@ public class liveSRRF_optimised_ implements PlugIn {
         prefs.set("getInterpolatedImage", getInterpolatedImage);
 
         prefs.set("doRollingAnalysis", doRollingAnalysis);
-        prefs.set("frameGapToUse", frameGapFromUser);
+        prefs.set("frameGapFromUser", frameGapFromUser);
 
         prefs.set("chosenDeviceName", chosenDeviceName);
         prefs.set("maxMemoryGPU", maxMemoryGPU);
@@ -629,21 +638,23 @@ public class liveSRRF_optimised_ implements PlugIn {
 
         if (maxnFrameOnGPU > 0) {
             goodToGo = true;
-            nFrameOnGPU = (int) math.ceil((float) nFrameForSRRF / (float) maxnFrameOnGPU);
-            nFrameOnGPU = (int) math.ceil(((float) nFrameForSRRF / (float) nFrameOnGPU));
-            nFrameOnGPU = min(nFrameForSRRF, nFrameOnGPU);
+            nFrameOnGPU = (int) math.ceil((float) nFrameForSRRFtoUse / (float) maxnFrameOnGPU);
+            nFrameOnGPU = (int) math.ceil(((float) nFrameForSRRFtoUse / (float) nFrameOnGPU));
+            nFrameOnGPU = min(nFrameForSRRFtoUse, nFrameOnGPU);
             memUsed = predictMemoryUsed(nFrameOnGPU);
 
-            IJ.showStatus("liveSRRF - Number of frames on device: " + (nFrameOnGPU) + " (" + Math.round(memUsed[0]) + " MB)");
+            IJ.showStatus("liveSRRF - Number of frames on device: " + (nFrameOnGPU) + " (" + (float) Math.ceil(memUsed[0]*100)/100 + " MB)");
         } else {
             memUsed = predictMemoryUsed(1);
-            IJ.showStatus("liveSRRF - Minimum device memory: " + Math.round(memUsed[0]) + "MB");
+            IJ.showStatus("liveSRRF - Minimum device memory: " + (float) Math.ceil(memUsed[0]*100) / 100 + "MB");
         }
 
         // Check for RAM on computer
-        if (memUsed[1] > IJ.maxMemory()) {
+        if ((float) memUsed[1] > maxMemoryRAMij) {
             goodToGo = false;
-            IJ.showStatus("liveSRRF - Max RAM available exceeded: (" + (Math.round(memUsed[1])) + "MB vs. " + (Math.round(IJ.maxMemory())) + "MB)");
+            IJ.showStatus("liveSRRF - Max RAM available exceeded: (" + ( (float) Math.ceil(memUsed[1]*100) / 100) + "MB vs. " + ((float) Math.round(maxMemoryRAMij*100) / 100) + "MB)");
+            if (!writeSuggestOKeyed) IJ.showMessage("Results will likely exceed current RAM capacity. Consider increasing RAM for ImageJ or Write to disk (Advanced Settings) or else...");
+            writeSuggestOKeyed = true;
         }
 
         return goodToGo;
