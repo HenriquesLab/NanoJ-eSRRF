@@ -1,17 +1,14 @@
 package nanoj.liveSRRF.gui;
 
-import com.jogamp.opencl.CLDevice;
 import ij.IJ;
 import ij.ImagePlus;
 import ij.ImageStack;
 import ij.WindowManager;
 import ij.gui.GenericDialog;
 import ij.gui.NonBlockingGenericDialog;
-import ij.gui.PointRoi;
 import ij.measure.Calibration;
 import ij.plugin.PlugIn;
 import ij.process.FloatProcessor;
-import ij.process.ImageProcessor;
 import nanoj.core2.NanoJPrefs;
 import nanoj.core2.NanoJProfiler;
 import nanoj.liveSRRF.ErrorMapLiveSRRF;
@@ -22,9 +19,7 @@ import java.awt.*;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
-import static java.lang.Math.min;
 import static nanoj.core.java.tools.NJ_LUT.applyLUT_SQUIRREL_Errors;
-import static nanoj.core2.NanoJCrossCorrelation.calculateCrossCorrelationMap;
 
 public class ParametersSweep_ implements PlugIn {
 
@@ -212,7 +207,7 @@ public class ParametersSweep_ implements PlugIn {
                     IJ.log("Radius: " + fwhmArray[fi] + " pixels");
                     IJ.log("Sensitivity: " + sensitivityArray[si]);
 
-                    liveSRRF.initialise(width, height, magnification, fwhmArray[fi], sensitivityArray[si], 1, nframeArray[nfi], blockSize, null);
+                    liveSRRF.initialise(width, height, magnification, fwhmArray[fi], sensitivityArray[si], 1, nframeArray[nfi], blockSize, null, true);
                     liveSRRF.resetFramePosition();
                     liveSRRF.loadShiftXYGPUbuffer(shiftXtemp, shiftYtemp);
 

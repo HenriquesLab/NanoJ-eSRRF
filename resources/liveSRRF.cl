@@ -14,6 +14,7 @@
 #define hM $HM$
 #define whM $WHM$
 #define nFrameForSRRF $NFRAMEFORSRRF$
+#define intWeighting $INTWEIGHTING$
 
 #define vxy_offset $VXY_OFFSET$
 #define vxy_ArrayShift $VXY_ARRAYSHIFT$
@@ -350,18 +351,31 @@ __kernel void calculateRadialGradientConvergence(
     if (CGLH >= 0) CGLH = pow(CGLH, sensitivity);
     else CGLH = 0;
 
-//    if (intWeighting == 1) {
-        float v = getInterpolatedValue(pixels, w, h, ((float) xM)/magnification + shiftX - 0.5f, ((float) yM)/magnification + shiftY - 0.5f, nCurrentFrame[1]);
+    float v = getInterpolatedValue(pixels, w, h, ((float) xM)/magnification + shiftX - 0.5f, ((float) yM)/magnification + shiftY - 0.5f, nCurrentFrame[1]);
 
-    if (nCurrentFrame[0] == 0) {
-        OutArray[offset] = v * CGLH / nFrameForSRRF;
-        OutArray[offset + whM] = v * CGLH * v * CGLH / nFrameForSRRF;
-        OutArray[offset + 2 * whM] = v / nFrameForSRRF;
+    if (intWeighting == 1) {
+            if (nCurrentFrame[0] == 0) {
+                OutArray[offset] = v * CGLH / nFrameForSRRF;
+                OutArray[offset + whM] = v * CGLH * v * CGLH / nFrameForSRRF;
+                OutArray[offset + 2 * whM] = v / nFrameForSRRF;
+            }
+            else {
+                OutArray[offset] = OutArray[offset] + v * CGLH / nFrameForSRRF;
+                OutArray[offset + whM] = OutArray[offset + whM] + v * CGLH * v * CGLH / nFrameForSRRF;
+                OutArray[offset + 2 * whM] = OutArray[offset + 2 * whM] + v / nFrameForSRRF;
+            }
     }
-    else {
-        OutArray[offset] = OutArray[offset] + v * CGLH / nFrameForSRRF;
-        OutArray[offset + whM] = OutArray[offset + whM] + v * CGLH * v * CGLH / nFrameForSRRF;
-        OutArray[offset + 2 * whM] = OutArray[offset + 2 * whM] + v / nFrameForSRRF;
+    else{
+            if (nCurrentFrame[0] == 0) {
+                OutArray[offset] = CGLH / nFrameForSRRF;
+                OutArray[offset + whM] = CGLH * CGLH / nFrameForSRRF;
+                OutArray[offset + 2 * whM] = v / nFrameForSRRF;
+            }
+            else {
+                OutArray[offset] = OutArray[offset] + CGLH / nFrameForSRRF;
+                OutArray[offset + whM] = OutArray[offset + whM] + CGLH * CGLH / nFrameForSRRF;
+                OutArray[offset + 2 * whM] = OutArray[offset + 2 * whM] + v / nFrameForSRRF;
+            }
     }
 
 //        }

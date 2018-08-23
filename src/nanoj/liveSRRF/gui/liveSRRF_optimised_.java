@@ -52,9 +52,10 @@ public class liveSRRF_optimised_ implements PlugIn {
             doRollingAnalysis,
             previousWriteToDisk = false,
             previousAdvSettings = false,
-            writeSuggestOKeyed = false;
+            writeSuggestOKeyed = false,
+            intWeighting;
 
-    private final String LiveSRRFVersion = "v1.2";
+    private final String LiveSRRFVersion = "v1.3";
     private String pathToDisk = "",
             fileName,
             chosenDeviceName;
@@ -104,6 +105,7 @@ public class liveSRRF_optimised_ implements PlugIn {
         maxMemoryGPU = (float) prefs.get("maxMemoryGPU", 500);
         blockSize = (int) prefs.get("blockSize", 20000);
         writeToDiskToUse = false;
+        intWeighting = prefs.get("intWeighting", true);
 
         IJ.log("\\Clear");  // Clear the log window
         IJ.log("-------------------------------------");
@@ -185,7 +187,7 @@ public class liveSRRF_optimised_ implements PlugIn {
 
         ImageStack imsAllRawData = imp.getImageStack();
 
-        liveSRRF.initialise(width, height, magnification, fwhm, sensitivity, nFrameOnGPU, nFrameForSRRFtoUse, blockSize, chosenDevice);
+        liveSRRF.initialise(width, height, magnification, fwhm, sensitivity, nFrameOnGPU, nFrameForSRRFtoUse, blockSize, chosenDevice, intWeighting);
 
         shiftX = new float[nFrameForSRRFtoUse];
         shiftY = new float[nFrameForSRRFtoUse];
@@ -513,6 +515,10 @@ public class liveSRRF_optimised_ implements PlugIn {
                 "will allow for long time courses to be reconstructed without\n" +
                 "exceeding RAM capacity.");
 
+        gd.addMessage("-=-= Advanced reconstruction settings (for testing) =-=-\n", headerFont);
+        gd.addCheckbox("Intensity weighting", prefs.get("intWeighting", true));
+
+
         gd.addHelp("https://www.youtube.com/watch?v=otCpCn0l4Wo"); // it's Hammer time
 
         MyDialogListenerAdvancedGUI dl = new MyDialogListenerAdvancedGUI(); // this serves to estimate a few indicators such as RAM usage
@@ -524,6 +530,7 @@ public class liveSRRF_optimised_ implements PlugIn {
             chosenDeviceName = prefs.get("chosenDeviceName", "Default device");
             maxMemoryGPU = prefs.get("maxMemoryGPU", 500);
             blockSize = (int) prefs.get("blockSize", 20000);
+            intWeighting = prefs.get("intWeighting", true);
 
             // re-initialises to how it was before entering advanced GUI
             writeToDiskToUse = writeToDiskTemp;
@@ -533,6 +540,7 @@ public class liveSRRF_optimised_ implements PlugIn {
             prefs.set("chosenDeviceName", chosenDeviceName);
             prefs.set("maxMemoryGPU", maxMemoryGPU);
             prefs.set("blockSize", blockSize);
+            prefs.set("intWeighting", intWeighting);
             prefs.save();
         }
 
@@ -557,6 +565,7 @@ public class liveSRRF_optimised_ implements PlugIn {
         boolean goodToGo = calculatenFrameOnGPU();
 
         writeToDiskTemp = gd.getNextBoolean();
+        intWeighting = gd.getNextBoolean();
 
         if (writeToDiskTemp && !previousWriteToDisk) {
             pathToDisk = IJ.getDirectory("");

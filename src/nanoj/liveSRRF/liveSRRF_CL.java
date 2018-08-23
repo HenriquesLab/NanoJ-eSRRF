@@ -88,7 +88,7 @@ public class liveSRRF_CL {
 
 
     // --- Initialization method ---
-    public void initialise(int width, int height, int magnification, float fwhm, int sensitivity, int nFramesOnGPU, int nFrameForSRRF, int blockLength, CLDevice chosenDevice) {
+    public void initialise(int width, int height, int magnification, float fwhm, int sensitivity, int nFramesOnGPU, int nFrameForSRRF, int blockLength, CLDevice chosenDevice, boolean intWeighting) {
 
         this.width = width;
         this.height = height;
@@ -143,6 +143,9 @@ public class liveSRRF_CL {
         programString = replaceFirst(programString, "$VXY_OFFSET$", "" + vxy_offset);
         programString = replaceFirst(programString, "$VXY_ARRAYSHIFT$", "" + vxy_ArrayShift);
         programString = replaceFirst(programString, "$NFRAMEFORSRRF$", "" + nFrameForSRRF);
+
+        if (intWeighting) programString = replaceFirst(programString, "$INTWEIGHTING$", "" + 1);
+        else programString = replaceFirst(programString, "$INTWEIGHTING$", "" + 0);
 
         programLiveSRRF = context.createProgram(programString).build();
 
