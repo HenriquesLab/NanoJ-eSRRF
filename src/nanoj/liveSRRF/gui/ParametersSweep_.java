@@ -34,15 +34,17 @@ public class ParametersSweep_ implements PlugIn {
             calculateSTD,
             showRecons,
             showErrorMaps,
+            showRSC,
             calculateFRC,
             calculateRSE,
+            calculateRSP,
             correctVibration;
 
     private float[] fwhmArray;
     private int[] sensitivityArray,
             nframeArray;
 
-    private final String LiveSRRFVersion = "v0.4";
+    private final String LiveSRRFVersion = "v0.5";
     private float[] shiftX, shiftY;
 
     // Image formats
@@ -62,7 +64,7 @@ public class ParametersSweep_ implements PlugIn {
         if (imp == null) return;
         imp.show();
 
-        nSlices = imp.getImageStack().getSize(); // TODO: use nSlices to set maximum on #frames
+        nSlices = imp.getImageStack().getSize();
         width = imp.getImageStack().getWidth();
         height = imp.getImageStack().getHeight();
 
@@ -105,8 +107,11 @@ public class ParametersSweep_ implements PlugIn {
         gd.addMessage("-=-= Output =-=-\n", headerFont);
         gd.addCheckbox("Show all reconstructions (default: on)", prefs.get("showRecons", true));
         gd.addCheckbox("Show all error maps (default: on)", prefs.get("showErrorMaps", true));
+        gd.addCheckbox("Show all rescaled reconstructions (default: off)", prefs.get("showRSC", false));
+
         gd.addCheckbox("Calculate FRC (default: off)", prefs.get("calculateFRC", false));
         gd.addCheckbox("Calculate RSE (default: off)", prefs.get("calculateRSE", false));
+        gd.addCheckbox("Calculate RSP (default: off)", prefs.get("calculateRSP", false));
 
         gd.addMessage("Calculating FRC will split all dataset in two halves and therefore\n" +
                 "the maximum number of frames will be half of the total frames\n" +
@@ -135,8 +140,11 @@ public class ParametersSweep_ implements PlugIn {
         ImageStack imsSRRFavg = new ImageStack(width * magnification, height * magnification);
         ImageStack imsSRRFstd = new ImageStack(width * magnification, height * magnification);
         ImageStack imsErrorMap = new ImageStack(width * magnification, height * magnification);
+        ImageStack imsRSC = new ImageStack(width * magnification, height * magnification);
+
 
         ImageStack imsRMSE = new ImageStack(fwhmArray.length, sensitivityArray.length, nframeArray.length);
+        ImageStack imsPPMCC = new ImageStack(fwhmArray.length, sensitivityArray.length, nframeArray.length);
 
         ImagePlus impTemp = new ImagePlus();
         impTemp.copyScale(imp); // make sure we copy the pixel sizes correctly across
@@ -159,6 +167,7 @@ public class ParametersSweep_ implements PlugIn {
         ErrorMapLiveSRRF errorMapCalculator = new ErrorMapLiveSRRF();
         FloatProcessor fpErrorMap;
         float[] pixelsRMSE;
+        float[] pixelsPPMCC;
 
         int maxnFrame = nframeArray[nframeArray.length - 1];
         shiftX = new float[maxnFrame];
@@ -178,6 +187,7 @@ public class ParametersSweep_ implements PlugIn {
 
         for (int nfi = 0; nfi < nframeArray.length; nfi++) {
             pixelsRMSE = new float[(fwhmArray.length) * (sensitivityArray.length)];
+            pixelsPPMCC = new float[(fwhmArray.length) * (sensitivityArray.length)];
 
             shiftXtemp = new float[nframeArray[nfi]];
             shiftYtemp = new float[nframeArray[nfi]];
@@ -193,7 +203,7 @@ public class ParametersSweep_ implements PlugIn {
                 for (int fi = 0; fi < fwhmArray.length; fi++) {
 
                     IJ.log("--------");
-                    IJ.log("SRRF frame: " + r+1 + "/" + n_calculation);
+                    IJ.log("SRRF frame: " + (r+1) + "/" + n_calculation);
                     IJ.showProgress(r, n_calculation);
 
                     // Check if user is cancelling calculation
@@ -237,21 +247,29 @@ public class ParametersSweep_ implements PlugIn {
                     IJ.showStatus("Calculating error map...");
                     fpErrorMap = errorMapCalculator.calculateErrorMap();
                     pixelsRMSE[fwhmArray.length * si + fi] = (float) errorMapCalculator.globalRMSE;
+                    pixelsPPMCC[fwhmArray.length * si + fi] = (float) errorMapCalculator.globalPPMCC;
 
                     String label = "R=" + fwhmArray[fi] + "/S=" + sensitivityArray[si] + "/#fr=" + nframeArray[nfi];
-                    if (showErrorMaps)
-                        imsErrorMap.addSlice(label, fpErrorMap);
-                    if (calculateAVG)
-                        imsSRRFavg.addSlice(label, imsBuffer.getProcessor(1));
-                    if (calculateSTD)
-                        imsSRRFstd.addSlice(label, imsBuffer.getProcessor(2));
+                    if (showErrorMaps) imsErrorMap.addSlice(label, fpErrorMap);
+                    if (showErrorMaps) imsRSC.addSlice(label, errorMapCalculator.fpSRC);
+
+                    if (calculateAVG) imsSRRFavg.addSlice(label, imsBuffer.getProcessor(1));
+                    if (calculateSTD) imsSRRFstd.addSlice(label, imsBuffer.getProcessor(2));
                     imsInt.addSlice(label, imsBuffer.getProcessor(3));
 
                     r++;
                 }
             }
-            imsRMSE.setProcessor(new FloatProcessor(fwhmArray.length, sensitivityArray.length, pixelsRMSE), nfi + 1);
-            imsRMSE.setSliceLabel("#fr=" + nframeArray[nfi], nfi + 1);
+
+            if (calculateRSE) {
+                imsRMSE.setProcessor(new FloatProcessor(fwhmArray.length, sensitivityArray.length, pixelsRMSE), nfi + 1);
+                imsRMSE.setSliceLabel("#fr=" + nframeArray[nfi], nfi + 1);
+            }
+
+            if (calculateRSP) {
+                imsPPMCC.setProcessor(new FloatProcessor(fwhmArray.length, sensitivityArray.length, pixelsPPMCC), nfi + 1);
+                imsPPMCC.setSliceLabel("#fr=" + nframeArray[nfi], nfi + 1);
+            }
 
         }
 
@@ -287,12 +305,27 @@ public class ParametersSweep_ implements PlugIn {
             impErrorMap.show();
         }
 
+        if (showRSC) {
+            ImagePlus impRSC = new ImagePlus(imp.getTitle() + " - rescaled liveSRRF", imsRSC);
+            impRSC.setCalibration(cal);
+            IJ.run(impRSC, "Enhance Contrast", "saturated=0.5");
+            impRSC.show();
+        }
+
         if (calculateRSE) {
             ImagePlus impRMSE = new ImagePlus(imp.getTitle() + " - RMSE sweep map", imsRMSE);
             impRMSE.setCalibration(cal);
             IJ.run(impRMSE, "Enhance Contrast", "saturated=0.5");
             applyLUT_SQUIRREL_Errors(impRMSE);
             impRMSE.show();
+        }
+
+        if (calculateRSP) {
+            ImagePlus impPPMCC = new ImagePlus(imp.getTitle() + " - PMC sweep map", imsPPMCC);
+            impPPMCC.setCalibration(cal);
+            IJ.run(impPPMCC, "Enhance Contrast", "saturated=0.5");
+            applyLUT_SQUIRREL_Errors(impPPMCC);
+            impPPMCC.show();
         }
 
         IJ.log("-------------------------------------");
@@ -332,9 +365,11 @@ public class ParametersSweep_ implements PlugIn {
 
         showRecons = gd.getNextBoolean();
         showErrorMaps = gd.getNextBoolean();
+        showRSC = gd.getNextBoolean();
 
         calculateFRC = gd.getNextBoolean();
         calculateRSE = gd.getNextBoolean();
+        calculateRSP = gd.getNextBoolean();
 
         blockSize = (int) gd.getNextNumber();
 
@@ -348,10 +383,22 @@ public class ParametersSweep_ implements PlugIn {
             sensitivityArray[i] = S0 + i * deltaS;
         }
 
-        nframeArray = new int[n_nf];
-        for (int i = 0; i < n_nf; i++) {
+        // Check that nf does not exceed nSlices
+        int n_nfToUse = Math.min((nSlices - nf0) / deltanf, n_nf);
+
+        nframeArray = new int[n_nfToUse];
+        for (int i = 0; i < n_nfToUse; i++) {
             nframeArray[i] = nf0 + i * deltanf;
         }
+
+        //        ArrayList<Integer> nframeListArray = new ArrayList<Integer>();
+//        int i = 0;
+//        int nf = nf0;
+//        while (nf <= nSlices && i < n_nf){
+//            nframeListArray.add(nf);
+//            nf = nf0 + i * deltanf;
+//            i++;
+//        }
 
         prefs.set("magnification", magnification);
         prefs.set("correctVibration", correctVibration);
@@ -366,16 +413,18 @@ public class ParametersSweep_ implements PlugIn {
 
         prefs.set("nf0", nf0);
         prefs.set("deltanf", deltanf);
-        prefs.set("n_nf", n_nf);
+        prefs.set("n_nf", n_nf); // save the one set by the user, not the calculated one
 
         prefs.set("calculateAVG", calculateAVG);
         prefs.set("calculateSTD", calculateSTD);
 
         prefs.set("showRecons", showRecons);
         prefs.set("showErrorMaps", showErrorMaps);
+        prefs.set("showRSC", showRSC);
+
         prefs.set("calculateFRC", calculateFRC);
         prefs.set("calculateRSE", calculateRSE);
-
+        prefs.set("calculateRSP", calculateRSP);
 
         prefs.set("blockSize", blockSize);
 

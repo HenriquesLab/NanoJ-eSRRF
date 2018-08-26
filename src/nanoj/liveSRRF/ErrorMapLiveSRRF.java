@@ -2,7 +2,6 @@ package nanoj.liveSRRF;
 
 
 import ij.IJ;
-import ij.gui.Plot;
 import ij.process.FloatProcessor;
 import ij.process.ImageProcessor;
 import org.apache.commons.math3.analysis.UnivariateFunction;
@@ -36,7 +35,8 @@ public class ErrorMapLiveSRRF {
     private float[] pixelsRef, ones;
 
     // Image formats
-    FloatProcessor fpSR;
+    private FloatProcessor fpSR;
+    public FloatProcessor fpSRC;
 
     // Other formats
     DecimalFormat df = new DecimalFormat("00.00");
@@ -111,6 +111,7 @@ public class ErrorMapLiveSRRF {
         /// intensity-scaled and convolved stack
         FloatProcessor fpSRIntensityScaledBlurred = (FloatProcessor) fpSRIntensityScaled.duplicate();
         fpSRIntensityScaledBlurred.blurGaussian(sigma_linear);
+        fpSRC = fpSRIntensityScaledBlurred;
 
         // CALCULATE METRICS AND MAP
         /// metrics
@@ -130,6 +131,7 @@ public class ErrorMapLiveSRRF {
             maxRef = max(maxRef, vRef); //why
             pixelsEMap[p] = abs(vRef - vSRC);
         }
+
 
         return new FloatProcessor(width, height, pixelsEMap);
 
