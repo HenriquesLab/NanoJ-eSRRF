@@ -2,6 +2,7 @@ package nanoj.liveSRRF;
 
 
 import ij.IJ;
+import ij.ImagePlus;
 import ij.process.FloatProcessor;
 import ij.process.ImageProcessor;
 import org.apache.commons.math3.analysis.UnivariateFunction;
@@ -9,7 +10,6 @@ import org.apache.commons.math3.optim.MaxEval;
 import org.apache.commons.math3.optim.nonlinear.scalar.GoalType;
 import org.apache.commons.math3.optim.univariate.*;
 
-import java.text.DecimalFormat;
 import java.util.ArrayList;
 
 import static java.lang.Math.*;
@@ -22,57 +22,78 @@ public class ErrorMapLiveSRRF {
     private static final String OVERBLUR_MESSAGE = "RSF constrained as no good minimum found";
     private static final float ROOT2 = (float) Math.sqrt(2);
     int width,
-            height;
+            height,
+            nPixels,
+            magnification;
 
     private float maxSigmaBoundary,
             alpha,
             beta,
-            sigma_linear;
+            sigma_linear,
+            fixedSigma;
 
     public double globalRMSE,
             globalPPMCC;
 
     private float[] pixelsRef, ones;
 
+    private boolean fixSigma;
+
     // Image formats
     private FloatProcessor fpSR;
     public FloatProcessor fpSRC;
 
-    // Other formats
-    DecimalFormat df = new DecimalFormat("00.00");
+
+    public ErrorMapLiveSRRF(ImagePlus imp, int magnification, boolean fixSigma, float fixedSigma) {
+
+        this.magnification = magnification;
+        this.width = magnification * imp.getWidth();
+        this.height = magnification * imp.getHeight();
+        this.nPixels = width * height;
+        this.fixSigma = fixSigma;
+        this.fixedSigma = fixedSigma;
+
+        this.ones = new float[nPixels];
+        for (int i = 0; i < nPixels; i++) {
+            ones[i] = 1;
+        }
+
+        this.maxSigmaBoundary = (4 / 2.35482f) * magnification; // this assumes Nyquist sampling in the ref image
+
+    }
 
 
     // -- Do something useful ---
-    public void optimise(ImageProcessor impRef, ImageProcessor impSR, int magnification) {
+    public void optimise(ImageProcessor impRef, ImageProcessor impSR) {
 
-        this.width = impRef.getWidth();
-        this.height = impRef.getHeight();
-        int nPixels = width * height;
+//        this.width = impRef.getWidth();
+//        this.height = impRef.getHeight();
+//        int nPixels = width * height;
 
         FloatProcessor fpRef = impRef.convertToFloatProcessor();
         // Set up pixel arrays for optimization
         this.pixelsRef = (float[]) fpRef.getPixels();
-        this.ones = new float[nPixels];
-        for(int i=0; i<nPixels; i++){ones[i] = 1;}
-
-        this.maxSigmaBoundary = (4 / 2.35482f) * magnification; // this assumes Nyquist sampling in the ref image
 
         boolean overblurFlag = false;
 
         // Get SR FloatProcessor
         this.fpSR = impSR.convertToFloatProcessor();
 
-        // UNIVARIATE OPTIMIZER - LINEAR MATCHING
-        /// setup optimizer
-        sigmaOptimiseFunction f = new sigmaOptimiseFunction(fpSR, pixelsRef, ones);
-        UnivariateOptimizer optimizer = new BrentOptimizer(1e-10, 1e-14);
-        /// run optimizer
-        UnivariatePointValuePair result = optimizer.optimize(new MaxEval(1000),
-                new UnivariateObjectiveFunction(f), GoalType.MINIMIZE, new SearchInterval(0, maxSigmaBoundary)); //NYQUIST ASSUMED
+        if (fixSigma) {
+            this.sigma_linear = fixedSigma;
+        } else {
+            // UNIVARIATE OPTIMIZER - LINEAR MATCHING
+            /// setup optimizer
+            sigmaOptimiseFunction f = new sigmaOptimiseFunction(fpSR, pixelsRef, ones);
+            UnivariateOptimizer optimizer = new BrentOptimizer(1e-10, 1e-14);
+            /// run optimizer
+            UnivariatePointValuePair result = optimizer.optimize(new MaxEval(1000),
+                    new UnivariateObjectiveFunction(f), GoalType.MINIMIZE, new SearchInterval(0, maxSigmaBoundary)); //NYQUIST ASSUMED
 
-        this.sigma_linear = (float) result.getPoint();
-        IJ.log("Best sigma is: " + sigma_linear);
-        IJ.log("Best error is: " + result.getValue());
+            this.sigma_linear = (float) result.getPoint();
+            IJ.log("Best sigma is: " + sigma_linear);
+            IJ.log("Best error is: " + result.getValue());
+        }
 
 //        float[] errorList = toArray(f.getErrorList(), 1.0f);
 //        float[] sigmaList = toArray(f.getSigmaList(), 1.0f);
@@ -96,7 +117,7 @@ public class ErrorMapLiveSRRF {
         this.alpha = aB[0];
         this.beta = aB[1];
 
-        IJ.log("Alpha is: " + alpha + ", beta is: " + beta);
+        IJ.log("Alpha is: " + (float) Math.round(alpha*100)/100 + ", beta is: " + (float) Math.round(beta*100)/100);
     }
 
 

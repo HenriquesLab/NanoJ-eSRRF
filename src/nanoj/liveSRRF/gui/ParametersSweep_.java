@@ -38,13 +38,16 @@ public class ParametersSweep_ implements PlugIn {
             calculateFRC,
             calculateRSE,
             calculateRSP,
+            fixSigma,
             correctVibration;
 
     private float[] fwhmArray;
     private int[] sensitivityArray,
             nframeArray;
 
-    private final String LiveSRRFVersion = "v0.5";
+    private float fixedSigma;
+
+    private final String LiveSRRFVersion = "v0.6";
     private float[] shiftX, shiftY;
 
     // Image formats
@@ -87,21 +90,28 @@ public class ParametersSweep_ implements PlugIn {
         gd.addMessage("-=-= Sweeping SRRF parameters =-=-\n", headerFont);
         gd.addMessage("Radius\n", headerFont);
         gd.addNumericField("Start", prefs.get("fwhm0", 2), 2);
+        gd.addToSameRow();
         gd.addNumericField("Delta", prefs.get("deltafwhm", 0.5f), 2);
+        gd.addToSameRow();
         gd.addNumericField("Number", prefs.get("n_fwhm", 5), 0);
 
         gd.addMessage("Sensitivity\n", headerFont);
         gd.addNumericField("Start", prefs.get("S0", 1), 0);
+        gd.addToSameRow();
         gd.addNumericField("Delta", prefs.get("deltaS", 1), 0);
+        gd.addToSameRow();
         gd.addNumericField("Number", prefs.get("n_S", 4), 0);
 
         gd.addMessage("# frames for SRRF\n", headerFont);
         gd.addNumericField("Start", prefs.get("nf0", 50), 0);
+        gd.addToSameRow();
         gd.addNumericField("Delta", prefs.get("deltanf", 25), 0);
+        gd.addToSameRow();
         gd.addNumericField("Number", prefs.get("n_nf", 3), 0);
 
         gd.addMessage("-=-= Reconstructions =-=-\n", headerFont);
         gd.addCheckbox("AVG reconstruction (default: on)", prefs.get("calculateAVG", true));
+        gd.addToSameRow();
         gd.addCheckbox("STD reconstruction (default: off)", prefs.get("calculateSTD", false));
 
         gd.addMessage("-=-= Output =-=-\n", headerFont);
@@ -109,9 +119,15 @@ public class ParametersSweep_ implements PlugIn {
         gd.addCheckbox("Show all error maps (default: on)", prefs.get("showErrorMaps", true));
         gd.addCheckbox("Show all rescaled reconstructions (default: off)", prefs.get("showRSC", false));
 
-        gd.addCheckbox("Calculate FRC (default: off)", prefs.get("calculateFRC", false));
         gd.addCheckbox("Calculate RSE (default: off)", prefs.get("calculateRSE", false));
+        gd.addToSameRow();
         gd.addCheckbox("Calculate RSP (default: off)", prefs.get("calculateRSP", false));
+
+        gd.addCheckbox("Fix sigma (default: off)", prefs.get("fixSigma", false));
+        gd.addToSameRow();
+        gd.addNumericField("Sigma", prefs.get("fixedSigma", 5), 2);
+
+        gd.addCheckbox("Calculate FRC (default: off)", prefs.get("calculateFRC", false));
 
         gd.addMessage("Calculating FRC will split all dataset in two halves and therefore\n" +
                 "the maximum number of frames will be half of the total frames\n" +
@@ -121,6 +137,8 @@ public class ParametersSweep_ implements PlugIn {
         gd.addNumericField("Analysis block size (default: 20000)", prefs.get("blockSize", 20000), 0);
         gd.addMessage("A large analysis block size will speed up the analysis but will use\n" +
                 "more resources and may slow down your computer.");
+
+        gd.addHelp("https://www.youtube.com/watch?v=Vs6awg-BJHo"); // If you don't know how to sweep
 
         gd.showDialog();
 
@@ -160,11 +178,14 @@ public class ParametersSweep_ implements PlugIn {
         if (correctVibration) IJ.log("Vibration correction: on");
         else IJ.log("Vibration correction: off");
 
+        if (fixSigma) IJ.log("Sigma is fixed to "+fixedSigma+" pixels.");
+        else IJ.log("Sigma is optimised for each reconstructions.");
+
         IJ.log("Number of calculations planned: " + n_calculation);
         int r = 0;
 
         boolean userPressedEscape;
-        ErrorMapLiveSRRF errorMapCalculator = new ErrorMapLiveSRRF();
+        ErrorMapLiveSRRF errorMapCalculator = new ErrorMapLiveSRRF(imp, magnification, fixSigma, fixedSigma);
         FloatProcessor fpErrorMap;
         float[] pixelsRMSE;
         float[] pixelsPPMCC;
@@ -242,7 +263,7 @@ public class ParametersSweep_ implements PlugIn {
                     imsBuffer = liveSRRF.readSRRFbuffer();
 
                     IJ.showStatus("Optimising Sigma...");
-                    errorMapCalculator.optimise(imsBuffer.getProcessor(3), imsBuffer.getProcessor(1), magnification);
+                    errorMapCalculator.optimise(imsBuffer.getProcessor(3), imsBuffer.getProcessor(1));
 
                     IJ.showStatus("Calculating error map...");
                     fpErrorMap = errorMapCalculator.calculateErrorMap();
@@ -367,9 +388,13 @@ public class ParametersSweep_ implements PlugIn {
         showErrorMaps = gd.getNextBoolean();
         showRSC = gd.getNextBoolean();
 
-        calculateFRC = gd.getNextBoolean();
         calculateRSE = gd.getNextBoolean();
         calculateRSP = gd.getNextBoolean();
+
+        fixSigma = gd.getNextBoolean();
+        fixedSigma = (float) gd.getNextNumber();
+
+        calculateFRC = gd.getNextBoolean();
 
         blockSize = (int) gd.getNextNumber();
 
@@ -422,9 +447,13 @@ public class ParametersSweep_ implements PlugIn {
         prefs.set("showErrorMaps", showErrorMaps);
         prefs.set("showRSC", showRSC);
 
-        prefs.set("calculateFRC", calculateFRC);
         prefs.set("calculateRSE", calculateRSE);
         prefs.set("calculateRSP", calculateRSP);
+
+        prefs.set("fixSigma", fixSigma);
+        prefs.set("fixedSigma", fixedSigma);
+
+        prefs.set("calculateFRC", calculateFRC);
 
         prefs.set("blockSize", blockSize);
 
