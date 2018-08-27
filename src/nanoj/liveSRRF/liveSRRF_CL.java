@@ -36,6 +36,8 @@ public class liveSRRF_CL {
 
     private final boolean DEBUG = false;
 
+    public ImageStack imsSRRF;
+
     // Advanced formats
     private NanoJProfiler prof = new NanoJProfiler();
 
@@ -43,10 +45,10 @@ public class liveSRRF_CL {
     static private CLContext context;
     static private CLProgram programLiveSRRF;
     static private CLKernel kernelCalculateGradient,
-            kernelInterpolateGradient,
-            kernelIncrementFramePosition,
-                kernelResetFramePosition,
-    kernelCalculateSRRF;
+                            kernelInterpolateGradient,
+                            kernelIncrementFramePosition,
+                            kernelResetFramePosition,
+                            kernelCalculateSRRF;
 
     static private CLCommandQueue queue;
 
@@ -274,14 +276,15 @@ public class liveSRRF_CL {
     }
 
     // --- Read the output buffer ---
-    public ImageStack readSRRFbuffer() {
+    public void readSRRFbuffer() {
 
         queue.finish(); // Make sure everything is done
         queue.putReadBuffer(clBufferOut, true);
         FloatBuffer bufferSRRF = clBufferOut.getBuffer();
 
-        ImageStack imsSRRF = new ImageStack(widthM, heightM);
+//        ImageStack imsSRRF = new ImageStack(widthM, heightM);
         float[] dataSRRF;
+        imsSRRF = new ImageStack(widthM, heightM);
 
         // Load average
         dataSRRF = new float[widthM * heightM];
@@ -312,7 +315,7 @@ public class liveSRRF_CL {
         }
         imsSRRF.addSlice(new FloatProcessor(widthM, heightM, dataSRRF));
 
-        return imsSRRF;
+//        return imsSRRF;
     }
 
 

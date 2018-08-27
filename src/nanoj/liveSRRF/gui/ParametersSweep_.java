@@ -9,6 +9,7 @@ import ij.gui.NonBlockingGenericDialog;
 import ij.measure.Calibration;
 import ij.plugin.PlugIn;
 import ij.process.FloatProcessor;
+import nanoj.core.java.image.analysis.FRC;
 import nanoj.core2.NanoJPrefs;
 import nanoj.core2.NanoJProfiler;
 import nanoj.liveSRRF.ErrorMapLiveSRRF;
@@ -47,7 +48,7 @@ public class ParametersSweep_ implements PlugIn {
 
     private float fixedSigma;
 
-    private final String LiveSRRFVersion = "v0.6";
+    private final String LiveSRRFVersion = "v0.7";
     private float[] shiftX, shiftY;
 
     // Image formats
@@ -164,6 +165,10 @@ public class ParametersSweep_ implements PlugIn {
         ImageStack imsRMSE = new ImageStack(fwhmArray.length, sensitivityArray.length, nframeArray.length);
         ImageStack imsPPMCC = new ImageStack(fwhmArray.length, sensitivityArray.length, nframeArray.length);
 
+        ImageStack imsFRCresolutionAVG = new ImageStack(fwhmArray.length, sensitivityArray.length, nframeArray.length);
+        ImageStack imsFRCresolutionSTD = new ImageStack(fwhmArray.length, sensitivityArray.length, nframeArray.length);
+
+
         ImagePlus impTemp = new ImagePlus();
         impTemp.copyScale(imp); // make sure we copy the pixel sizes correctly across
         Calibration cal = impTemp.getCalibration();
@@ -178,7 +183,7 @@ public class ParametersSweep_ implements PlugIn {
         if (correctVibration) IJ.log("Vibration correction: on");
         else IJ.log("Vibration correction: off");
 
-        if (fixSigma) IJ.log("Sigma is fixed to "+fixedSigma+" pixels.");
+        if (fixSigma) IJ.log("Sigma is fixed to " + fixedSigma + " pixels.");
         else IJ.log("Sigma is optimised for each reconstructions.");
 
         IJ.log("Number of calculations planned: " + n_calculation);
@@ -205,6 +210,16 @@ public class ParametersSweep_ implements PlugIn {
         float[] shiftXtemp;
         float[] shiftYtemp;
 
+        FRC frcCalculator = new FRC();
+        FloatProcessor ipOddAVG;
+        FloatProcessor ipEvenAVG;
+        FloatProcessor ipOddSTD;
+        FloatProcessor ipEvenSTD;
+
+        float[] pixelsFRCresolutionAVG;
+        float[] pixelsFRCresolutionSTD;
+
+
 
         for (int nfi = 0; nfi < nframeArray.length; nfi++) {
             pixelsRMSE = new float[(fwhmArray.length) * (sensitivityArray.length)];
@@ -212,6 +227,9 @@ public class ParametersSweep_ implements PlugIn {
 
             shiftXtemp = new float[nframeArray[nfi]];
             shiftYtemp = new float[nframeArray[nfi]];
+
+            pixelsFRCresolutionAVG = new float[(fwhmArray.length) * (sensitivityArray.length)];
+            pixelsFRCresolutionSTD = new float[(fwhmArray.length) * (sensitivityArray.length)];
 
             for (int i = 0; i < nframeArray[nfi]; i++) {
                 shiftXtemp[i] = shiftX[i];
@@ -224,7 +242,7 @@ public class ParametersSweep_ implements PlugIn {
                 for (int fi = 0; fi < fwhmArray.length; fi++) {
 
                     IJ.log("--------");
-                    IJ.log("SRRF frame: " + (r+1) + "/" + n_calculation);
+                    IJ.log("SRRF frame: " + (r + 1) + "/" + n_calculation);
                     IJ.showProgress(r, n_calculation);
 
                     // Check if user is cancelling calculation
@@ -238,32 +256,70 @@ public class ParametersSweep_ implements PlugIn {
                     IJ.log("Radius: " + fwhmArray[fi] + " pixels");
                     IJ.log("Sensitivity: " + sensitivityArray[si]);
 
-                    liveSRRF.initialise(width, height, magnification, fwhmArray[fi], sensitivityArray[si], 1, nframeArray[nfi], blockSize, null, true);
-                    liveSRRF.resetFramePosition();
-                    liveSRRF.loadShiftXYGPUbuffer(shiftXtemp, shiftYtemp);
+//                    liveSRRF.initialise(width, height, magnification, fwhmArray[fi], sensitivityArray[si], 1, nframeArray[nfi], blockSize, null, true);
+//                    liveSRRF.resetFramePosition();
+//                    liveSRRF.loadShiftXYGPUbuffer(shiftXtemp, shiftYtemp);
 
-                    IJ.showStatus("Calculating SRRF image...");
-                    for (int f = 1; f <= nframeArray[nfi]; f++) {
-//                        imp.setSlice(f);
-                        imsThisRawData = new ImageStack(width, height);
-//                        imsThisRawData.addSlice(imp.getProcessor());
-                        imsThisRawData.addSlice(imsAllRawData.getProcessor(f));
-                        userPressedEscape = liveSRRF.calculateSRRF(imsThisRawData);
+//                    IJ.showStatus("Calculating SRRF image...");
+//                    for (int f = 1; f <= nframeArray[nfi]; f++) {
+////                        imp.setSlice(f);
+//                        imsThisRawData = new ImageStack(width, height);
+////                        imsThisRawData.addSlice(imp.getProcessor());
+//                        imsThisRawData.addSlice(imsAllRawData.getProcessor(f));
+//                        userPressedEscape = liveSRRF.calculateSRRF(imsThisRawData);
+//
+//                        // Check if user is cancelling calculation
+//                        if (userPressedEscape) {
+//                            liveSRRF.release();
+//                            IJ.log("-------------------------------------");
+//                            IJ.log("Reconstruction aborted by user.");
+//                            return;
+//                        }
+//                    }
+//
+//                    IJ.showStatus("Reading SRRF image...");
+////                    imsBuffer = liveSRRF.readSRRFbuffer();
+//                    liveSRRF.readSRRFbuffer();
 
-                        // Check if user is cancelling calculation
-                        if (userPressedEscape) {
-                            liveSRRF.release();
-                            IJ.log("-------------------------------------");
-                            IJ.log("Reconstruction aborted by user.");
-                            return;
-                        }
+                    if (calculateFRC) {
+
+                        liveSRRF.initialise(width, height, magnification, fwhmArray[fi], sensitivityArray[si], 1, nframeArray[nfi], blockSize, null, true);
+                        liveSRRF.resetFramePosition();
+                        liveSRRF.loadShiftXYGPUbuffer(shiftXtemp, shiftYtemp);
+
+                        calculateLiveSRRFsingleframeLoad(imsAllRawData, nfi, 1);
+                        imsBuffer = liveSRRF.imsSRRF;
+
+                        ipOddAVG = imsBuffer.getProcessor(1).convertToFloatProcessor();
+                        ipOddSTD = imsBuffer.getProcessor(2).convertToFloatProcessor();
+
+                        liveSRRF.initialise(width, height, magnification, fwhmArray[fi], sensitivityArray[si], 1, nframeArray[nfi], blockSize, null, true);
+                        liveSRRF.resetFramePosition();
+                        liveSRRF.loadShiftXYGPUbuffer(shiftXtemp, shiftYtemp);
+
+                        calculateLiveSRRFsingleframeLoad(imsAllRawData, nfi, 2);
+                        imsBuffer = liveSRRF.imsSRRF;
+
+                        ipEvenAVG = imsBuffer.getProcessor(1).convertToFloatProcessor();
+                        ipEvenSTD = imsBuffer.getProcessor(2).convertToFloatProcessor();
+
+                        pixelsFRCresolutionAVG[fwhmArray.length * si + fi] = (float) frcCalculator.calculateFireNumber(ipOddAVG, ipEvenAVG, FRC.ThresholdMethod.FIXED_1_OVER_7);
+                        pixelsFRCresolutionSTD[fwhmArray.length * si + fi] = (float) frcCalculator.calculateFireNumber(ipOddSTD, ipEvenSTD, FRC.ThresholdMethod.FIXED_1_OVER_7);
+
+                    } else {
+
+                        liveSRRF.initialise(width, height, magnification, fwhmArray[fi], sensitivityArray[si], 1, nframeArray[nfi], blockSize, null, true);
+                        liveSRRF.resetFramePosition();
+                        liveSRRF.loadShiftXYGPUbuffer(shiftXtemp, shiftYtemp);
+
+                        calculateLiveSRRFsingleframeLoad(imsAllRawData, nfi, 0);
+                        imsBuffer = liveSRRF.imsSRRF;
+
                     }
 
-                    IJ.showStatus("Reading SRRF image...");
-                    imsBuffer = liveSRRF.readSRRFbuffer();
 
                     IJ.showStatus("Optimising Sigma...");
-                    errorMapCalculator.optimise(imsBuffer.getProcessor(3), imsBuffer.getProcessor(1));
+                    errorMapCalculator.optimise(imsBuffer.getProcessor(3), imsBuffer.getProcessor(1)); // TODO: currently only doing it on AVG images
 
                     IJ.showStatus("Calculating error map...");
                     fpErrorMap = errorMapCalculator.calculateErrorMap();
@@ -290,6 +346,11 @@ public class ParametersSweep_ implements PlugIn {
             if (calculateRSP) {
                 imsPPMCC.setProcessor(new FloatProcessor(fwhmArray.length, sensitivityArray.length, pixelsPPMCC), nfi + 1);
                 imsPPMCC.setSliceLabel("#fr=" + nframeArray[nfi], nfi + 1);
+            }
+
+            if (calculateFRC) {
+                imsFRCresolutionAVG.setProcessor(new FloatProcessor(fwhmArray.length, sensitivityArray.length, pixelsFRCresolutionAVG), nfi + 1);
+                imsFRCresolutionAVG.setSliceLabel("#fr=" + nframeArray[nfi], nfi + 1);
             }
 
         }
@@ -347,6 +408,14 @@ public class ParametersSweep_ implements PlugIn {
             IJ.run(impPPMCC, "Enhance Contrast", "saturated=0.5");
             applyLUT_SQUIRREL_Errors(impPPMCC);
             impPPMCC.show();
+        }
+
+        if (calculateFRC) {
+            ImagePlus impFRCresolution = new ImagePlus(imp.getTitle() + " - FRC resolution sweep map", imsFRCresolutionAVG);
+            impFRCresolution.setCalibration(cal);
+            IJ.run(impFRCresolution, "Enhance Contrast", "saturated=0.5");
+            applyLUT_SQUIRREL_Errors(impFRCresolution);
+            impFRCresolution.show();
         }
 
         IJ.log("-------------------------------------");
@@ -409,7 +478,10 @@ public class ParametersSweep_ implements PlugIn {
         }
 
         // Check that nf does not exceed nSlices
-        int n_nfToUse = Math.min((nSlices - nf0) / deltanf, n_nf);
+        int n_nfToUse;
+        if (calculateFRC) n_nfToUse = Math.min((nSlices / 2 - nf0) / deltanf + 1, n_nf); // TODO: review the +1
+        else n_nfToUse = Math.min((nSlices - nf0) / deltanf + 1, n_nf);
+        // TODO: ABORT IF NOT enough frames in original stack for even 1 analysis
 
         nframeArray = new int[n_nfToUse];
         for (int i = 0; i < n_nfToUse; i++) {
@@ -459,6 +531,38 @@ public class ParametersSweep_ implements PlugIn {
 
 
         prefs.save();
+    }
+
+
+    public void calculateLiveSRRFsingleframeLoad(ImageStack imsAllRawData, int nf, int mode) {
+
+        ImageStack imsThisRawData;
+        boolean userPressedEscape;
+        int fmode;
+
+        IJ.showStatus("Calculating SRRF image...");
+        for (int f = 1; f <= nframeArray[nf]; f++) {
+            imsThisRawData = new ImageStack(width, height);
+
+            if (mode == 0) fmode = f;  // no FRC
+            else if (mode == 1) fmode = 2 * (f - 1) + 1; // FRC odd frames
+            else fmode = 2 * f; // FRC even frames
+
+            imsThisRawData.addSlice(imsAllRawData.getProcessor(fmode));
+            userPressedEscape = liveSRRF.calculateSRRF(imsThisRawData);
+
+            // Check if user is cancelling calculation
+            if (userPressedEscape) {
+                liveSRRF.release();
+                IJ.log("-------------------------------------");
+                IJ.log("Reconstruction aborted by user.");
+                return;
+            }
+        }
+
+        IJ.showStatus("Reading SRRF image...");
+        liveSRRF.readSRRFbuffer();
+
     }
 
 

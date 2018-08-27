@@ -264,7 +264,8 @@ public class liveSRRF_optimised_ implements PlugIn {
                 IJ.showStatus("LiveSRRF - Remaining time: " + timeToString(remainingTime));
             }
 
-            imsBuffer = liveSRRF.readSRRFbuffer();
+            liveSRRF.readSRRFbuffer();
+            imsBuffer = liveSRRF.imsSRRF;
 
             if (writeToDiskToUse) {
                 try {
