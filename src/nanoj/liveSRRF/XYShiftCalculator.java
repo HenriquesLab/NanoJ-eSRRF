@@ -117,14 +117,14 @@ public class XYShiftCalculator {
         float shiftX = (float) xMax - radiusCCM;
         float shiftY = (float) yMax - radiusCCM;
 
-        if (impCCM == null) {
-            impCCM = new ImagePlus("CCM Vibration Stabilisation", fpCCM);
-            impCCM.show();
-        }
-
-        impCCM.setProcessor(fpCCM);
-        impCCM.setRoi(new PointRoi(xMax + .5, yMax + .5));
-        impCCM.setDisplayRange(vMin, vMax);
+//        if (impCCM == null) {
+//            impCCM = new ImagePlus("CCM Vibration Stabilisation", fpCCM);
+//            impCCM.show();
+//        }
+//
+//        impCCM.setProcessor(fpCCM);
+//        impCCM.setRoi(new PointRoi(xMax + .5, yMax + .5));
+//        impCCM.setDisplayRange(vMin, vMax);
 
         return new float[]{shiftX, shiftY};
     }

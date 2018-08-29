@@ -41,7 +41,8 @@ public class ErrorMapLiveSRRF {
 
     // Image formats
     private FloatProcessor fpSR;
-    public FloatProcessor fpSRC;
+    public FloatProcessor fpSRC,
+            fpErrorMap;
 
 
     public ErrorMapLiveSRRF(ImagePlus imp, int magnification, boolean fixSigma, float fixedSigma) {
@@ -117,11 +118,11 @@ public class ErrorMapLiveSRRF {
         this.alpha = aB[0];
         this.beta = aB[1];
 
-        IJ.log("Alpha is: " + (float) Math.round(alpha*100)/100 + ", beta is: " + (float) Math.round(beta*100)/100);
+//        IJ.log("Alpha is: " + (float) Math.round(alpha*100)/100 + ", beta is: " + (float) Math.round(beta*100)/100);
     }
 
 
-    public FloatProcessor calculateErrorMap() {
+    public void calculateErrorMap() {
         // POPULATE OUTPUT STACKS
 
         /// intensity-scaled stack
@@ -153,9 +154,7 @@ public class ErrorMapLiveSRRF {
             pixelsEMap[p] = abs(vRef - vSRC);
         }
 
-
-        return new FloatProcessor(width, height, pixelsEMap);
-
+        fpErrorMap = new FloatProcessor(width, height, pixelsEMap);
 
     }
 

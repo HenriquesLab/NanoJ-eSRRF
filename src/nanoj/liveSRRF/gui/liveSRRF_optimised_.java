@@ -110,7 +110,7 @@ public class liveSRRF_optimised_ implements PlugIn {
         IJ.log("\\Clear");  // Clear the log window
         IJ.log("-------------------------------------");
         IJ.log("-------------------------------------");
-        IJ.log("liveSRRF " + LiveSRRFVersion);
+        IJ.log("liveSRRF " + LiveSRRFVersion); //TODO: what's taking so long on Wolverine?
         IJ.log("Max RAM available: "+ (float) Math.round(maxMemoryRAMij*100)/100 + " MB");
 
         LocalDateTime now = LocalDateTime.now();
