@@ -24,20 +24,22 @@ public class ErrorMapLiveSRRF {
     int width,
             height,
             nPixels,
-            magnification;
+            magnification,
+            cropSize;
 
     private float maxSigmaBoundary,
             alpha,
             beta,
             sigma_linear,
-            fixedSigma;
+            fixedSigmaSRspace;
 
     public double globalRMSE,
             globalPPMCC;
 
     private float[] pixelsRef, ones;
 
-    private boolean fixSigma;
+    private boolean fixSigma,
+                    cropBorder;
 
     // Image formats
     private FloatProcessor fpSR;
@@ -45,14 +47,25 @@ public class ErrorMapLiveSRRF {
             fpErrorMap;
 
 
-    public ErrorMapLiveSRRF(ImagePlus imp, int magnification, boolean fixSigma, float fixedSigma) {
+    public ErrorMapLiveSRRF(ImagePlus imp, int magnification, boolean fixSigma, float fixedSigma, boolean cropBorder, int cropSize) {
 
         this.magnification = magnification;
-        this.width = magnification * imp.getWidth();
-        this.height = magnification * imp.getHeight();
-        this.nPixels = width * height;
         this.fixSigma = fixSigma;
-        this.fixedSigma = fixedSigma;
+        this.fixedSigmaSRspace = fixedSigma * magnification;
+        this.cropBorder = cropBorder;
+        this.cropSize = cropSize;
+
+        if (cropBorder){
+            this.width = magnification * (imp.getWidth() - 2*cropSize);
+            this.height = magnification * (imp.getHeight() - 2*cropSize);
+        }
+        else{
+            this.width = magnification * imp.getWidth();
+            this.height = magnification * imp.getHeight();
+        }
+
+
+        this.nPixels = width * height;
 
         this.ones = new float[nPixels];
         for (int i = 0; i < nPixels; i++) {
@@ -70,18 +83,39 @@ public class ErrorMapLiveSRRF {
 //        this.width = impRef.getWidth();
 //        this.height = impRef.getHeight();
 //        int nPixels = width * height;
+        //        boolean overblurFlag = false;
 
-        FloatProcessor fpRef = impRef.convertToFloatProcessor();
-        // Set up pixel arrays for optimization
-        this.pixelsRef = (float[]) fpRef.getPixels();
 
-        boolean overblurFlag = false;
+        //TODO: log message that we're cropping
 
-        // Get SR FloatProcessor
-        this.fpSR = impSR.convertToFloatProcessor();
+        if (cropBorder){
+            impRef.setRoi(cropSize, cropSize, width, height);
+            ImageProcessor impRefCropped = impRef.crop();
+
+            impSR.setRoi(cropSize, cropSize, width, height);
+            ImageProcessor impSRcropped = impSR.crop();
+
+            FloatProcessor fpRef = impRefCropped.convertToFloatProcessor();
+            // Set up pixel arrays for optimization
+            this.pixelsRef = (float[]) fpRef.getPixels();
+
+            // Get SR FloatProcessor
+            this.fpSR = impSRcropped.convertToFloatProcessor();
+
+        }
+        else{
+
+            FloatProcessor fpRef = impRef.convertToFloatProcessor();
+            // Set up pixel arrays for optimization
+            this.pixelsRef = (float[]) fpRef.getPixels();
+
+            // Get SR FloatProcessor
+            this.fpSR = impSR.convertToFloatProcessor();
+        }
+
 
         if (fixSigma) {
-            this.sigma_linear = fixedSigma;
+            this.sigma_linear = fixedSigmaSRspace;
         } else {
             // UNIVARIATE OPTIMIZER - LINEAR MATCHING
             /// setup optimizer
@@ -104,7 +138,7 @@ public class ErrorMapLiveSRRF {
 //        plot.show();
 
         if (abs(sigma_linear - maxSigmaBoundary) < 0.0001f) {
-            overblurFlag = true;
+//            overblurFlag = true;
             IJ.log(OVERBLUR_MESSAGE);
         }
 

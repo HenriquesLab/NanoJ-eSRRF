@@ -29,7 +29,8 @@ public class ParametersSweep_ implements PlugIn {
             nSlices,
             width,
             height,
-            blockSize;
+            blockSize,
+            cropSize;
 
     private boolean showRecons,
             showErrorMaps,
@@ -39,7 +40,8 @@ public class ParametersSweep_ implements PlugIn {
             calculateRSP,
             doErrorMapping,
             fixSigma,
-            correctVibration;
+            correctVibration,
+            cropBorder;
 
     private float[] fwhmArray;
     private int[] sensitivityArray,
@@ -47,7 +49,7 @@ public class ParametersSweep_ implements PlugIn {
 
     private float fixedSigma;
 
-    private final String LiveSRRFVersion = "v0.8";
+    private final String LiveSRRFVersion = "v0.9";
     private float[] shiftX, shiftY;
 
     private String chosenTemporalAnalysis;
@@ -137,6 +139,12 @@ public class ParametersSweep_ implements PlugIn {
         gd.addMessage("Sigma can be evaluated by: (0.21 x Emission wavelength (in nm) / NA) / pixel size (in nm)\n"+
                 "It should typically be around ~1 pixel.");
 
+        gd.addCheckbox("Crop border (default: on)", prefs.get("cropBorder", true));
+        gd.addToSameRow();
+        gd.addNumericField("Pixels to crop (in pixels, used if selected)", prefs.get("cropSize", 3), 0);
+        gd.addMessage("Sigma can be evaluated by: (0.21 x Emission wavelength (in nm) / NA) / pixel size (in nm)\n"+
+                "It should typically be around ~1 pixel.");
+
         gd.addMessage("-=-= FRC resolution =-=-\n", headerFont);
         gd.addCheckbox("Calculate FRC (default: off)", prefs.get("calculateFRC", false));
 
@@ -171,8 +179,15 @@ public class ParametersSweep_ implements PlugIn {
         if (correctVibration) IJ.log("Vibration correction: on");
         else IJ.log("Vibration correction: off");
 
-        if (fixSigma) IJ.log("Sigma is fixed to " + fixedSigma + " pixels.");
-        else IJ.log("Sigma is optimised for each reconstructions.");
+        if (doErrorMapping) {
+            IJ.log("Error mapping paramaters:");
+            if (fixSigma) IJ.log("Sigma is fixed to " + fixedSigma + " pixels.");
+            else IJ.log("Sigma is optimised for each reconstructions.");
+            if (cropBorder) IJ.log("The borders will be cropped by "+cropSize+" pixels");
+
+        }
+
+
         int n_calculation = nframeArray.length * sensitivityArray.length * fwhmArray.length;
         IJ.log("Number of calculations planned: " + n_calculation);
 
@@ -195,19 +210,32 @@ public class ParametersSweep_ implements PlugIn {
 
 
         // Initialising the Error maps variables
-        float sigmaInPixelInSRspace = magnification*fixedSigma;
-        ErrorMapLiveSRRF errorMapCalculator = new ErrorMapLiveSRRF(imp, magnification, fixSigma, sigmaInPixelInSRspace);
+        ErrorMapLiveSRRF errorMapCalculator = new ErrorMapLiveSRRF(imp, magnification, fixSigma, fixedSigma, cropBorder, cropSize);
 
         float[] pixelsRMSEavg = null;
         float[] pixelsPPMCCavg = null;
         float[] pixelsRMSEstd = null;
         float[] pixelsPPMCCstd = null;
 
-        ImageStack imsErrorMapAVG = new ImageStack(width * magnification, height * magnification);
-        ImageStack imsErrorMapSTD = new ImageStack(width * magnification, height * magnification);
+        int widthSquirrel;
+        int heightSquirrel;
 
-        ImageStack imsRSCavg = new ImageStack(width * magnification, height * magnification);
-        ImageStack imsRSCstd = new ImageStack(width * magnification, height * magnification);
+        if (cropBorder){
+            widthSquirrel = (width - 2*cropSize) * magnification;
+            heightSquirrel = (height - 2*cropSize) * magnification;
+        }
+        else{
+            widthSquirrel = width * magnification;
+            heightSquirrel = height * magnification;
+        }
+
+
+        ImageStack imsErrorMapAVG = new ImageStack(widthSquirrel, heightSquirrel);
+        ImageStack imsErrorMapSTD = new ImageStack(widthSquirrel, heightSquirrel);
+
+        ImageStack imsRSCavg = new ImageStack(widthSquirrel, heightSquirrel);
+        ImageStack imsRSCstd = new ImageStack(widthSquirrel, heightSquirrel);
+
 
 
         // These images are small so it doesn't matter if they are initialised in any case
@@ -244,10 +272,10 @@ public class ParametersSweep_ implements PlugIn {
 
         // Initialising the FRC variab;es
         FRC frcCalculator = new FRC();
-        FloatProcessor ipOddAVG;
-        FloatProcessor ipEvenAVG;
-        FloatProcessor ipOddSTD;
-        FloatProcessor ipEvenSTD;
+        FloatProcessor fpOddAVG;
+        FloatProcessor fpEvenAVG;
+        FloatProcessor fpOddSTD;
+        FloatProcessor fpEvenSTD;
 
         float[] pixelsFRCresolutionAVG = null;
         float[] pixelsFRCresolutionSTD = null;
@@ -351,8 +379,8 @@ public class ParametersSweep_ implements PlugIn {
 
                         imsBuffer = liveSRRF.imsSRRF;
 
-                        ipOddAVG = imsBuffer.getProcessor(1).convertToFloatProcessor();
-                        ipOddSTD = imsBuffer.getProcessor(2).convertToFloatProcessor();
+                        fpOddAVG = imsBuffer.getProcessor(1).convertToFloatProcessor();
+                        fpOddSTD = imsBuffer.getProcessor(2).convertToFloatProcessor();
 
                         // Calculate and get the reconstruction from the even frames
                         liveSRRF.initialise(width, height, magnification, fwhmArray[fi], sensitivityArray[si], 1, nframeArray[nfi], blockSize, null, true);
@@ -363,12 +391,12 @@ public class ParametersSweep_ implements PlugIn {
                         imsBuffer = liveSRRF.imsSRRF;
 
                         if (chosenTemporalAnalysis.equals(temporalAnalysis[0]) || chosenTemporalAnalysis.equals(temporalAnalysis[2])) {
-                            ipEvenAVG = imsBuffer.getProcessor(1).convertToFloatProcessor();
-                            pixelsFRCresolutionAVG[fwhmArray.length * si + fi] = (float) frcCalculator.calculateFireNumber(ipOddAVG, ipEvenAVG, FRC.ThresholdMethod.FIXED_1_OVER_7);
+                            fpEvenAVG = imsBuffer.getProcessor(1).convertToFloatProcessor();
+                            pixelsFRCresolutionAVG[fwhmArray.length * si + fi] = (float) frcCalculator.calculateFireNumber(fpOddAVG, fpEvenAVG, FRC.ThresholdMethod.FIXED_1_OVER_7);
                         }
                         if (chosenTemporalAnalysis.equals(temporalAnalysis[1]) || chosenTemporalAnalysis.equals(temporalAnalysis[2])) {
-                            ipEvenSTD = imsBuffer.getProcessor(2).convertToFloatProcessor();
-                            pixelsFRCresolutionSTD[fwhmArray.length * si + fi] = (float) frcCalculator.calculateFireNumber(ipOddSTD, ipEvenSTD, FRC.ThresholdMethod.FIXED_1_OVER_7);
+                            fpEvenSTD = imsBuffer.getProcessor(2).convertToFloatProcessor();
+                            pixelsFRCresolutionSTD[fwhmArray.length * si + fi] = (float) frcCalculator.calculateFireNumber(fpOddSTD, fpEvenSTD, FRC.ThresholdMethod.FIXED_1_OVER_7);
                         }
 
 
@@ -625,6 +653,9 @@ public class ParametersSweep_ implements PlugIn {
         fixSigma = gd.getNextBoolean();
         fixedSigma = (float) gd.getNextNumber();
 
+        cropBorder = gd.getNextBoolean();
+        cropSize = (int) gd.getNextNumber();
+
         calculateFRC = gd.getNextBoolean();
 
         blockSize = (int) gd.getNextNumber();
@@ -680,6 +711,9 @@ public class ParametersSweep_ implements PlugIn {
 
         prefs.set("fixSigma", fixSigma);
         prefs.set("fixedSigma", fixedSigma);
+
+        prefs.set("cropBorder", cropBorder);
+        prefs.set("cropSize", cropSize);
 
         prefs.set("calculateFRC", calculateFRC);
 
