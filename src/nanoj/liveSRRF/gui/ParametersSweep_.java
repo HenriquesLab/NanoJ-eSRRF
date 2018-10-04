@@ -142,8 +142,8 @@ public class ParametersSweep_ implements PlugIn {
         gd.addCheckbox("Crop border (default: on)", prefs.get("cropBorder", true));
         gd.addToSameRow();
         gd.addNumericField("Pixels to crop (in pixels, used if selected)", prefs.get("cropSize", 3), 0);
-        gd.addMessage("Sigma can be evaluated by: (0.21 x Emission wavelength (in nm) / NA) / pixel size (in nm)\n"+
-                "It should typically be around ~1 pixel.");
+        gd.addMessage("Cropping the border of the images avoids biasing error mapping analysis if extrapolation\n"+
+                " artefacts may occur.");
 
         gd.addMessage("-=-= FRC resolution =-=-\n", headerFont);
         gd.addCheckbox("Calculate FRC (default: off)", prefs.get("calculateFRC", false));
