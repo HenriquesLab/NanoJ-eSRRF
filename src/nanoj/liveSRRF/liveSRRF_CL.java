@@ -50,6 +50,11 @@ public class liveSRRF_CL {
                             kernelResetFramePosition,
                             kernelCalculateSRRF;
 
+    static private CLPlatform clPlatformMaxFlop;
+    static private CLDevice clDeviceMaxFlop;
+    static private CLPlatform[] allCLplatforms;
+    static public CLDevice[] allCLdevices;
+
     static private CLCommandQueue queue;
 
     private CLBuffer<FloatBuffer>
@@ -65,27 +70,54 @@ public class liveSRRF_CL {
 
     // --- Constructor ---
     public liveSRRF_CL() {
-        IJ.log("--------");
-        context = CLContext.create();
-        System.out.println("created " + context);
+        // Nothing to see here. Keep calm and carry on.
     }
 
 
     // -- Check devices --
-    public CLDevice[] checkDevices() {
+    public void checkDevices() {
 
-        CLDevice[] allCLdevice = context.getDevices();
+        int nDevices = 0;
+        CLPlatform[] allPlatforms = CLPlatform.listCLPlatforms();
 
-        for (int i = 0; i < allCLdevice.length; i++) {
-            IJ.log("Device #" + i);
-            IJ.log("Max clock: " + allCLdevice[i].getMaxClockFrequency() + " MHz");
-            IJ.log("Number of compute units: " + allCLdevice[i].getMaxComputeUnits());
-            IJ.log("Device type: " + allCLdevice[i].getType());
-            IJ.log("Device name: " + allCLdevice[i].getName());
-            IJ.log("--------");
+        double nFlops = 0;
+
+        for (int p = 0; p < allPlatforms.length; p++) {
+            CLDevice[] allCLdeviceOnThisPlatform = allPlatforms[p].listCLDevices();
+            nDevices += allCLdeviceOnThisPlatform.length;
+
+            for (int d = 0; d < allCLdeviceOnThisPlatform.length; d++) {
+                IJ.log("--------");
+                IJ.log("Device name: " + allCLdeviceOnThisPlatform[d].getName());
+                IJ.log("Device type: " + allCLdeviceOnThisPlatform[d].getType());
+                IJ.log("Max clock: " + allCLdeviceOnThisPlatform[d].getMaxClockFrequency() + " MHz");
+                IJ.log("Number of compute units: " + allCLdeviceOnThisPlatform[d].getMaxComputeUnits());
+                if (allCLdeviceOnThisPlatform[d].getMaxComputeUnits()*allCLdeviceOnThisPlatform[d].getMaxClockFrequency() > nFlops){
+                    nFlops = allCLdeviceOnThisPlatform[d].getMaxComputeUnits()*allCLdeviceOnThisPlatform[d].getMaxClockFrequency();
+                    clPlatformMaxFlop = allPlatforms[p];
+                    clDeviceMaxFlop = allCLdeviceOnThisPlatform[d];
+                }
+            }
         }
 
-        return allCLdevice;
+        IJ.log("--------");
+        IJ.log("Maximum flops device: " + clDeviceMaxFlop.getName());
+
+        allCLdevices = new CLDevice[nDevices];
+        allCLplatforms = new CLPlatform[nDevices];
+
+        int i = 0;
+        for (int p = 0; p < allPlatforms.length; p++) {
+            CLDevice[] allCLdeviceOnThisPlatform = allPlatforms[p].listCLDevices();
+            nDevices += allCLdeviceOnThisPlatform.length;
+
+            for (int d = 0; d < allCLdeviceOnThisPlatform.length; d++) {
+                allCLdevices[i] = allCLdeviceOnThisPlatform[d];
+                allCLplatforms[i] = allPlatforms[p];
+                i++;
+            }
+        }
+
     }
 
 
@@ -99,12 +131,23 @@ public class liveSRRF_CL {
         this.nFrameForSRRF = nFrameForSRRF;
         this.blockLength = blockLength;
 
-
         if (chosenDevice == null) {
-            //IJ.log("Looking for the fastest device...");
-            System.out.println("Looking for the fastest device...");
+            IJ.log("Looking for the fastest device...");
+            System.out.println("Using the fastest device...");
+            context = CLContext.create(clPlatformMaxFlop);
             chosenDevice = context.getMaxFlopsDevice();
+            IJ.log("Using "+chosenDevice.getName());
         }
+        else{
+            context = CLContext.create(chosenDevice.getPlatform());
+            CLDevice[] allCLdevicesOnThisPlatform = context.getDevices();
+            int i = 0;
+            while (!allCLdevicesOnThisPlatform[i].getName().equals(chosenDevice.getName())){
+                i++;
+            }
+            chosenDevice = allCLdevicesOnThisPlatform[i];
+        }
+
 
         System.out.println("using " + chosenDevice);
         //IJ.log("Using " + chosenDevice.getName());
@@ -117,6 +160,7 @@ public class liveSRRF_CL {
         clBufferGyInt = context.createFloatBuffer(nFramesOnGPU * 4 * width * height, READ_WRITE); // single frame Gy
         clBufferOut = context.createFloatBuffer((nReconstructions + 1) * widthM * heightM, WRITE_ONLY); // single frame cumulative AVG projection of RGC
         clBufferCurrentFrame = context.createIntBuffer(2, READ_WRITE);
+
         // Current frame is a 2 element Int buffer:
         // nCurrentFrame[0] is the global current frame in the current SRRF frame (reset every SRRF frame)
         // nCurrentFrame[1] is the local current frame in the current GPU-loaded dataset (reset every tun of the method calculateSRRF (within the gradient calculation))

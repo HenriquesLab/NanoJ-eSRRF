@@ -119,7 +119,8 @@ public class liveSRRF_optimised_ implements PlugIn {
 
         // Initialize the liveSRRF class and check the devices
         liveSRRF = new liveSRRF_CL();
-        CLDevice[] allDevices = liveSRRF.checkDevices();
+        liveSRRF.checkDevices();
+        CLDevice[] allDevices = liveSRRF.allCLdevices;
 
         // Initializing string for device choice
         deviceNames = new String[allDevices.length + 1];
@@ -146,8 +147,8 @@ public class liveSRRF_optimised_ implements PlugIn {
 
         // Get chosen device
         if (chosenDeviceName == null) chosenDeviceName = "Default device";
-        for (CLDevice allDevice : allDevices) {
-            if (chosenDeviceName.equals(allDevice.getName())) chosenDevice = allDevice;
+        for (CLDevice thisDevice : allDevices) {
+            if (chosenDeviceName.equals(thisDevice.getName())) chosenDevice = thisDevice;
         }
 
         // Save last user entries
