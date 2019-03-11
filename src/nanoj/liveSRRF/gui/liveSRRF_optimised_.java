@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
+import static ij.IJ.selectWindow;
 import static java.lang.Math.min;
 
 public class liveSRRF_optimised_ implements PlugIn {
@@ -55,7 +56,7 @@ public class liveSRRF_optimised_ implements PlugIn {
             writeSuggestOKeyed = false,
             intWeighting;
 
-    private final String LiveSRRFVersion = "v1.3";
+    private final String LiveSRRFVersion = "v1.4";
     private String pathToDisk = "",
             fileName,
             chosenDeviceName;
@@ -106,6 +107,12 @@ public class liveSRRF_optimised_ implements PlugIn {
         blockSize = (int) prefs.get("blockSize", 20000);
         writeToDiskToUse = false;
         intWeighting = prefs.get("intWeighting", true);
+
+        // Close the log: //TODO: this seems to sometimes make a different whether OpenCL runs or not (observation from Nvidia 1050, not repeatable)
+        if (IJ.getLog() != null) {
+            selectWindow("Log");
+            IJ.run("Close");
+        }
 
         IJ.log("\\Clear");  // Clear the log window
         IJ.log("-------------------------------------");

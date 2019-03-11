@@ -1,5 +1,6 @@
 package nanoj.liveSRRF;
 
+import com.jogamp.common.JogampRuntimeException;
 import com.jogamp.opencl.*;
 import ij.IJ;
 import ij.ImageStack;
@@ -52,7 +53,6 @@ public class liveSRRF_CL {
 
     static private CLPlatform clPlatformMaxFlop;
     static private CLDevice clDeviceMaxFlop;
-    static private CLPlatform[] allCLplatforms;
     static public CLDevice[] allCLdevices;
 
     static private CLCommandQueue queue;
@@ -78,7 +78,13 @@ public class liveSRRF_CL {
     public void checkDevices() {
 
         int nDevices = 0;
-        CLPlatform[] allPlatforms = CLPlatform.listCLPlatforms();
+        CLPlatform[] allPlatforms;
+
+        try{allPlatforms = CLPlatform.listCLPlatforms();}
+        catch(CLException ex) {
+            IJ.log("Something went wrong initializing OpenCL.");
+            throw new RuntimeException("Something went wrong initializing OpenCL.");
+        }
 
         double nFlops = 0;
 
@@ -104,7 +110,6 @@ public class liveSRRF_CL {
         IJ.log("Maximum flops device: " + clDeviceMaxFlop.getName());
 
         allCLdevices = new CLDevice[nDevices];
-        allCLplatforms = new CLPlatform[nDevices];
 
         int i = 0;
         for (int p = 0; p < allPlatforms.length; p++) {
@@ -113,7 +118,6 @@ public class liveSRRF_CL {
 
             for (int d = 0; d < allCLdeviceOnThisPlatform.length; d++) {
                 allCLdevices[i] = allCLdeviceOnThisPlatform[d];
-                allCLplatforms[i] = allPlatforms[p];
                 i++;
             }
         }
@@ -140,6 +144,7 @@ public class liveSRRF_CL {
         }
         else{
             context = CLContext.create(chosenDevice.getPlatform());
+            IJ.log("Working on platform: "+chosenDevice.getPlatform().getName());
             CLDevice[] allCLdevicesOnThisPlatform = context.getDevices();
             int i = 0;
             while (!allCLdevicesOnThisPlatform[i].getName().equals(chosenDevice.getName())){
@@ -365,7 +370,12 @@ public class liveSRRF_CL {
 
     // --- Release GPU context ---
     public void release() {
-        context.release();
+        //context.release();
+        while (!context.isReleased()){
+            IJ.log("-------------");
+            IJ.log("Releasing context...");
+            context.release();
+        }
     }
 
 

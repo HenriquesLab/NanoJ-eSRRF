@@ -1,7 +1,8 @@
 package nanoj.liveSRRF.gui;
 
-import com.jogamp.opencl.CLContext;
+import com.jogamp.common.JogampRuntimeException;
 import com.jogamp.opencl.CLDevice;
+import com.jogamp.opencl.CLException;
 import com.jogamp.opencl.CLPlatform;
 import ij.IJ;
 import ij.plugin.PlugIn;
@@ -14,17 +15,26 @@ public class GetOpenCLinfo_ implements PlugIn {
         IJ.log("-------------------------------------");
         IJ.log("-------------------------------------");
 
-        CLPlatform[] allPlatforms = CLPlatform.listCLPlatforms();
+        try{
+            CLPlatform.initialize();
+        }catch(JogampRuntimeException ex) {
+            IJ.log("Could not load Java OpenCL Binding");
+            throw new RuntimeException("could not load Java OpenCL Binding");
+        }
+
+        CLPlatform[] allPlatforms;
+        try{allPlatforms = CLPlatform.listCLPlatforms();}
+        catch(CLException ex) {
+            IJ.log("Something went wrong initializing OpenCL.");
+            throw new RuntimeException("Something went wrong initializing OpenCL.");
+        }
+
         IJ.log("Number of platform(s): " + allPlatforms.length);
         for (int p = 0; p < allPlatforms.length; p++) {
             IJ.log("-----------------");
             IJ.log("-----------------");
-            IJ.log("Platform #"+(p+1)+" ("+allPlatforms[p].getProfile()+")");
-            //CLContext context = CLContext.create(allPlatforms[p]);
-
-            //CLDevice[] allCLdevice = context.getDevices();
+            IJ.log("Platform #"+(p+1)+" ("+allPlatforms[p].getName()+")");
             CLDevice[] allCLdevice = allPlatforms[p].listCLDevices();
-
 
             for (int i = 0; i < allCLdevice.length; i++) {
                 IJ.log("--------");
@@ -34,8 +44,6 @@ public class GetOpenCLinfo_ implements PlugIn {
                 IJ.log("Max clock: " + allCLdevice[i].getMaxClockFrequency() + " MHz");
                 IJ.log("Number of compute units: " + allCLdevice[i].getMaxComputeUnits());
             }
-
-            //context.release();
         }
         IJ.log("-----------------");
 
