@@ -21,6 +21,8 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
 import static nanoj.core.java.tools.NJ_LUT.applyLUT_SQUIRREL_Errors;
+import static nanoj.core.java.tools.NJ_LUT.applyLUT_SQUIRREL_FRC;
+
 
 public class ParametersSweep_ implements PlugIn {
 
@@ -589,13 +591,13 @@ public class ParametersSweep_ implements PlugIn {
             if (chosenTemporalAnalysis.equals(temporalAnalysis[0]) || chosenTemporalAnalysis.equals(temporalAnalysis[2])) {
                 ImagePlus impFRCresolutionAVG = new ImagePlus(imp.getTitle() + " - FRC resolution sweep map (AVG)", imsFRCresolutionAVG);
                 IJ.run(impFRCresolutionAVG, "Enhance Contrast", "saturated=0.5");
-                applyLUT_SQUIRREL_Errors(impFRCresolutionAVG);
+                applyLUT_SQUIRREL_FRC(impFRCresolutionAVG);
                 impFRCresolutionAVG.show();
             }
             if (chosenTemporalAnalysis.equals(temporalAnalysis[1]) || chosenTemporalAnalysis.equals(temporalAnalysis[2])) {
                 ImagePlus impFRCresolutionSTD = new ImagePlus(imp.getTitle() + " - FRC resolution sweep map (STD)", imsFRCresolutionSTD);
                 IJ.run(impFRCresolutionSTD, "Enhance Contrast", "saturated=0.5");
-                applyLUT_SQUIRREL_Errors(impFRCresolutionSTD);
+                applyLUT_SQUIRREL_FRC(impFRCresolutionSTD);
                 impFRCresolutionSTD.show();
             }
         }
@@ -726,7 +728,7 @@ public class ParametersSweep_ implements PlugIn {
     }
 
 
-    public boolean calculateLiveSRRFsingleframeLoad(ImageStack imsAllRawData, int nf, int mode) {
+    private boolean calculateLiveSRRFsingleframeLoad(ImageStack imsAllRawData, int nf, int mode) {
 
         ImageStack imsThisRawData;
         boolean userPressedEscape =false;

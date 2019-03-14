@@ -1,6 +1,5 @@
 package nanoj.liveSRRF;
 
-import com.jogamp.common.JogampRuntimeException;
 import com.jogamp.opencl.*;
 import ij.IJ;
 import ij.ImageStack;
@@ -27,7 +26,8 @@ public class liveSRRF_CL {
             widthM,
             heightM,
             nFrameForSRRF,
-            blockLength;
+            blockLength,
+            magnification;
 
     private final int GxGyMagnification = 2;
     private final float vxy_offset = 0.5f;
@@ -49,7 +49,9 @@ public class liveSRRF_CL {
                             kernelInterpolateGradient,
                             kernelIncrementFramePosition,
                             kernelResetFramePosition,
-                            kernelCalculateSRRF;
+                            kernelCalculateSRRF,
+                            kernelCalculateMPmap,
+                            kernelCalculateStd;
 
     static private CLPlatform clPlatformMaxFlop;
     static private CLDevice clDeviceMaxFlop;
@@ -62,7 +64,8 @@ public class liveSRRF_CL {
             clBufferGx, clBufferGy,
             clBufferGxInt, clBufferGyInt,
             clBufferShiftXY,
-            clBufferOut;
+            clBufferOut,
+            clBufferMPmap;
 
     private CLBuffer<IntBuffer>
             clBufferCurrentFrame;
@@ -88,20 +91,20 @@ public class liveSRRF_CL {
 
         double nFlops = 0;
 
-        for (int p = 0; p < allPlatforms.length; p++) {
-            CLDevice[] allCLdeviceOnThisPlatform = allPlatforms[p].listCLDevices();
+        for (CLPlatform allPlatform : allPlatforms) {
+            CLDevice[] allCLdeviceOnThisPlatform = allPlatform.listCLDevices();
             nDevices += allCLdeviceOnThisPlatform.length;
 
-            for (int d = 0; d < allCLdeviceOnThisPlatform.length; d++) {
+            for (CLDevice clDevice : allCLdeviceOnThisPlatform) {
                 IJ.log("--------");
-                IJ.log("Device name: " + allCLdeviceOnThisPlatform[d].getName());
-                IJ.log("Device type: " + allCLdeviceOnThisPlatform[d].getType());
-                IJ.log("Max clock: " + allCLdeviceOnThisPlatform[d].getMaxClockFrequency() + " MHz");
-                IJ.log("Number of compute units: " + allCLdeviceOnThisPlatform[d].getMaxComputeUnits());
-                if (allCLdeviceOnThisPlatform[d].getMaxComputeUnits()*allCLdeviceOnThisPlatform[d].getMaxClockFrequency() > nFlops){
-                    nFlops = allCLdeviceOnThisPlatform[d].getMaxComputeUnits()*allCLdeviceOnThisPlatform[d].getMaxClockFrequency();
-                    clPlatformMaxFlop = allPlatforms[p];
-                    clDeviceMaxFlop = allCLdeviceOnThisPlatform[d];
+                IJ.log("Device name: " + clDevice.getName());
+                IJ.log("Device type: " + clDevice.getType());
+                IJ.log("Max clock: " + clDevice.getMaxClockFrequency() + " MHz");
+                IJ.log("Number of compute units: " + clDevice.getMaxComputeUnits());
+                if (clDevice.getMaxComputeUnits() * clDevice.getMaxClockFrequency() > nFlops) {
+                    nFlops = clDevice.getMaxComputeUnits() * clDevice.getMaxClockFrequency();
+                    clPlatformMaxFlop = allPlatform;
+                    clDeviceMaxFlop = clDevice;
                 }
             }
         }
@@ -112,12 +115,12 @@ public class liveSRRF_CL {
         allCLdevices = new CLDevice[nDevices];
 
         int i = 0;
-        for (int p = 0; p < allPlatforms.length; p++) {
-            CLDevice[] allCLdeviceOnThisPlatform = allPlatforms[p].listCLDevices();
+        for (CLPlatform allPlatform : allPlatforms) {
+            CLDevice[] allCLdeviceOnThisPlatform = allPlatform.listCLDevices();
             nDevices += allCLdeviceOnThisPlatform.length;
 
-            for (int d = 0; d < allCLdeviceOnThisPlatform.length; d++) {
-                allCLdevices[i] = allCLdeviceOnThisPlatform[d];
+            for (CLDevice clDevice : allCLdeviceOnThisPlatform) {
+                allCLdevices[i] = clDevice;
                 i++;
             }
         }
@@ -134,6 +137,7 @@ public class liveSRRF_CL {
         this.widthM = width * magnification;
         this.nFrameForSRRF = nFrameForSRRF;
         this.blockLength = blockLength;
+        this.magnification = magnification;
 
         if (chosenDevice == null) {
             IJ.log("Looking for the fastest device...");
@@ -165,6 +169,7 @@ public class liveSRRF_CL {
         clBufferGyInt = context.createFloatBuffer(nFramesOnGPU * 4 * width * height, READ_WRITE); // single frame Gy
         clBufferOut = context.createFloatBuffer((nReconstructions + 1) * widthM * heightM, WRITE_ONLY); // single frame cumulative AVG projection of RGC
         clBufferCurrentFrame = context.createIntBuffer(2, READ_WRITE);
+        clBufferMPmap = context.createFloatBuffer(2 * magnification * magnification, READ_WRITE);
 
         // Current frame is a 2 element Int buffer:
         // nCurrentFrame[0] is the global current frame in the current SRRF frame (reset every SRRF frame)
@@ -205,6 +210,10 @@ public class liveSRRF_CL {
         kernelCalculateSRRF = programLiveSRRF.createCLKernel("calculateRadialGradientConvergence");
         kernelIncrementFramePosition = programLiveSRRF.createCLKernel("kernelIncrementFramePosition");
         kernelResetFramePosition = programLiveSRRF.createCLKernel("kernelResetFramePosition");
+        kernelCalculateMPmap = programLiveSRRF.createCLKernel("kernelCalculateMPmap");
+        kernelCalculateStd = programLiveSRRF.createCLKernel("kernelCalculateStd");
+
+
 
         int argn;
         argn = 0;
@@ -229,11 +238,18 @@ public class liveSRRF_CL {
 
         kernelIncrementFramePosition.setArg(0, clBufferCurrentFrame); // make sure type is the same !!
 
+        argn = 0;
+        kernelCalculateMPmap.setArg(argn++, clBufferOut); // make sure type is the same !!
+        kernelCalculateMPmap.setArg(argn++, clBufferMPmap); // make sure type is the same !!
+
+        argn = 0;
+        kernelCalculateStd.setArg(argn++, clBufferOut);
+
 
         queue = chosenDevice.createCommandQueue();
 
-        System.out.println("used device memory: " + (
-                clBufferPx.getCLSize() +
+        System.out.println("used device memory: " + (  // TODO: add the buffer for MPmap
+                        clBufferPx.getCLSize() +
                         clBufferShiftXY.getCLSize() +
                         clBufferGx.getCLSize() +
                         clBufferGy.getCLSize() +
@@ -308,17 +324,15 @@ public class liveSRRF_CL {
 
             }
 
-//            id = prof.startTimer();
-//            queue.put2DRangeKernel(kernelCalculateSRRF, 0, 0, widthM, heightM, 0, 0);
-//            prof.recordTime("kernelCalculateSRRF", prof.endTimer(id));
-
             // This kernel needs to be done outside of the previous kernel because of concommitent execution (you never know when each pixel is executed)
             id = prof.startTimer();
             queue.finish(); // Make sure everything is done
             queue.put1DRangeKernel(kernelIncrementFramePosition, 0, 2, 0);
             prof.recordTime("Increment frame count", prof.endTimer(id));
-
         }
+
+        // Calculate the STD on the OutputArray on the GPU
+        queue.put1DRangeKernel(kernelCalculateStd, 0, heightM*heightM,0);
 
         return false;
 
@@ -343,16 +357,17 @@ public class liveSRRF_CL {
         }
         imsSRRF.addSlice(new FloatProcessor(widthM, heightM, dataSRRF));
 
-        // Load standard deviation
+        // Load standard deviation // TODO: do this on GPU !!!
         dataSRRF = new float[widthM * heightM];
         for (int n = 0; n < widthM * heightM; n++) {
-            dataSRRF[n] = bufferSRRF.get(n + widthM * heightM) - bufferSRRF.get(n) * bufferSRRF.get(n); // Var[X] = E[X^2] - (E[X])^2
-            if (dataSRRF[n] < 0) {
-                dataSRRF[n] = 0;
-                //IJ.log("!!Negative VAR value!!");
-            }
+            //dataSRRF[n] = bufferSRRF.get(n + widthM * heightM) - bufferSRRF.get(n) * bufferSRRF.get(n); // Var[X] = E[X^2] - (E[X])^2
+            dataSRRF[n] = bufferSRRF.get(n + widthM * heightM);
+            //if (dataSRRF[n] < 0) {
+            //    dataSRRF[n] = 0;
+            //    //IJ.log("!!Negative VAR value!!");
+            //}
             if (Float.isNaN(dataSRRF[n])) dataSRRF[n] = 0; // make sure we dont get any weirdness
-            dataSRRF[n] = (float) math.sqrt(dataSRRF[n]);
+            //dataSRRF[n] = (float) math.sqrt(dataSRRF[n]);
         }
         imsSRRF.addSlice(new FloatProcessor(widthM, heightM, dataSRRF));
 
@@ -386,4 +401,30 @@ public class liveSRRF_CL {
         queue.put1DRangeKernel(kernelResetFramePosition, 0, 1, 0);
         prof.recordTime("Reset SRRF frame counter", prof.endTimer(id));
     }
+
+    // --- Calculate and get the Macro-pixel map ---
+    public ImageStack getMPmap() {
+
+        int id = prof.startTimer();
+        queue.put1DRangeKernel(kernelCalculateMPmap,0,2 * magnification * magnification,0);
+        prof.recordTime("Calculate MP map", prof.endTimer(id));
+
+        ImageStack imsMPmap = new ImageStack(magnification, 2 * magnification);
+        queue.finish(); // Make sure everything is done
+        queue.putReadBuffer(clBufferMPmap, true);
+        FloatBuffer bufferMPmap = clBufferMPmap.getBuffer();
+
+        float[] dataMPmap = new float[2*magnification*magnification];
+        for (int n = 0; n < 2*magnification*magnification; n++) {
+            if (Float.isNaN(dataMPmap[n])) dataMPmap[n] = 0; // make sure we dont get any weirdness
+            dataMPmap[n] = bufferMPmap.get(n);
+        }
+
+        imsMPmap.addSlice(new FloatProcessor(magnification, 2 * magnification, dataMPmap));
+
+        return imsMPmap;
+
+    }
+
+
 }

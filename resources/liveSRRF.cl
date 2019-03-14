@@ -409,6 +409,17 @@ __kernel void calculateRadialGradientConvergence(
 //}
 
 
+// Kernel: calculate STD image from the OutputArray
+__kernel void kernelCalculateStd(
+    __global float* OutArray
+    ){
+
+    const int offset = get_global_id(0);
+    OutArray[offset + whM] = sqrt(OutArray[offset + whM] - OutArray[offset]*OutArray[offset]);
+
+}
+
+
 // Fourth kernel: increment the current frame number -----------------------------------------------------------------
 __kernel void kernelIncrementFramePosition(
     __global int* nCurrentFrame
@@ -434,3 +445,31 @@ __kernel void kernelResetFramePosition(
 
 }
 
+// kernel: calculate the Macro-Pixel artefact map -----------------------------------------------------------------
+__kernel void kernelCalculateMPmap(
+    __global float* OutArray,
+    __global float* MPmap
+    ){
+
+    const int offset_MPmap = get_global_id(0);
+    const int frame = offset_MPmap/(magnification*magnification); // 0 or 1 depending on whether we're dealing with AVG or STD
+    const int y_MPmap = (offset_MPmap - frame*(magnification*magnification))/magnification;
+    const int x_MPmap = offset_MPmap - y_MPmap*magnification - frame*(magnification*magnification);
+
+    float thisMPmapValue = 0;
+    int x;
+    int y;
+    int offset;
+
+//    int maxOffset = 0;
+//    int i = w;
+    for (int i=0; i<wh; i++) {
+        y = i/w;
+        x = i - y*w;
+        offset = x_MPmap + x * magnification + wM * (y_MPmap + y * magnification) + frame * whM;
+        thisMPmapValue += OutArray[offset];
+    }
+    MPmap[offset_MPmap] = thisMPmapValue/wh;
+//    MPmap[offset_MPmap] = thisMPmapValue;
+
+}

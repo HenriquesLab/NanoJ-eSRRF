@@ -29,6 +29,10 @@ public class GetOpenCLinfo_ implements PlugIn {
             throw new RuntimeException("Something went wrong initializing OpenCL.");
         }
 
+        double nFlops;
+        double nMaxFlops = 0;
+        CLDevice clDeviceMaxFlop = null;
+
         IJ.log("Number of platform(s): " + allPlatforms.length);
         for (int p = 0; p < allPlatforms.length; p++) {
             IJ.log("-----------------");
@@ -43,9 +47,19 @@ public class GetOpenCLinfo_ implements PlugIn {
                 IJ.log("Device type: " + allCLdevice[i].getType());
                 IJ.log("Max clock: " + allCLdevice[i].getMaxClockFrequency() + " MHz");
                 IJ.log("Number of compute units: " + allCLdevice[i].getMaxComputeUnits());
+
+                nFlops = allCLdevice[i].getMaxComputeUnits()*allCLdevice[i].getMaxClockFrequency();
+                if (nFlops > nMaxFlops){
+                    nMaxFlops = nFlops;
+                    clDeviceMaxFlop = allCLdevice[i];
+                }
             }
         }
+
         IJ.log("-----------------");
+        assert clDeviceMaxFlop != null;
+        IJ.log("Maximum flops device: " + clDeviceMaxFlop.getName());
+
 
     }
 }

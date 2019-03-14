@@ -56,7 +56,7 @@ public class liveSRRF_optimised_ implements PlugIn {
             writeSuggestOKeyed = false,
             intWeighting;
 
-    private final String LiveSRRFVersion = "v1.4";
+    private final String LiveSRRFVersion = "v1.5";
     private String pathToDisk = "",
             fileName,
             chosenDeviceName;
@@ -103,7 +103,7 @@ public class liveSRRF_optimised_ implements PlugIn {
 
         // initialization of advanced settings (in case advanced settings are not selected)
         chosenDeviceName = prefs.get("chosenDeviceName", "Default device");
-        maxMemoryGPU = (float) prefs.get("maxMemoryGPU", 500);
+        maxMemoryGPU = prefs.get("maxMemoryGPU", 500);
         blockSize = (int) prefs.get("blockSize", 20000);
         writeToDiskToUse = false;
         intWeighting = prefs.get("intWeighting", true);
@@ -203,6 +203,9 @@ public class liveSRRF_optimised_ implements PlugIn {
         XYShiftCalculator shiftCalculator = new XYShiftCalculator(imp, prof);
         ImageStack imsBuffer;
 
+
+        ImagePlus impMPmap;
+
         ImageStack imsRawData;
         ImageStack imsSRRFavg = new ImageStack(width * magnification, height * magnification);
         ImageStack imsSRRFstd = new ImageStack(width * magnification, height * magnification);
@@ -274,6 +277,11 @@ public class liveSRRF_optimised_ implements PlugIn {
 
             liveSRRF.readSRRFbuffer();
             imsBuffer = liveSRRF.imsSRRF;
+
+            impMPmap = new ImagePlus("MP map",liveSRRF.getMPmap());
+            impMPmap.setCalibration(cal);
+            IJ.run(impMPmap, "Enhance Contrast", "saturated=0.5");
+            impMPmap.show();
 
             if (writeToDiskToUse) {
                 try {
@@ -448,8 +456,7 @@ public class liveSRRF_optimised_ implements PlugIn {
         gd.showDialog();
 
         // If the GUI was cancelled
-        if (gd.wasCanceled()) return true;
-        else return false;
+        return gd.wasCanceled();
 
 
     }
@@ -481,9 +488,9 @@ public class liveSRRF_optimised_ implements PlugIn {
 
         // Calculate the parameters based on user inputs
         if (nFrameForSRRFfromUser == 0) nFrameForSRRFtoUse = nSlices;
-        else nFrameForSRRFtoUse = min(nSlices, nFrameForSRRFfromUser);;
+        else nFrameForSRRFtoUse = min(nSlices, nFrameForSRRFfromUser);
 
-        if (frameGapFromUser == 0 || doRollingAnalysis == false) frameGapToUse = nFrameForSRRFtoUse;
+        if (frameGapFromUser == 0 || !doRollingAnalysis) frameGapToUse = nFrameForSRRFtoUse;
         else frameGapToUse = frameGapFromUser;
 
         nSRRFframe = (int) ((float) (nSlices - nFrameForSRRFtoUse) / (float) frameGapToUse) + 1;
@@ -680,7 +687,7 @@ public class liveSRRF_optimised_ implements PlugIn {
 
 
     // -- Convert time to string --
-    public String timeToString(double time){
+    private String timeToString(double time){
 
         String timeString;
         int _h = (int) (time / 3600);
