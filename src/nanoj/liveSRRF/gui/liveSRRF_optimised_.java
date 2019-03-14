@@ -57,12 +57,14 @@ public class liveSRRF_optimised_ implements PlugIn {
             doMPmapCorrection,
             intWeighting;
 
-    private final String LiveSRRFVersion = "v1.6";
+    private final String LiveSRRFVersion = "v1.7";
     private String pathToDisk = "",
             fileName,
-            chosenDeviceName;
+            chosenDeviceName,
+            chosenTemporalAnalysis;
 
-    private String[] deviceNames;
+    private String[] deviceNames,
+            temporalAnalysis = {"AVG","STD","Both AVG and STD"};
 
     private float[] shiftX, shiftY;
 
@@ -129,7 +131,7 @@ public class liveSRRF_optimised_ implements PlugIn {
         // Initialize the liveSRRF class and check the devices
         liveSRRF = new liveSRRF_CL();
         liveSRRF.checkDevices();
-        CLDevice[] allDevices = liveSRRF.allCLdevices;
+        CLDevice[] allDevices = liveSRRF_CL.allCLdevices;
 
         // Initializing string for device choice
         deviceNames = new String[allDevices.length + 1];
@@ -176,6 +178,7 @@ public class liveSRRF_optimised_ implements PlugIn {
         IJ.log("Running on: " + chosenDeviceName);
         IJ.log("# reconstructed frames: " + nSRRFframe);
         IJ.log("# device load / SRRF frame: " + nGPUloadPerSRRFframe);
+        IJ.log("Macro-pixel artefact removal: " + doMPmapCorrection);
 
         // Initialize ZipSaver in case we're writing to disk
         if (writeToDiskToUse) {
@@ -219,6 +222,8 @@ public class liveSRRF_optimised_ implements PlugIn {
         cal.pixelWidth /= magnification;
         cal.pixelHeight /= magnification;
         cal.setUnit(imp.getCalibration().getUnit());
+
+        IJ.log("Distance units: "+cal.getUnit());
 
         boolean userPressedEscape;
         long loopStart = System.nanoTime();
@@ -439,8 +444,9 @@ public class liveSRRF_optimised_ implements PlugIn {
         gd.addCheckbox("Correct vibration", prefs.get("correctVibration", false));
 
         gd.addMessage("-=-= Reconstructions =-=-\n", headerFont);
-        gd.addCheckbox("AVG reconstruction (default: on)", prefs.get("calculateAVG", true));
-        gd.addCheckbox("STD reconstruction (default: off)", prefs.get("calculateSTD", false));
+        gd.addChoice("Temporal analysis", temporalAnalysis, prefs.get("chosenTemporalAnalysis", temporalAnalysis[2]));
+//        gd.addCheckbox("AVG reconstruction (default: on)", prefs.get("calculateAVG", true));
+//        gd.addCheckbox("STD reconstruction (default: off)", prefs.get("calculateSTD", false));
         gd.addCheckbox("Wide-field interpolation (default: off)", prefs.get("getInterpolatedImage", false));
 
         gd.addMessage("-=-= Rolling analysis =-=-\n", headerFont);
@@ -481,8 +487,22 @@ public class liveSRRF_optimised_ implements PlugIn {
 
         correctVibration = gd.getNextBoolean();
 
-        calculateAVG = gd.getNextBoolean();
-        calculateSTD = gd.getNextBoolean();
+        chosenTemporalAnalysis = gd.getNextChoice();
+        if (chosenTemporalAnalysis.equals(temporalAnalysis[0])){
+            calculateAVG = true;
+            calculateSTD = false;
+        }
+        else if(chosenTemporalAnalysis.equals(temporalAnalysis[1])){
+            calculateAVG = false;
+            calculateSTD = true;
+        }
+        else{
+            calculateAVG = true;
+            calculateSTD = true;
+        }
+
+//        calculateAVG = gd.getNextBoolean();
+//        calculateSTD = gd.getNextBoolean();
         getInterpolatedImage = gd.getNextBoolean();
 
         doRollingAnalysis = gd.getNextBoolean();
@@ -638,8 +658,9 @@ public class liveSRRF_optimised_ implements PlugIn {
         prefs.set("sensitivity", sensitivity);
         prefs.set("correctVibration", correctVibration);
 
-        prefs.set("calculateAVG", calculateAVG);
-        prefs.set("calculateSTD", calculateSTD);
+        prefs.set("chosenTemporalAnalysis", chosenTemporalAnalysis);
+//        prefs.set("calculateAVG", calculateAVG);
+//        prefs.set("calculateSTD", calculateSTD);
         prefs.set("getInterpolatedImage", getInterpolatedImage);
 
         prefs.set("doRollingAnalysis", doRollingAnalysis);

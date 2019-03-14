@@ -34,14 +34,12 @@ public class liveSRRF_CL {
 
     private final int nReconstructions = 2; // Currently only STD and AVG
 
-    private final boolean DEBUG = false;
-
     private boolean doMPmapCorrection;
 
     public ImageStack imsSRRF;
 
     // Advanced formats
-    private NanoJProfiler prof = new NanoJProfiler();
+    private final NanoJProfiler prof = new NanoJProfiler();
 
     // OpenCL formats
     static private CLContext context;
@@ -143,11 +141,11 @@ public class liveSRRF_CL {
         this.doMPmapCorrection = doMPmapCorrection;
 
         if (chosenDevice == null) {
-            IJ.log("Looking for the fastest device...");
+//            IJ.log("Looking for the fastest device...");
             System.out.println("Using the fastest device...");
             context = CLContext.create(clPlatformMaxFlop);
             chosenDevice = context.getMaxFlopsDevice();
-            IJ.log("Using "+chosenDevice.getName());
+//            IJ.log("Using "+chosenDevice.getName());
         }
         else{
             context = CLContext.create(chosenDevice.getPlatform());
@@ -257,7 +255,7 @@ public class liveSRRF_CL {
 
         queue = chosenDevice.createCommandQueue();
 
-        System.out.println("used device memory: " + (  // TODO: add the buffer for MPmap
+        System.out.println("used device memory: " + (
                         clBufferPx.getCLSize() +
                         clBufferShiftXY.getCLSize() +
                         clBufferGx.getCLSize() +
@@ -265,7 +263,8 @@ public class liveSRRF_CL {
                         clBufferGxInt.getCLSize() +
                         clBufferGyInt.getCLSize() +
                         clBufferOut.getCLSize() +
-                        clBufferCurrentFrame.getCLSize())
+                        clBufferCurrentFrame.getCLSize()) +
+                        clBufferMPmap.getCLSize()
                 / 1000000d + "MB");
 
     }

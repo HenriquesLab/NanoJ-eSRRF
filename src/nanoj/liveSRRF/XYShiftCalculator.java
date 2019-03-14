@@ -19,7 +19,7 @@ public class XYShiftCalculator {
 
     public float[] shiftX, shiftY;
 
-    private NanoJProfiler prof = new NanoJProfiler();
+    private NanoJProfiler prof;
 
     // -- Constructor --
     public XYShiftCalculator(ImagePlus imp, NanoJProfiler prof){

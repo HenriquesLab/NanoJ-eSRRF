@@ -319,7 +319,7 @@ public class ErrorMapLiveSRRF {
     private FloatProcessor getRSF(float sigma) {
 
         // calculate the final RSF
-        float sigma2 = (float) (ROOT2 * abs(sigma));
+        float sigma2 = (ROOT2 * abs(sigma));
         int radius = max(((int) sigma) * 3, 1);
         int size = radius * 2 + 1;
         float vKernelSum = 0;

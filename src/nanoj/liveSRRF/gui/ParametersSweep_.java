@@ -51,24 +51,21 @@ public class ParametersSweep_ implements PlugIn {
 
     private float fixedSigma;
 
-    private final String LiveSRRFVersion = "v0.9";
+    private final String LiveSRRFVersion = "v1.0";
     private float[] shiftX, shiftY;
 
     private String chosenTemporalAnalysis;
 
-    // Image formats
-    private ImagePlus imp;
-
     // Advanced formats
-    private NanoJPrefs prefs = new NanoJPrefs(this.getClass().getName());
-    private NanoJProfiler prof = new NanoJProfiler();
+    private final NanoJPrefs prefs = new NanoJPrefs(this.getClass().getName());
+    private final NanoJProfiler prof = new NanoJProfiler();
     private liveSRRF_CL liveSRRF;
 
     public void run(String arg) {
 
 
         // Get raw data
-        imp = WindowManager.getCurrentImage();
+        ImagePlus imp = WindowManager.getCurrentImage();
         if (imp == null) imp = IJ.openImage();
         if (imp == null) return;
         imp.show();
@@ -91,10 +88,8 @@ public class ParametersSweep_ implements PlugIn {
 
         // Build GUI
         Font headerFont = new Font("Arial", Font.BOLD, 16);
-        String[] temporalAnalysis = new String[3];
-        temporalAnalysis[0] = "AVG";
-        temporalAnalysis[1] = "STD";
-        temporalAnalysis[2] = "Both AVG and STD";
+        String[] temporalAnalysis = {"AVG","STD","Both AVG and STD"};
+
 
         NonBlockingGenericDialog gd = new NonBlockingGenericDialog("liveSRRF - Parameters sweep " + LiveSRRFVersion);
         gd.addMessage("-=-= liveSRRF reconstruction =-=-\n", headerFont);
@@ -394,11 +389,11 @@ public class ParametersSweep_ implements PlugIn {
 
                         if (chosenTemporalAnalysis.equals(temporalAnalysis[0]) || chosenTemporalAnalysis.equals(temporalAnalysis[2])) {
                             fpEvenAVG = imsBuffer.getProcessor(1).convertToFloatProcessor();
-                            pixelsFRCresolutionAVG[fwhmArray.length * si + fi] = (float) frcCalculator.calculateFireNumber(fpOddAVG, fpEvenAVG, FRC.ThresholdMethod.FIXED_1_OVER_7);
+                            pixelsFRCresolutionAVG[fwhmArray.length * si + fi] = (float) cal.pixelHeight * (float) frcCalculator.calculateFireNumber(fpOddAVG, fpEvenAVG, FRC.ThresholdMethod.FIXED_1_OVER_7);
                         }
                         if (chosenTemporalAnalysis.equals(temporalAnalysis[1]) || chosenTemporalAnalysis.equals(temporalAnalysis[2])) {
                             fpEvenSTD = imsBuffer.getProcessor(2).convertToFloatProcessor();
-                            pixelsFRCresolutionSTD[fwhmArray.length * si + fi] = (float) frcCalculator.calculateFireNumber(fpOddSTD, fpEvenSTD, FRC.ThresholdMethod.FIXED_1_OVER_7);
+                            pixelsFRCresolutionSTD[fwhmArray.length * si + fi] = (float) cal.pixelHeight * (float) frcCalculator.calculateFireNumber(fpOddSTD, fpEvenSTD, FRC.ThresholdMethod.FIXED_1_OVER_7);
                         }
 
 
@@ -501,6 +496,38 @@ public class ParametersSweep_ implements PlugIn {
         liveSRRF.release();
 
         //Display results
+        Calibration sweepMapCalib = new Calibration();
+        sweepMapCalib.setXUnit("Radius");
+        sweepMapCalib.setYUnit("Sensitivity");
+
+        if (fwhmArray.length > 1) {
+            sweepMapCalib.pixelWidth = fwhmArray[1] - fwhmArray[0];
+            sweepMapCalib.xOrigin = -fwhmArray[0] / (fwhmArray[1] - fwhmArray[0]);
+        }
+        else{
+            sweepMapCalib.pixelWidth = fwhmArray[0];
+            sweepMapCalib.xOrigin = -1;
+        }
+
+        if (sensitivityArray.length > 1) {
+            sweepMapCalib.pixelHeight = sensitivityArray[1]-sensitivityArray[0];
+            sweepMapCalib.yOrigin = -(float)sensitivityArray[0]/ (float)(sensitivityArray[1]-sensitivityArray[0]);
+        }
+        else{
+            sweepMapCalib.pixelHeight = sensitivityArray[0];
+            sweepMapCalib.yOrigin = -1;
+        }
+
+
+        if (nframeArray.length > 1){
+            sweepMapCalib.pixelDepth = nframeArray[1]-nframeArray[0];
+            sweepMapCalib.zOrigin = -(float)nframeArray[0]/ (float)(nframeArray[1]-nframeArray[0]);
+        }
+        else{
+            sweepMapCalib.pixelDepth = nframeArray[0];
+            sweepMapCalib.zOrigin = -1;
+        }
+
 
         // liveSRRF (AVG) reconstruction
         if (chosenTemporalAnalysis.equals(temporalAnalysis[0]) || chosenTemporalAnalysis.equals(temporalAnalysis[2])) {
@@ -560,12 +587,14 @@ public class ParametersSweep_ implements PlugIn {
         if (calculateRSE) {
             if (chosenTemporalAnalysis.equals(temporalAnalysis[0]) || chosenTemporalAnalysis.equals(temporalAnalysis[2])) {
                 ImagePlus impRMSEavg = new ImagePlus(imp.getTitle() + " - RMSE sweep map (AVG)", imsRMSEavg);
+                impRMSEavg.setCalibration(sweepMapCalib.copy());
                 IJ.run(impRMSEavg, "Enhance Contrast", "saturated=0.5");
                 applyLUT_SQUIRREL_Errors(impRMSEavg);
                 impRMSEavg.show();
             }
             if (chosenTemporalAnalysis.equals(temporalAnalysis[1]) || chosenTemporalAnalysis.equals(temporalAnalysis[2])) {
                 ImagePlus impRMSEstd = new ImagePlus(imp.getTitle() + " - RMSE sweep map (STD)", imsRMSEstd);
+                impRMSEstd.setCalibration(sweepMapCalib.copy());
                 IJ.run(impRMSEstd, "Enhance Contrast", "saturated=0.5");
                 applyLUT_SQUIRREL_Errors(impRMSEstd);
                 impRMSEstd.show();
@@ -575,12 +604,14 @@ public class ParametersSweep_ implements PlugIn {
         if (calculateRSP) {
             if (chosenTemporalAnalysis.equals(temporalAnalysis[0]) || chosenTemporalAnalysis.equals(temporalAnalysis[2])) {
                 ImagePlus impPPMCCavg = new ImagePlus(imp.getTitle() + " - RSP sweep map (AVG)", imsPPMCCavg);
+                impPPMCCavg.setCalibration(sweepMapCalib.copy());
                 IJ.run(impPPMCCavg, "Enhance Contrast", "saturated=0.5");
                 applyLUT_SQUIRREL_Errors(impPPMCCavg);
                 impPPMCCavg.show();
             }
             if (chosenTemporalAnalysis.equals(temporalAnalysis[1]) || chosenTemporalAnalysis.equals(temporalAnalysis[2])) {
                 ImagePlus impPPMCCstd = new ImagePlus(imp.getTitle() + " - RSP sweep map (STD)", imsPPMCCstd);
+                impPPMCCstd.setCalibration(sweepMapCalib.copy());
                 IJ.run(impPPMCCstd, "Enhance Contrast", "saturated=0.5");
                 applyLUT_SQUIRREL_Errors(impPPMCCstd);
                 impPPMCCstd.show();
@@ -590,12 +621,14 @@ public class ParametersSweep_ implements PlugIn {
         if (calculateFRC) {
             if (chosenTemporalAnalysis.equals(temporalAnalysis[0]) || chosenTemporalAnalysis.equals(temporalAnalysis[2])) {
                 ImagePlus impFRCresolutionAVG = new ImagePlus(imp.getTitle() + " - FRC resolution sweep map (AVG)", imsFRCresolutionAVG);
+                impFRCresolutionAVG.setCalibration(sweepMapCalib.copy());
                 IJ.run(impFRCresolutionAVG, "Enhance Contrast", "saturated=0.5");
                 applyLUT_SQUIRREL_FRC(impFRCresolutionAVG);
                 impFRCresolutionAVG.show();
             }
             if (chosenTemporalAnalysis.equals(temporalAnalysis[1]) || chosenTemporalAnalysis.equals(temporalAnalysis[2])) {
                 ImagePlus impFRCresolutionSTD = new ImagePlus(imp.getTitle() + " - FRC resolution sweep map (STD)", imsFRCresolutionSTD);
+                impFRCresolutionSTD.setCalibration(sweepMapCalib.copy());
                 IJ.run(impFRCresolutionSTD, "Enhance Contrast", "saturated=0.5");
                 applyLUT_SQUIRREL_FRC(impFRCresolutionSTD);
                 impFRCresolutionSTD.show();

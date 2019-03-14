@@ -68,7 +68,7 @@ public class DarkFrameCorrector_ implements PlugIn {
         doStd = gd.getNextBoolean();
         setPrefs("doStd", doStd);
 
-        prefs.savePreferences();
+        Prefs.savePreferences();
 
         // set-up
         impDark = WindowManager.getImage(titleDark);
@@ -151,24 +151,25 @@ public class DarkFrameCorrector_ implements PlugIn {
     //helper functions for prefs handling
 
     public float getPrefs(String key, float defaultValue) {
-        return (float) prefs.get(prefsHeader+"."+key, defaultValue);
+        return (float) Prefs.get(prefsHeader+"."+key, defaultValue);
     }
 
     public boolean getPrefs(String key, boolean defaultValue) {
-        return prefs.get(prefsHeader+"."+key, defaultValue);
+        return Prefs.get(prefsHeader+"."+key, defaultValue);
     }
 
-    public String getPrefs(String key, String defaultValue) { return prefs.get(prefsHeader+"."+key, defaultValue); }
+    public String getPrefs(String key, String defaultValue) { return Prefs.get(prefsHeader+"."+key, defaultValue); }
 
     public void setPrefs(String key, float defaultValue) {
-        prefs.set(prefsHeader+"."+key, defaultValue);
+        Prefs.set(prefsHeader+"."+key, defaultValue);
     }
 
     public void setPrefs(String key, boolean defaultValue) {
-        prefs.set(prefsHeader+"."+key, defaultValue);
+        Prefs.set(prefsHeader+"."+key, defaultValue);
     }
 
-    public void setPrefs(String key, String defaultValue) {prefs.set(prefsHeader+"."+key, defaultValue); }
+    public void setPrefs(String key, String defaultValue) {
+        Prefs.set(prefsHeader+"."+key, defaultValue); }
 
     // helper functions for image maths
 
