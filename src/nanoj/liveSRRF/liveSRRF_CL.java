@@ -5,7 +5,6 @@ import ij.IJ;
 import ij.ImageStack;
 import ij.process.FloatProcessor;
 import nanoj.core2.NanoJProfiler;
-import org.python.modules.math;
 
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
@@ -37,6 +36,8 @@ public class liveSRRF_CL {
 
     private final boolean DEBUG = false;
 
+    private boolean doMPmapCorrection;
+
     public ImageStack imsSRRF;
 
     // Advanced formats
@@ -51,7 +52,8 @@ public class liveSRRF_CL {
                             kernelResetFramePosition,
                             kernelCalculateSRRF,
                             kernelCalculateMPmap,
-                            kernelCalculateStd;
+                            kernelCalculateStd,
+                            kernelCorrectMPmap;
 
     static private CLPlatform clPlatformMaxFlop;
     static private CLDevice clDeviceMaxFlop;
@@ -129,7 +131,7 @@ public class liveSRRF_CL {
 
 
     // --- Initialization method ---
-    public void initialise(int width, int height, int magnification, float fwhm, int sensitivity, int nFramesOnGPU, int nFrameForSRRF, int blockLength, CLDevice chosenDevice, boolean intWeighting) {
+    public void initialise(int width, int height, int magnification, float fwhm, int sensitivity, int nFramesOnGPU, int nFrameForSRRF, int blockLength, CLDevice chosenDevice, boolean intWeighting, boolean doMPmapCorrection) {
 
         this.width = width;
         this.height = height;
@@ -138,6 +140,7 @@ public class liveSRRF_CL {
         this.nFrameForSRRF = nFrameForSRRF;
         this.blockLength = blockLength;
         this.magnification = magnification;
+        this.doMPmapCorrection = doMPmapCorrection;
 
         if (chosenDevice == null) {
             IJ.log("Looking for the fastest device...");
@@ -212,6 +215,7 @@ public class liveSRRF_CL {
         kernelResetFramePosition = programLiveSRRF.createCLKernel("kernelResetFramePosition");
         kernelCalculateMPmap = programLiveSRRF.createCLKernel("kernelCalculateMPmap");
         kernelCalculateStd = programLiveSRRF.createCLKernel("kernelCalculateStd");
+        kernelCorrectMPmap = programLiveSRRF.createCLKernel("kernelCorrectMPmap");
 
 
 
@@ -236,7 +240,8 @@ public class liveSRRF_CL {
         kernelCalculateSRRF.setArg(argn++, clBufferShiftXY); // make sure type is the same !!
         kernelCalculateSRRF.setArg(argn++, clBufferCurrentFrame); // make sure type is the same !!
 
-        kernelIncrementFramePosition.setArg(0, clBufferCurrentFrame); // make sure type is the same !!
+        argn = 0;
+        kernelIncrementFramePosition.setArg(argn++, clBufferCurrentFrame); // make sure type is the same !!
 
         argn = 0;
         kernelCalculateMPmap.setArg(argn++, clBufferOut); // make sure type is the same !!
@@ -244,6 +249,10 @@ public class liveSRRF_CL {
 
         argn = 0;
         kernelCalculateStd.setArg(argn++, clBufferOut);
+
+        argn = 0;
+        kernelCorrectMPmap.setArg(argn++, clBufferOut); // make sure type is the same !!
+        kernelCorrectMPmap.setArg(argn++, clBufferMPmap); // make sure type is the same !!
 
 
         queue = chosenDevice.createCommandQueue();
@@ -277,7 +286,7 @@ public class liveSRRF_CL {
 
 
     // --- Calculate SRRF images ---
-    public synchronized boolean calculateSRRF(ImageStack imsRawData) { // returns boolean desribing whether it was cancelled by user or not
+    public synchronized boolean calculateSRRF(ImageStack imsRawData) { // returns boolean describing whether it was cancelled by user or not
 
         assert (imsRawData.getWidth() == width && imsRawData.getHeight() == height);
         int nFrameToLoad = imsRawData.getSize();
@@ -331,15 +340,29 @@ public class liveSRRF_CL {
             prof.recordTime("Increment frame count", prof.endTimer(id));
         }
 
-        // Calculate the STD on the OutputArray on the GPU
-        queue.put1DRangeKernel(kernelCalculateStd, 0, heightM*heightM,0);
-
         return false;
 
     }
 
     // --- Read the output buffer ---
     public void readSRRFbuffer() {
+
+
+        // Calculate the STD on the OutputArray on the GPU
+        int id = prof.startTimer();
+        queue.finish(); // Make sure everything is done
+        queue.put1DRangeKernel(kernelCalculateStd, 0, heightM*widthM,0);
+        prof.recordTime("Calculate STD image", prof.endTimer(id));
+
+        if (doMPmapCorrection) {
+            id = prof.startTimer();
+            queue.put1DRangeKernel(kernelCalculateMPmap, 0, 2 * magnification * magnification, 0);
+            prof.recordTime("Calculate MP map", prof.endTimer(id));
+
+            id = prof.startTimer();
+            queue.put1DRangeKernel(kernelCorrectMPmap, 0, 2 * heightM*widthM, 0);
+            prof.recordTime("Correct for MP map", prof.endTimer(id));
+        }
 
         queue.finish(); // Make sure everything is done
         queue.putReadBuffer(clBufferOut, true);
@@ -379,7 +402,6 @@ public class liveSRRF_CL {
         }
         imsSRRF.addSlice(new FloatProcessor(widthM, heightM, dataSRRF));
 
-//        return imsSRRF;
     }
 
 
@@ -401,30 +423,5 @@ public class liveSRRF_CL {
         queue.put1DRangeKernel(kernelResetFramePosition, 0, 1, 0);
         prof.recordTime("Reset SRRF frame counter", prof.endTimer(id));
     }
-
-    // --- Calculate and get the Macro-pixel map ---
-    public ImageStack getMPmap() {
-
-        int id = prof.startTimer();
-        queue.put1DRangeKernel(kernelCalculateMPmap,0,2 * magnification * magnification,0);
-        prof.recordTime("Calculate MP map", prof.endTimer(id));
-
-        ImageStack imsMPmap = new ImageStack(magnification, 2 * magnification);
-        queue.finish(); // Make sure everything is done
-        queue.putReadBuffer(clBufferMPmap, true);
-        FloatBuffer bufferMPmap = clBufferMPmap.getBuffer();
-
-        float[] dataMPmap = new float[2*magnification*magnification];
-        for (int n = 0; n < 2*magnification*magnification; n++) {
-            if (Float.isNaN(dataMPmap[n])) dataMPmap[n] = 0; // make sure we dont get any weirdness
-            dataMPmap[n] = bufferMPmap.get(n);
-        }
-
-        imsMPmap.addSlice(new FloatProcessor(magnification, 2 * magnification, dataMPmap));
-
-        return imsMPmap;
-
-    }
-
 
 }

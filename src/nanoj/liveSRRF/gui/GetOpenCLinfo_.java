@@ -57,7 +57,6 @@ public class GetOpenCLinfo_ implements PlugIn {
         }
 
         IJ.log("-----------------");
-        assert clDeviceMaxFlop != null;
         IJ.log("Maximum flops device: " + clDeviceMaxFlop.getName());
 
 

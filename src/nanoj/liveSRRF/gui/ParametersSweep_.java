@@ -366,8 +366,8 @@ public class ParametersSweep_ implements PlugIn {
                     // FRC resolution estimation
                     if (calculateFRC) {
 
-                        // Calculate and get the reconstruction from the odd frames
-                        liveSRRF.initialise(width, height, magnification, fwhmArray[fi], sensitivityArray[si], 1, nframeArray[nfi], blockSize, null, true);
+                        // Calculate and get the reconstruction from the odd frames // TODO: add options to do intensity weighting or MPcorrection
+                        liveSRRF.initialise(width, height, magnification, fwhmArray[fi], sensitivityArray[si], 1, nframeArray[nfi], blockSize, null, true, true);
                         liveSRRF.resetFramePosition();
                         liveSRRF.loadShiftXYGPUbuffer(shiftXtempOdd, shiftYtempOdd);
 
@@ -384,8 +384,8 @@ public class ParametersSweep_ implements PlugIn {
                         fpOddAVG = imsBuffer.getProcessor(1).convertToFloatProcessor();
                         fpOddSTD = imsBuffer.getProcessor(2).convertToFloatProcessor();
 
-                        // Calculate and get the reconstruction from the even frames
-                        liveSRRF.initialise(width, height, magnification, fwhmArray[fi], sensitivityArray[si], 1, nframeArray[nfi], blockSize, null, true);
+                        // Calculate and get the reconstruction from the even frames // TODO: add options to do intensity weighting or MPcorrection
+                        liveSRRF.initialise(width, height, magnification, fwhmArray[fi], sensitivityArray[si], 1, nframeArray[nfi], blockSize, null, true, true);
                         liveSRRF.resetFramePosition();
                         liveSRRF.loadShiftXYGPUbuffer(shiftXtempEven, shiftYtempEven);
 
@@ -403,8 +403,8 @@ public class ParametersSweep_ implements PlugIn {
 
 
                     } else {
-
-                        liveSRRF.initialise(width, height, magnification, fwhmArray[fi], sensitivityArray[si], 1, nframeArray[nfi], blockSize, null, true);
+                        // TODO: add options to do intensity weighting or MPcorrection
+                        liveSRRF.initialise(width, height, magnification, fwhmArray[fi], sensitivityArray[si], 1, nframeArray[nfi], blockSize, null, true, true);
                         liveSRRF.resetFramePosition();
                         liveSRRF.loadShiftXYGPUbuffer(shiftXtemp, shiftYtemp);
 

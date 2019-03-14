@@ -461,8 +461,6 @@ __kernel void kernelCalculateMPmap(
     int y;
     int offset;
 
-//    int maxOffset = 0;
-//    int i = w;
     for (int i=0; i<wh; i++) {
         y = i/w;
         x = i - y*w;
@@ -470,6 +468,23 @@ __kernel void kernelCalculateMPmap(
         thisMPmapValue += OutArray[offset];
     }
     MPmap[offset_MPmap] = thisMPmapValue/wh;
-//    MPmap[offset_MPmap] = thisMPmapValue;
+
+}
+
+// kernel: correct for Macro-pixel artefacts
+__kernel void kernelCorrectMPmap(
+     __global float* OutArray,
+     __global float* MPmap
+){
+
+    const int offset = get_global_id(0);
+    const int frame = offset/whM; // 0 or 1 depending on whether we're dealing with AVG or STD
+    const int yM = (offset - frame*(whM))/wM;
+    const int xM = offset - yM*wM - frame*whM;
+    const int x = xM/magnification;
+    const int y = yM/magnification;
+
+    int offset_MPmap = magnification*magnification*frame + magnification*(yM - y*magnification) + xM - x*magnification;
+    OutArray[offset] = OutArray[offset]/MPmap[offset_MPmap];
 
 }

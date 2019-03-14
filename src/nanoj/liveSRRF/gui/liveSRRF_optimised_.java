@@ -54,9 +54,10 @@ public class liveSRRF_optimised_ implements PlugIn {
             previousWriteToDisk = false,
             previousAdvSettings = false,
             writeSuggestOKeyed = false,
+            doMPmapCorrection,
             intWeighting;
 
-    private final String LiveSRRFVersion = "v1.5";
+    private final String LiveSRRFVersion = "v1.6";
     private String pathToDisk = "",
             fileName,
             chosenDeviceName;
@@ -107,6 +108,7 @@ public class liveSRRF_optimised_ implements PlugIn {
         blockSize = (int) prefs.get("blockSize", 20000);
         writeToDiskToUse = false;
         intWeighting = prefs.get("intWeighting", true);
+        doMPmapCorrection = prefs.get("doMPmapCorrection", true);
 
         // Close the log: //TODO: this seems to sometimes make a different whether OpenCL runs or not (observation from Nvidia 1050, not repeatable)
         if (IJ.getLog() != null) {
@@ -195,7 +197,7 @@ public class liveSRRF_optimised_ implements PlugIn {
 
         ImageStack imsAllRawData = imp.getImageStack();
 
-        liveSRRF.initialise(width, height, magnification, fwhm, sensitivity, nFrameOnGPU, nFrameForSRRFtoUse, blockSize, chosenDevice, intWeighting);
+        liveSRRF.initialise(width, height, magnification, fwhm, sensitivity, nFrameOnGPU, nFrameForSRRFtoUse, blockSize, chosenDevice, intWeighting, doMPmapCorrection);
 
         shiftX = new float[nFrameForSRRFtoUse];
         shiftY = new float[nFrameForSRRFtoUse];
@@ -278,10 +280,10 @@ public class liveSRRF_optimised_ implements PlugIn {
             liveSRRF.readSRRFbuffer();
             imsBuffer = liveSRRF.imsSRRF;
 
-            impMPmap = new ImagePlus("MP map",liveSRRF.getMPmap());
-            impMPmap.setCalibration(cal);
-            IJ.run(impMPmap, "Enhance Contrast", "saturated=0.5");
-            impMPmap.show();
+//            impMPmap = new ImagePlus("MP map",liveSRRF.getMPmap());
+//            impMPmap.setCalibration(cal);
+//            IJ.run(impMPmap, "Enhance Contrast", "saturated=0.5");
+//            impMPmap.show();
 
             if (writeToDiskToUse) {
                 try {
@@ -533,6 +535,7 @@ public class liveSRRF_optimised_ implements PlugIn {
 
         gd.addMessage("-=-= Advanced reconstruction settings (for testing) =-=-\n", headerFont);
         gd.addCheckbox("Intensity weighting", prefs.get("intWeighting", true));
+        gd.addCheckbox("Correct for Macro-pixel patterning", prefs.get("doMPmapCorrection", true));
 
 
         gd.addHelp("https://www.youtube.com/watch?v=otCpCn0l4Wo"); // it's Hammer time
@@ -547,6 +550,7 @@ public class liveSRRF_optimised_ implements PlugIn {
             maxMemoryGPU = prefs.get("maxMemoryGPU", 500);
             blockSize = (int) prefs.get("blockSize", 20000);
             intWeighting = prefs.get("intWeighting", true);
+            doMPmapCorrection = prefs.get("doMPmapCorrection", true);
 
             // re-initialises to how it was before entering advanced GUI
             writeToDiskToUse = writeToDiskTemp;
@@ -557,6 +561,7 @@ public class liveSRRF_optimised_ implements PlugIn {
             prefs.set("maxMemoryGPU", maxMemoryGPU);
             prefs.set("blockSize", blockSize);
             prefs.set("intWeighting", intWeighting);
+            prefs.set("doMPmapCorrection", doMPmapCorrection);
             prefs.save();
         }
 
@@ -582,6 +587,7 @@ public class liveSRRF_optimised_ implements PlugIn {
 
         writeToDiskTemp = gd.getNextBoolean();
         intWeighting = gd.getNextBoolean();
+        doMPmapCorrection = gd.getNextBoolean();
 
         if (writeToDiskTemp && !previousWriteToDisk) {
             pathToDisk = IJ.getDirectory("");
