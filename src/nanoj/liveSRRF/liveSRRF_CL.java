@@ -357,7 +357,7 @@ public class liveSRRF_CL {
         }
         imsSRRF.addSlice(new FloatProcessor(widthM, heightM, dataSRRF));
 
-        // Load standard deviation // TODO: do this on GPU !!!
+        // Load standard deviation // TODO: do this on GPU - test but this looks fine
         dataSRRF = new float[widthM * heightM];
         for (int n = 0; n < widthM * heightM; n++) {
             //dataSRRF[n] = bufferSRRF.get(n + widthM * heightM) - bufferSRRF.get(n) * bufferSRRF.get(n); // Var[X] = E[X^2] - (E[X])^2

@@ -293,8 +293,7 @@ public class ErrorMapLiveSRRF {
     float getIntegratedGaussian(float dx, float dy, float sigma2) {
         float Ex = 0.5f * (erf((dx + 0.5f) / sigma2) - erf((dx - 0.5f) / sigma2));
         float Ey = 0.5f * (erf((dy + 0.5f) / sigma2) - erf((dy - 0.5f) / sigma2));
-        float vKernel = Ex * Ey;
-        return vKernel;
+        return Ex * Ey;
     }
 
     float erf(float g) {

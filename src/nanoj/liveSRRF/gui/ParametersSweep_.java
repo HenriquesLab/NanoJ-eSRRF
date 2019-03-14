@@ -731,7 +731,7 @@ public class ParametersSweep_ implements PlugIn {
     private boolean calculateLiveSRRFsingleframeLoad(ImageStack imsAllRawData, int nf, int mode) {
 
         ImageStack imsThisRawData;
-        boolean userPressedEscape =false;
+        boolean userPressedEscape = false;
         int fmode;
 
         IJ.showStatus("Calculating liveSRRF image...");

@@ -314,7 +314,7 @@ public class SRRF2CL {
 
         public float g, o;
 
-        public ThreadedNormaliseAndCalculateErrorMap(float[] dataRef, float dataSRRF[], float[] dataSRRFConvolved, float[] dataErrorMap, int width, int height) {
+        public ThreadedNormaliseAndCalculateErrorMap(float[] dataRef, float[] dataSRRF, float[] dataSRRFConvolved, float[] dataErrorMap, int width, int height) {
             this.dataRef = dataRef;
             this.dataSRRF = dataSRRF;
             this.dataSRRFConvolved = dataSRRFConvolved;

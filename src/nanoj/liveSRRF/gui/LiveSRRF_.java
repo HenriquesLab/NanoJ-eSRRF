@@ -31,7 +31,6 @@ public class LiveSRRF_ implements PlugIn {
     private NanoJUsageTracker tracker = new NanoJUsageTracker("NanoJ-LiveSRRF", version, "UA-61590656-4");
     private NanoJProfiler prof = new NanoJProfiler();
 
-    private ImageStack imsSRRF;
     private ImagePlus impCCM = null;
 
     private ImagePlus imp;
@@ -96,7 +95,7 @@ public class LiveSRRF_ implements PlugIn {
         cal.pixelWidth /= magnification;
         cal.pixelHeight /= magnification;
 
-        imsSRRF = new ImageStack(wM, hM);
+        ImageStack imsSRRF = new ImageStack(wM, hM);
         //impSRRF.setStack(imsSRRF);
         ImageStack imsRawDataBuffer = new ImageStack(w, h);
         boolean firstTime = true;
