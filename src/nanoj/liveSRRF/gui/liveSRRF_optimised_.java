@@ -57,7 +57,7 @@ public class liveSRRF_optimised_ implements PlugIn {
             doMPmapCorrection,
             intWeighting;
 
-    private final String LiveSRRFVersion = "v1.7";
+    private final String LiveSRRFVersion = "v1.8";
     private String pathToDisk = "",
             fileName,
             chosenDeviceName,
@@ -112,11 +112,12 @@ public class liveSRRF_optimised_ implements PlugIn {
         intWeighting = prefs.get("intWeighting", true);
         doMPmapCorrection = prefs.get("doMPmapCorrection", true);
 
-        // Close the log: //TODO: this seems to sometimes make a different whether OpenCL runs or not (observation from Nvidia 1050, not repeatable)
-        if (IJ.getLog() != null) {
-            selectWindow("Log");
-            IJ.run("Close");
-        }
+//        // Close the log: //TODO: this seems to sometimes make a different whether OpenCL runs or not (observation from Nvidia 1050, not repeatable)
+        // TODO: but this causes the GUI to pop up when using liveSRRF in a macro
+//        if (IJ.getLog() != null) {
+//            selectWindow("Log");
+//            IJ.run("Close");
+//        }
 
         IJ.log("\\Clear");  // Clear the log window
         IJ.log("-------------------------------------");
