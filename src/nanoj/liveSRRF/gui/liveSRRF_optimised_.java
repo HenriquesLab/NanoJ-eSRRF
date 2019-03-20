@@ -57,7 +57,7 @@ public class liveSRRF_optimised_ implements PlugIn {
             doMPmapCorrection,
             intWeighting;
 
-    private final String LiveSRRFVersion = "v1.8";
+    private final String LiveSRRFVersion = "v1.9";
     private String pathToDisk = "",
             fileName,
             chosenDeviceName,
@@ -180,6 +180,7 @@ public class liveSRRF_optimised_ implements PlugIn {
         IJ.log("# reconstructed frames: " + nSRRFframe);
         IJ.log("# device load / SRRF frame: " + nGPUloadPerSRRFframe);
         IJ.log("Macro-pixel artefact removal: " + doMPmapCorrection);
+        IJ.log("Vibration correction: "+ correctVibration);
 
         // Initialize ZipSaver in case we're writing to disk
         if (writeToDiskToUse) {
@@ -208,9 +209,6 @@ public class liveSRRF_optimised_ implements PlugIn {
 
         XYShiftCalculator shiftCalculator = new XYShiftCalculator(imp, prof);
         ImageStack imsBuffer;
-
-
-        ImagePlus impMPmap;
 
         ImageStack imsRawData;
         ImageStack imsSRRFavg = new ImageStack(width * magnification, height * magnification);
@@ -442,7 +440,7 @@ public class liveSRRF_optimised_ implements PlugIn {
         gd.addNumericField("Radius (pixels, default: 2)", prefs.get("fwhm", 2), 2);
         gd.addNumericField("Sensitivity (default: 1)", prefs.get("sensitivity", 1), 0);
         gd.addNumericField("# frames for SRRF (0 = auto)", prefs.get("nFrameForSRRFfromUser", 0), 0);
-        gd.addCheckbox("Correct vibration", prefs.get("correctVibration", false));
+        gd.addCheckbox("Vibration correction", prefs.get("correctVibration", false));
 
         gd.addMessage("-=-= Reconstructions =-=-\n", headerFont);
         gd.addChoice("Temporal analysis", temporalAnalysis, prefs.get("chosenTemporalAnalysis", temporalAnalysis[2]));
@@ -556,7 +554,7 @@ public class liveSRRF_optimised_ implements PlugIn {
 
         gd.addMessage("-=-= Advanced reconstruction settings (for testing) =-=-\n", headerFont);
         gd.addCheckbox("Intensity weighting", prefs.get("intWeighting", true));
-        gd.addCheckbox("Correct for Macro-pixel patterning", prefs.get("doMPmapCorrection", true));
+        gd.addCheckbox("Macro-pixel patterning correction", prefs.get("doMPmapCorrection", true));
 
 
         gd.addHelp("https://www.youtube.com/watch?v=otCpCn0l4Wo"); // it's Hammer time

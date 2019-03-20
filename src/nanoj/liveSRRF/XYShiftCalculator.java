@@ -49,7 +49,7 @@ public class XYShiftCalculator {
             }
 
             // Grab the new frame from the list
-            ipData = ims.getProcessor(s+1);
+            ipData = ims.getProcessor(s+indexStart);
 
             // Estimate vibrations
             int id = prof.startTimer();
