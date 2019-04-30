@@ -5,6 +5,7 @@ import ij.*;
 import ij.gui.DialogListener;
 import ij.gui.GenericDialog;
 import ij.gui.NonBlockingGenericDialog;
+import ij.gui.Plot;
 import ij.measure.Calibration;
 import ij.plugin.PlugIn;
 import nanoj.core.java.io.zip.SaveFileInZip;
@@ -55,9 +56,10 @@ public class liveSRRF_optimised_ implements PlugIn {
             previousAdvSettings = false,
             writeSuggestOKeyed = false,
             doMPmapCorrection,
+            showImStabPlot,
             intWeighting;
 
-    private final String LiveSRRFVersion = "v1.9";
+    private final String LiveSRRFVersion = "v1.10";
     private String pathToDisk = "",
             fileName,
             chosenDeviceName,
@@ -246,6 +248,22 @@ public class liveSRRF_optimised_ implements PlugIn {
                 shiftCalculator.calculateShiftArray(indexStartSRRFframe, nFrameForSRRFtoUse);
                 shiftX = shiftCalculator.shiftX;
                 shiftY = shiftCalculator.shiftY;
+
+                if (showImStabPlot) {
+                    // Scatter plot
+                    Plot scatterPlot = new Plot("x/y scatter plot (spectrum LUT-coded) #" + r, "x (pixels)", "y (pixels)");
+                    for (int i = 0; i < nFrameForSRRFtoUse; i++) {
+                        float[] x_temp = new float[1];
+                        float[] y_temp = new float[1];
+                        x_temp[0] = shiftX[i];
+                        y_temp[0] = shiftY[i];
+                        scatterPlot.setColor(Color.getHSBColor(i / (float) nSlices, 1f, 1f)); // this corresponds to the spectrum LUT
+                        scatterPlot.addPoints(x_temp, y_temp, Plot.CROSS);
+                    }
+                    scatterPlot.show();
+                    scatterPlot.setLimitsToFit(true);
+                }
+
             }
 
             liveSRRF.loadShiftXYGPUbuffer(shiftX, shiftY);
@@ -276,7 +294,7 @@ public class liveSRRF_optimised_ implements PlugIn {
 
                 // Estimating the remaining time
                 currentNLoad = nGPUloadPerSRRFframe*(r-1) + l+1;
-                singleLoadTime = ((System.nanoTime() - loopStart) / currentNLoad) / 1e9;
+                singleLoadTime = ((System.nanoTime() - loopStart) / (float) currentNLoad) / 1e9;
                 remainingTime = singleLoadTime * (nSRRFframe * nGPUloadPerSRRFframe - currentNLoad);
                 IJ.showStatus("LiveSRRF - Remaining time: " + timeToString(remainingTime));
             }
@@ -555,7 +573,7 @@ public class liveSRRF_optimised_ implements PlugIn {
         gd.addMessage("-=-= Advanced reconstruction settings (for testing) =-=-\n", headerFont);
         gd.addCheckbox("Intensity weighting", prefs.get("intWeighting", true));
         gd.addCheckbox("Macro-pixel patterning correction", prefs.get("doMPmapCorrection", true));
-
+        gd.addCheckbox("Show image stabilisation scatter plot", prefs.get("showImStabPlot", false));
 
         gd.addHelp("https://www.youtube.com/watch?v=otCpCn0l4Wo"); // it's Hammer time
 
@@ -570,6 +588,7 @@ public class liveSRRF_optimised_ implements PlugIn {
             blockSize = (int) prefs.get("blockSize", 20000);
             intWeighting = prefs.get("intWeighting", true);
             doMPmapCorrection = prefs.get("doMPmapCorrection", true);
+            showImStabPlot = prefs.get("showImStabPlot", false);
 
             // re-initialises to how it was before entering advanced GUI
             writeToDiskToUse = writeToDiskTemp;
@@ -581,6 +600,7 @@ public class liveSRRF_optimised_ implements PlugIn {
             prefs.set("blockSize", blockSize);
             prefs.set("intWeighting", intWeighting);
             prefs.set("doMPmapCorrection", doMPmapCorrection);
+            prefs.set("showImStabPlot", showImStabPlot);
             prefs.save();
         }
 
@@ -607,6 +627,7 @@ public class liveSRRF_optimised_ implements PlugIn {
         writeToDiskTemp = gd.getNextBoolean();
         intWeighting = gd.getNextBoolean();
         doMPmapCorrection = gd.getNextBoolean();
+        showImStabPlot = gd.getNextBoolean();
 
         if (writeToDiskTemp && !previousWriteToDisk) {
             pathToDisk = IJ.getDirectory("");

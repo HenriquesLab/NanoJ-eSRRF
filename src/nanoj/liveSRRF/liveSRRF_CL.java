@@ -144,6 +144,7 @@ public class liveSRRF_CL {
 //            IJ.log("Looking for the fastest device...");
             System.out.println("Using the fastest device...");
             context = CLContext.create(clPlatformMaxFlop);
+//            context = CLContext.create();
             chosenDevice = context.getMaxFlopsDevice();
 //            IJ.log("Using "+chosenDevice.getName());
         }
@@ -263,8 +264,9 @@ public class liveSRRF_CL {
                         clBufferGxInt.getCLSize() +
                         clBufferGyInt.getCLSize() +
                         clBufferOut.getCLSize() +
-                        clBufferCurrentFrame.getCLSize()) +
+                        clBufferCurrentFrame.getCLSize() +
                         clBufferMPmap.getCLSize()
+        )
                 / 1000000d + "MB");
 
     }
