@@ -315,10 +315,9 @@ public class liveSRRF_CL {
 //        IJ.log("Calculating SRRF...");
 
         int workSize;
+        int nBlocks = widthM * heightM / blockLength + ((widthM * heightM % blockLength == 0) ? 0 : 1);
 
         for (int f = 0; f < nFrameToLoad; f++) {
-
-            int nBlocks = widthM * heightM / blockLength + ((widthM * heightM % blockLength == 0) ? 0 : 1);
 
             for (int nB = 0; nB < nBlocks; nB++) {
                 workSize = min(blockLength, widthM * heightM - nB * blockLength);
@@ -369,12 +368,10 @@ public class liveSRRF_CL {
         queue.putReadBuffer(clBufferOut, true);
         FloatBuffer bufferSRRF = clBufferOut.getBuffer();
 
-//        ImageStack imsSRRF = new ImageStack(widthM, heightM);
-        float[] dataSRRF;
         imsSRRF = new ImageStack(widthM, heightM);
 
         // Load average
-        dataSRRF = new float[widthM * heightM];
+        float[] dataSRRF = new float[widthM * heightM];
         for (int n = 0; n < widthM * heightM; n++) {
             dataSRRF[n] = bufferSRRF.get(n);
             if (Float.isNaN(dataSRRF[n])) dataSRRF[n] = 0; // make sure we dont get any weirdness
