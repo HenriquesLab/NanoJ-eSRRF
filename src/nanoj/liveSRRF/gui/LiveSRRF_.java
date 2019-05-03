@@ -53,7 +53,7 @@ public class LiveSRRF_ implements PlugIn {
         gd.addCheckbox("Correct vibration", prefs.get("correctVibration", false));
         gd.addCheckbox("Correct sCMOS patterning", prefs.get("correctSCMOS", false));
         gd.addMessage("-=-= Reconstructions =-=-\n", headerFont);
-        gd.addCheckbox("Show_all reconstruction (default: off)", prefs.get("showAllReconstructions", false));
+        gd.addCheckbox("Show all reconstruction (default: off)", prefs.get("showAllReconstructions", false));
         gd.addNumericField("Accumulative_timelags (default: 5)", prefs.get("nTimeLags", 5), 0);
         gd.addCheckbox("Calculate for bin 2 (default: off)", prefs.get("doBin2", false));
         gd.addCheckbox("Calculate for bin 4 (default: off)", prefs.get("doBin4", false));

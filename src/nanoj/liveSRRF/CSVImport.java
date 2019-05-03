@@ -13,6 +13,10 @@ import java.util.Locale;
 import java.util.Scanner;
 import java.io.IOException;
 
+// A large part of this was taken from ThunderSTORM code on Github on 2019-05-01
+// https://github.com/zitmen/thunderstorm/blob/master/src/main/java/cz/cuni/lf1/lge/ThunderSTORM/ImportExport/DLMImportExport.java
+
+
 public class CSVImport {
 
     public DefaultFloatTable dataTable;
