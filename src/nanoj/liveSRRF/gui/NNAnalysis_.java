@@ -6,6 +6,7 @@ import ij.gui.NonBlockingGenericDialog;
 import ij.gui.Plot;
 import ij.io.OpenDialog;
 import ij.plugin.PlugIn;
+import nanoj.core2.NanoJPrefs;
 import nanoj.liveSRRF.CSVImport;
 import nanoj.liveSRRF.NNDistance_CL;
 import org.scijava.table.DefaultFloatTable;
@@ -14,6 +15,8 @@ public class NNAnalysis_ implements PlugIn {
 
     private int nLocs;
     private int nColX, nColY, nColFrame, nFrameToChop;
+    private NanoJPrefs prefs = new NanoJPrefs(this.getClass().getName());
+
 
 
     // TODO: how to ignore the dark areas? BG localizations? run DBSCAN on localization on TS beforehand!
@@ -35,7 +38,7 @@ public class NNAnalysis_ implements PlugIn {
         simChoice[0] = "From ThunderSTORM";
         simChoice[1] = "From SureSim";
         NonBlockingGenericDialog gd = new NonBlockingGenericDialog("NanoJ - Localisation density analysis");
-        gd.addChoice("Loc file type: ", simChoice, simChoice[0]);
+        gd.addChoice("Loc file type: ", simChoice, prefs.get("simType", simChoice[0]));
 
         gd.showDialog();
         if (gd.wasCanceled()) return;
@@ -45,6 +48,7 @@ public class NNAnalysis_ implements PlugIn {
         if (simType.equals(simChoice[0])) {
             try {
                 IJ.log("Reading file...");
+                IJ.log(filePath);
                 CSVImport csvImport = new CSVImport(filePath, ",");
                 dataTable = csvImport.dataTable;
             } catch (Exception e) {
@@ -58,6 +62,7 @@ public class NNAnalysis_ implements PlugIn {
         else{
             try {
                 IJ.log("Reading file...");
+                IJ.log(filePath);
                 CSVImport csvImport = new CSVImport(filePath, " ");
                 dataTable = csvImport.dataTable;
             } catch (Exception e) {
@@ -75,14 +80,13 @@ public class NNAnalysis_ implements PlugIn {
         IJ.log("Number of frames: " + nFrames);
 
         gd = new NonBlockingGenericDialog("NanoJ - Localisation density analysis");
-        gd.addNumericField("Size of temporal blocks (frames): ", 100, 0);
-        gd.addNumericField("Radius for density calculation (nm): ", 100, 2);
-        gd.addNumericField("Number of spatial blocks per axis: ", 4, 0);
-        gd.addNumericField("Image width/height (nm): ", 40960, 2);
-        gd.addNumericField("Number of frames to ignore (at start & end): ", 10, 0);
-        gd.addNumericField("GPU block size: ", 20000, 0);
-
-        gd.addCheckbox("Show histograms ", false);
+        gd.addNumericField("Size of temporal blocks (frames): ", prefs.get("blockSize", 100), 0);
+        gd.addNumericField("Radius for density calculation (nm): ", prefs.get("densityRadius", 100), 2);
+        gd.addNumericField("Number of spatial blocks per axis: ", prefs.get("blockPerAxis", 4), 0);
+        gd.addNumericField("Image width/height (nm): ", prefs.get("imageSize", 40960), 2);
+        gd.addNumericField("Number of frames to ignore (at start & end): ", prefs.get("nFrameToChop", 10), 0);
+        gd.addNumericField("GPU block size: ", prefs.get("blockLength", 20000), 0);
+        gd.addCheckbox("Show histograms ", prefs.get("showHistogram", false));
         gd.showDialog();
         if (gd.wasCanceled()) return;
 
@@ -93,6 +97,17 @@ public class NNAnalysis_ implements PlugIn {
         nFrameToChop = (int) gd.getNextNumber();
         int blockLength = (int) gd.getNextNumber();
         boolean showHistogram = gd.getNextBoolean();
+
+
+        prefs.set("simType", simType);
+        prefs.set("blockSize", blockSize);
+        prefs.set("densityRadius", densityRadius);
+        prefs.set("blockPerAxis", blockPerAxis);
+        prefs.set("imageSize", imageSize);
+        prefs.set("nFrameToChop", nFrameToChop);
+        prefs.set("blockLength", blockLength);
+        prefs.set("showHistogram", showHistogram);
+
 
         nFrames -= 2*nFrameToChop; // adjust the number of frames
 
