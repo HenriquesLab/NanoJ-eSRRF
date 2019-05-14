@@ -20,13 +20,14 @@ import java.io.IOException;
 public class CSVImport {
 
     public DefaultFloatTable dataTable;
-    private String separator = ",";
+    private String separator;
     private int floatPrecision = 5;
 
-    public CSVImport(String filePath) throws IOException {
+    public CSVImport(String filePath, String stringSeparator) throws IOException {
 
         File file = new File(filePath);
         long fileSize = file.length();
+        separator = stringSeparator;
 
         //im using file size and counting bytes read to track progress (without having to know line count in advance)
         Scanner sc = null;

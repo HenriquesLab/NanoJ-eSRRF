@@ -34,7 +34,7 @@ public class NNDistance_CL {
 
     private int nLocs,
             blockPerAxis,
-            blockLength = 2000; // TODO: determine depending on the GPU?
+            blockLength; // TODO: determine depending on the GPU?
 
     private float densityRadius, imageSize;
 
@@ -42,11 +42,12 @@ public class NNDistance_CL {
 
     public ImageStack imsNND, imsDensity;
 
-    public NNDistance_CL(float densityRadius, int blockPerAxis, float imageSize) {
+    public NNDistance_CL(float densityRadius, int blockPerAxis, float imageSize, int blockLength) {
 
         this.densityRadius = densityRadius;
         this.blockPerAxis = blockPerAxis;
         this.imageSize = imageSize;
+        this.blockLength = blockLength;
 
         this.imsNND = new ImageStack(blockPerAxis, blockPerAxis);
         this.imsDensity = new ImageStack(blockPerAxis, blockPerAxis);

@@ -13,6 +13,8 @@ import org.scijava.table.DefaultFloatTable;
 public class NNAnalysis_ implements PlugIn {
 
     private int nLocs;
+    private int nColX, nColY, nColFrame, nFrameToChop;
+
 
     // TODO: how to ignore the dark areas? BG localizations? run DBSCAN on localization on TS beforehand!
 
@@ -25,28 +27,61 @@ public class NNAnalysis_ implements PlugIn {
         IJ.log("-------------------------------------");
         IJ.log("-------------------------------------");
 
+
         OpenDialog dialog = new OpenDialog("Please choose a localization file"); // TODO: handle cancel
         String filePath = dialog.getPath();
-        try {
-            IJ.log("Reading file...");
-            CSVImport csvImport = new CSVImport(filePath);
-            dataTable = csvImport.dataTable;
-        } catch (Exception e) {
-            IJ.log("Computer says no.");
+
+        String[] simChoice = new String[2];
+        simChoice[0] = "From ThunderSTORM";
+        simChoice[1] = "From SureSim";
+        NonBlockingGenericDialog gd = new NonBlockingGenericDialog("NanoJ - Localisation density analysis");
+        gd.addChoice("Loc file type: ", simChoice, simChoice[0]);
+
+        gd.showDialog();
+        if (gd.wasCanceled()) return;
+
+        String simType = gd.getNextChoice();
+
+        if (simType.equals(simChoice[0])) {
+            try {
+                IJ.log("Reading file...");
+                CSVImport csvImport = new CSVImport(filePath, ",");
+                dataTable = csvImport.dataTable;
+            } catch (Exception e) {
+                IJ.log("Computer says no.");
+            }
+            nColX = 1;
+            nColY = 2;
+            nColFrame = 0;
+        }
+
+        else{
+            try {
+                IJ.log("Reading file...");
+                CSVImport csvImport = new CSVImport(filePath, " ");
+                dataTable = csvImport.dataTable;
+            } catch (Exception e) {
+                IJ.log("Computer says no.");
+            }
+            nColX = 0;
+            nColY = 1;
+            nColFrame = 3;
         }
 
         nLocs = dataTable.getRowCount();
-        int nFrames = Math.round(dataTable.get(0, nLocs - 1));
+        int nFrames = Math.round(dataTable.get(nColFrame, nLocs - 1));
         IJ.log("Number of localizations: " + nLocs);
         IJ.log("Number of columns: " + dataTable.getColumnCount());
         IJ.log("Number of frames: " + nFrames);
 
-
-        NonBlockingGenericDialog gd = new NonBlockingGenericDialog("NanoJ - Localisation density analysis");
+        gd = new NonBlockingGenericDialog("NanoJ - Localisation density analysis");
         gd.addNumericField("Size of temporal blocks (frames): ", 100, 0);
         gd.addNumericField("Radius for density calculation (nm): ", 100, 2);
         gd.addNumericField("Number of spatial blocks per axis: ", 4, 0);
         gd.addNumericField("Image width/height (nm): ", 40960, 2);
+        gd.addNumericField("Number of frames to ignore (at start & end): ", 10, 0);
+        gd.addNumericField("GPU block size: ", 20000, 0);
+
         gd.addCheckbox("Show histograms ", false);
         gd.showDialog();
         if (gd.wasCanceled()) return;
@@ -55,10 +90,13 @@ public class NNAnalysis_ implements PlugIn {
         float densityRadius = (float) gd.getNextNumber();
         int blockPerAxis = (int) gd.getNextNumber();
         float imageSize = (float) gd.getNextNumber();
+        nFrameToChop = (int) gd.getNextNumber();
+        int blockLength = (int) gd.getNextNumber();
         boolean showHistogram = gd.getNextBoolean();
 
+        nFrames -= 2*nFrameToChop; // adjust the number of frames
 
-        NNDistance_CL nndCalculator = new NNDistance_CL(densityRadius, blockPerAxis, imageSize);
+        NNDistance_CL nndCalculator = new NNDistance_CL(densityRadius, blockPerAxis, imageSize, blockLength);
 
         int nTempBlocks = nFrames / blockSize;
         IJ.log("Number of blocks to compute: " + nTempBlocks);
@@ -76,8 +114,8 @@ public class NNAnalysis_ implements PlugIn {
 
         for (int ntB = 0; ntB < nTempBlocks; ntB++) {
 
-            int nStart = getFramePosition(ntB * blockSize + 1) + 1;
-            int nEnd = getFramePosition((ntB + 1) * blockSize + 1);
+            int nStart = getFramePosition(ntB * blockSize + 1 + nFrameToChop) + 1;
+            int nEnd = getFramePosition((ntB + 1) * blockSize + 1 + nFrameToChop);
             nLocsPerBlock[ntB] = nEnd - nStart + 1;
 
             IJ.log("Block #" + (ntB + 1) + "/" + nTempBlocks + " (using localizations #" + nStart + " to #" + nEnd + ")");
@@ -85,8 +123,8 @@ public class NNAnalysis_ implements PlugIn {
             if (nLocsPerBlock[ntB] > 1) {
                 float[] xyDataArray = new float[2 * nLocsPerBlock[ntB]];
                 for (int i = 0; i < nLocsPerBlock[ntB]; i++) {
-                    xyDataArray[i] = dataTable.get(1, i + nStart);
-                    xyDataArray[i + nLocsPerBlock[ntB]] = dataTable.get(2, i + nStart);
+                    xyDataArray[i] = dataTable.get(nColX, i + nStart);
+                    xyDataArray[i + nLocsPerBlock[ntB]] = dataTable.get(nColY, i + nStart);
                 }
 
                 nndCalculator.calculateNND(xyDataArray);
@@ -177,7 +215,7 @@ public class NNAnalysis_ implements PlugIn {
 
         int locPosition = -1;
         for (int i=0; i<nLocs; i++){
-            if (dataTable.get(0, i) < frameNumber) locPosition = i;
+            if (dataTable.get(nColFrame, i) < frameNumber) locPosition = i;
         }
 
         return locPosition;
