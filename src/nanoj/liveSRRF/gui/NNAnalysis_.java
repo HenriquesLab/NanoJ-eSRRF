@@ -216,9 +216,16 @@ public class NNAnalysis_ implements PlugIn {
 
 
         IJ.log("-----------------------------");
-        double[] globalMeanStd = getMeanStdFromArray(meanNNDarray);
+        double[] globalMeanStdNND = getMeanStdFromArray(meanNNDarray);
         IJ.log("Temporal block size: " + blockSize + " frames.");
-        IJ.log(String.format("NN distance (nm): %.2f +/- %.2f", globalMeanStd[0], globalMeanStd[1]));
+        IJ.log(String.format("NN distance (nm): %.2f +/- %.2f", globalMeanStdNND[0], globalMeanStdNND[1]));
+
+        double[] globalMeanStdDensity = getMeanStdFromArray(meanDensityArray);
+        double area = Math.PI*densityRadius*densityRadius/(1e6);
+        globalMeanStdDensity[0] /= area;
+        globalMeanStdDensity[1] /= area;
+
+        IJ.log(String.format("Density (#loc/um^2): %.2f +/- %.2f (using %.2f nm as a radius)", globalMeanStdDensity[0], globalMeanStdDensity[1], densityRadius));
 
         IJ.log("-----------------------------");
         IJ.log("All done. Cheerio !");
