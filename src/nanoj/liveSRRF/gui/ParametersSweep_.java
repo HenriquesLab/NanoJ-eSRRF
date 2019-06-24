@@ -51,7 +51,7 @@ public class ParametersSweep_ implements PlugIn {
 
     private float fixedSigma;
 
-    private final String LiveSRRFVersion = "v1.0";
+    private final String LiveSRRFVersion = "v1.1";
     private float[] shiftX, shiftY;
 
     private String chosenTemporalAnalysis;

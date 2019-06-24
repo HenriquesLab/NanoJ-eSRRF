@@ -89,10 +89,10 @@ public class ErrorMapLiveSRRF {
         //TODO: log message that we're cropping
 
         if (cropBorder){
-            impRef.setRoi(cropSize, cropSize, width, height);
+            impRef.setRoi(cropSize*magnification, cropSize*magnification, width, height);
             ImageProcessor impRefCropped = impRef.crop();
 
-            impSR.setRoi(cropSize, cropSize, width, height);
+            impSR.setRoi(cropSize*magnification, cropSize*magnification, width, height);
             ImageProcessor impSRcropped = impSR.crop();
 
             FloatProcessor fpRef = impRefCropped.convertToFloatProcessor();
