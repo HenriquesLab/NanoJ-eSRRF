@@ -59,7 +59,7 @@ public class ParametersSweep_ implements PlugIn {
     // Advanced formats
     private final NanoJPrefs prefs = new NanoJPrefs(this.getClass().getName());
     private final NanoJProfiler prof = new NanoJProfiler();
-    private liveSRRF_CL liveSRRF;
+//    private liveSRRF_CL liveSRRF;
 
     public void run(String arg) {
 
@@ -84,7 +84,7 @@ public class ParametersSweep_ implements PlugIn {
         IJ.log(now.format(formatter));
 
         // Initialise the liveSRRF engine (creates a context really)
-        liveSRRF = new liveSRRF_CL();
+        liveSRRF_CL liveSRRF = new liveSRRF_CL();
 
         // Build GUI
         Font headerFont = new Font("Arial", Font.BOLD, 16);
@@ -366,7 +366,7 @@ public class ParametersSweep_ implements PlugIn {
                         liveSRRF.resetFramePosition();
                         liveSRRF.loadShiftXYGPUbuffer(shiftXtempOdd, shiftYtempOdd);
 
-                        userPressedEscape = calculateLiveSRRFsingleframeLoad(imsAllRawData, nfi, 1);
+                        userPressedEscape = calculateLiveSRRFsingleframeLoad(imsAllRawData, nfi, 1, liveSRRF);
                         if (userPressedEscape) {
                             liveSRRF.release();
                             IJ.log("-------------------------------------");
@@ -384,7 +384,7 @@ public class ParametersSweep_ implements PlugIn {
                         liveSRRF.resetFramePosition();
                         liveSRRF.loadShiftXYGPUbuffer(shiftXtempEven, shiftYtempEven);
 
-                        calculateLiveSRRFsingleframeLoad(imsAllRawData, nfi, 2);
+                        calculateLiveSRRFsingleframeLoad(imsAllRawData, nfi, 2, liveSRRF);
                         imsBuffer = liveSRRF.imsSRRF;
 
                         if (chosenTemporalAnalysis.equals(temporalAnalysis[0]) || chosenTemporalAnalysis.equals(temporalAnalysis[2])) {
@@ -403,7 +403,7 @@ public class ParametersSweep_ implements PlugIn {
                         liveSRRF.resetFramePosition();
                         liveSRRF.loadShiftXYGPUbuffer(shiftXtemp, shiftYtemp);
 
-                        calculateLiveSRRFsingleframeLoad(imsAllRawData, nfi, 0);
+                        calculateLiveSRRFsingleframeLoad(imsAllRawData, nfi, 0, liveSRRF);
                         imsBuffer = liveSRRF.imsSRRF;
                     }
 
@@ -761,7 +761,7 @@ public class ParametersSweep_ implements PlugIn {
     }
 
 
-    private boolean calculateLiveSRRFsingleframeLoad(ImageStack imsAllRawData, int nf, int mode) {
+    private boolean calculateLiveSRRFsingleframeLoad(ImageStack imsAllRawData, int nf, int mode, liveSRRF_CL liveSRRF) {
 
         ImageStack imsThisRawData;
         boolean userPressedEscape = false;

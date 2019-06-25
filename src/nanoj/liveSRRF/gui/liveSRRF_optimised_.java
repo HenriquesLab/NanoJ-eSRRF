@@ -455,7 +455,7 @@ public class liveSRRF_optimised_ implements PlugIn {
         NonBlockingGenericDialog gd = new NonBlockingGenericDialog("liveSRRF " + LiveSRRFVersion);
         gd.addMessage("-=-= SRRF parameters =-=-\n", headerFont);
         gd.addNumericField("Magnification (default: 5)", prefs.get("magnification", 5), 0);
-        gd.addNumericField("Radius (pixels, default: 2)", prefs.get("fwhm", 2), 2);
+        gd.addNumericField("Radius (pixels, default: 1.5)", prefs.get("fwhm", (float) 1.5), 2);
         gd.addNumericField("Sensitivity (default: 1)", prefs.get("sensitivity", 1), 0);
         gd.addNumericField("# frames for SRRF (0 = auto)", prefs.get("nFrameForSRRFfromUser", 0), 0);
         gd.addCheckbox("Vibration correction", prefs.get("correctVibration", false));
