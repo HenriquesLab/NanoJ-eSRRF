@@ -26,7 +26,7 @@ import static nanoj.liveSRRF.StackProjections.calculateAverage;
 public class GetSpatialCalibrationMFMdata_ implements PlugIn {
 
     private NanoJPrefs prefs = new NanoJPrefs(this.getClass().getName());
-    private final String MFMGetCalibVersion = "v0.1";
+    private final String MFMGetCalibVersion = "v0.2";
 
 
     public void run(String s) {
@@ -40,8 +40,19 @@ public class GetSpatialCalibrationMFMdata_ implements PlugIn {
         double zStep = 1000 * imageInfo.pixelDepth; //nm
         zStep = (double) Math.round(zStep * 100d) / 100d;
 
+        int[] offsetMFMarray = new int[] {2,3,4,-1,0,1,-4,-3,-2}; // TODO: add other cases where it's not 9 positions
+        int nImageSplits = (int) Math.sqrt(offsetMFMarray.length);
+
+        String[] splitLabels = new String[nImageSplits*nImageSplits];
+        boolean[] splitDefaultChoice = new boolean[nImageSplits*nImageSplits];
+        for (int i=0; i<nImageSplits*nImageSplits; i++){
+            splitLabels[i] = Integer.toString(offsetMFMarray[i]);
+            splitDefaultChoice[i] = true;
+        }
+
         NonBlockingGenericDialog gd = new NonBlockingGenericDialog("Spatial calibration from MFM data ("+MFMGetCalibVersion+")");
-        gd.addNumericField("Number of split/axis:", prefs.get("nSplits", 3), 0);
+        gd.addMessage("-=-= MFM parameters =-=-\n");
+        gd.addCheckboxGroup(nImageSplits, nImageSplits, splitLabels, splitDefaultChoice);
         gd.addNumericField("Axial spacing (in nm):", prefs.get("axialSpacing", 390), 1);
         gd.addNumericField("Border crop (in pixels):", prefs.get("borderCrop", 10), 0);
         gd.addMessage("-=-= Search parameters =-=-\n");
@@ -52,12 +63,26 @@ public class GetSpatialCalibrationMFMdata_ implements PlugIn {
         gd.showDialog();
         if (gd.wasCanceled()) return;
 
-        String header = "Choose where to save Calibration table...";
-        String filePath = getSavePath(header, imp.getTitle(), ".njt");
-        if (filePath == null) return;
-        filePath = filePath.replace(".njt", "");
+        int nROI = 0;
+        boolean[] splitLocations = new boolean[nImageSplits*nImageSplits];
+        for (int i=0; i<nImageSplits*nImageSplits; i++){
+            splitLocations[i] = gd.getNextBoolean();
+            if (splitLocations[i]) nROI++;
+        }
 
-        int nSplits = (int) gd.getNextNumber();
+        double[] axialPositions = new double[nROI];
+        double[] chosenROIsLocations = new double[nROI];
+
+        int id = 0;
+        for (int i=0; i<nImageSplits*nImageSplits; i++){
+            if (splitLocations[i]) {
+                axialPositions[id] = offsetMFMarray[i];
+                chosenROIsLocations[id] = i;
+                id++;
+            }
+        }
+        int[] sortedIndicesROI = getSortedIndices(axialPositions);
+
         float axialSpacing = (float) gd.getNextNumber();
         int borderCrop = (int) gd.getNextNumber();
 
@@ -65,13 +90,17 @@ public class GetSpatialCalibrationMFMdata_ implements PlugIn {
         float maxAngle = (float) gd.getNextNumber();
         boolean applyCorr = gd.getNextBoolean();
 
-        prefs.set("nSplits", (float) nSplits);
+//        prefs.set("nImageSplits", (float) nImageSplits);
         prefs.set("axialSpacing", axialSpacing);
         prefs.set("borderCrop", (float) borderCrop);
         prefs.set("nAngles", (float) nAngles);
         prefs.set("maxAngle", maxAngle);
         prefs.set("applyCorr", applyCorr);
 
+        String header = "Choose where to save Calibration table...";
+        String filePath = getSavePath(header, imp.getTitle(), ".njt");
+        if (filePath == null) return;
+        filePath = filePath.replace(".njt", "");
 
         IJ.log("\\Clear");  // Clear the log window
         IJ.log("-------------------------------------------------------------------------------------");
@@ -85,34 +114,33 @@ public class GetSpatialCalibrationMFMdata_ implements PlugIn {
         width = ims.getWidth();
         height = ims.getHeight();
 
-        int[] offsetMFMarray;
-//        if (nSplits == 3){
-        offsetMFMarray = new int[] {2,3,4,-1,0,1,-4,-3,-2};
-        // TODO: add other cases where it's not 9 positions
-//        }
-
-        int cropSizeX = Math.round(width/nSplits) - 2*borderCrop; // TODO: assume that size in X and Y are the same?
-        int cropSizeY = Math.round(height/nSplits) - 2*borderCrop; // TODO: assume that size in X and Y are the same?
+        int cropSizeX = Math.round(width/nImageSplits) - 2*borderCrop; // TODO: assume that size in X and Y are the same?
+        int cropSizeY = Math.round(height/nImageSplits) - 2*borderCrop; // TODO: assume that size in X and Y are the same?
 
         int z0 = Math.round(nSlices/2);
-        int nFramesToAverage = z0 - (int) Math.round(getMaxfromArray(offsetMFMarray)* axialSpacing/zStep);
+        int nFramesToAverage = z0 - (int) Math.round(getMaxfromArray(axialPositions) * axialSpacing/zStep);
         IJ.log("Number of frames to average: "+nFramesToAverage);
         IJ.log("z0: "+z0);
-        int referenceFrameNumber = (int) Math.ceil((double) (nSplits*nSplits)/2);
-        IJ.log("Reference frame: "+referenceFrameNumber);
+        int referenceFrameNumber = (int) Math.ceil((double) (nROI)/2);
+        IJ.log("Reference frame: "+referenceFrameNumber+"(position "+axialPositions[referenceFrameNumber]+")");
 
-        ImageStack imsAvg = new ImageStack(cropSizeX, cropSizeY, nSplits*nSplits);
+        ImageStack imsAvg = new ImageStack(cropSizeX, cropSizeY, nROI);
 
+        IJ.log("------------");
         IJ.log("Cropping FOV...");
         int x,y,z;
-        for (int j = 0; j < nSplits; j++){
-            for (int i = 0; i < nSplits; i++){
-                x = Math.round((width/nSplits)*i) + borderCrop;
-                y = Math.round((height/nSplits)*j) + borderCrop;
-                z = z0 + (int) Math.round(offsetMFMarray[i+j*nSplits]*axialSpacing/zStep) - nFramesToAverage;
+        id = 0;
+        for (int j = 0; j < nImageSplits; j++){
+            for (int i = 0; i < nImageSplits; i++){
+                if (splitLocations[j*nImageSplits+i]) {
+                    x = Math.round((width / nImageSplits) * i) + borderCrop;
+                    y = Math.round((height / nImageSplits) * j) + borderCrop;
+                    z = z0 + (int) Math.round(offsetMFMarray[i + j * nImageSplits] * axialSpacing / zStep) - nFramesToAverage;
 //                IJ.log("x/y/z: "+x+"/"+y+"/"+z);
-                ImageStack imsTemp = ims.crop(x, y, z, cropSizeX,cropSizeY, nFramesToAverage);
-                imsAvg.setProcessor(calculateAverage(imsTemp), i+j*nSplits+1);
+                    ImageStack imsTemp = ims.crop(x, y, z, cropSizeX, cropSizeY, nFramesToAverage);
+                    imsAvg.setProcessor(calculateAverage(imsTemp), id+1);
+                    id++;
+                }
             }
         }
 
@@ -127,11 +155,11 @@ public class GetSpatialCalibrationMFMdata_ implements PlugIn {
         IJ.log("Extracting calibration parameters...");
         double[][] allShiftAndRot = RCCMcalculator.getShiftAndTiltfromRCCM();
 
-        double[] shiftX = new double[nSplits*nSplits];
-        double[] shiftY = new double[nSplits*nSplits];
-        double[] theta = new double[nSplits*nSplits];
+        double[] shiftX = new double[nROI];
+        double[] shiftY = new double[nROI];
+        double[] theta = new double[nROI];
 
-        for (int i = 0; i<nSplits*nSplits; i++){
+        for (int i = 0; i<nROI; i++){
             shiftX[i] = allShiftAndRot[0][i];
             shiftY[i] = allShiftAndRot[1][i];
             theta[i] = allShiftAndRot[2][i];
@@ -147,6 +175,8 @@ public class GetSpatialCalibrationMFMdata_ implements PlugIn {
         data.put("X-shift (pixels)", shiftX);
         data.put("Y-shift (pixels)", shiftY);
         data.put("Theta (degrees)", theta); // in degrees !!!
+        data.put("Axial positions", axialPositions);
+        data.put("ROI #", chosenROIsLocations);
         ResultsTable rt = dataMapToResultsTable(data);
         rt.show("Calibration-Table");
         try {
@@ -157,28 +187,31 @@ public class GetSpatialCalibrationMFMdata_ implements PlugIn {
 
         if (applyCorr) {
             IJ.log("Applying correction to stack...");
-            ImagePlus[] impCorrected = new ImagePlus[nSplits*nSplits];
-            int maxOffset = getMaxfromArray(offsetMFMarray);
+            ImagePlus[] impCorrected = new ImagePlus[nROI];
             double[] shiftXslice = new double[nSlices];
             double[] shiftYslice = new double[nSlices];
             double[] thetaSlice = new double[nSlices];
-            for (int j = 0; j < nSplits; j++){
-                for (int i = 0; i < nSplits; i++){
-
-                    for (int k = 0; k < nSlices; k++){
-                        shiftXslice[k] = shiftX[j*nSplits+i];
-                        shiftYslice[k] = shiftY[j*nSplits+i];
-                        thetaSlice[k] = theta[j*nSplits+i];
+            id = 0;
+            for (int j = 0; j < nImageSplits; j++){
+                for (int i = 0; i < nImageSplits; i++) {
+                    if (splitLocations[j * nImageSplits + i]) {
+                        for (int k = 0; k < nSlices; k++) {
+                            shiftXslice[k] = shiftX[id];
+                            shiftYslice[k] = shiftY[id];
+                            thetaSlice[k] = theta[id];
+                        }
+                        x = Math.round((width / nImageSplits) * i) + borderCrop;
+                        y = Math.round((height / nImageSplits) * j) + borderCrop;
+                        ImageStack imsTemp = ims.crop(x, y, 0, cropSizeX, cropSizeY, nSlices);
+                        ImagePlus impTemp = new ImagePlus("Substack-" + i + "/" + j, imsTemp);
+                        impCorrected[sortedIndicesROI[id]] = applyCorrection(impTemp, shiftXslice, shiftYslice, thetaSlice);
+                        id++;
                     }
-                    x = Math.round((width/nSplits)*i) + borderCrop;
-                    y = Math.round((height/nSplits)*j) + borderCrop;
-                    ImageStack imsTemp = ims.crop(x, y, 0, cropSizeX,cropSizeY, nSlices);
-                    ImagePlus impTemp = new ImagePlus("Substack-"+i+"/"+j,imsTemp);
-                    impCorrected[offsetMFMarray[j*nSplits+i]+maxOffset] = applyCorrection(impTemp, shiftXslice, shiftYslice, thetaSlice);
                 }
             }
             Concatenator concatenator = new Concatenator();
             ImagePlus impStack = concatenator.concatenate(impCorrected, false);
+            impStack.setTitle(imp.getShortTitle()+" - Calibrated");
             impStack.show();
             IJ.log("------------");
             IJ.log("All done.");
@@ -187,12 +220,24 @@ public class GetSpatialCalibrationMFMdata_ implements PlugIn {
     }
 
     // Helper function // TODO: could be migrated to core
-    public static int getMaxfromArray(int[] array){
-        int max = array[0];
+    public static double getMaxfromArray(double[] array){
+        double max = array[0];
         for (int i = 1; i < array.length; i++){
             if (max < array[i]) max = array[i];
         }
         return max;
     }
+
+    // Helper function // TODO: could be migrated to core
+    public static int[] getSortedIndices(double[] array){
+        int[] indices = new int[array.length];
+        for (int i=0; i<array.length; i++){
+            for (int j=0; j<array.length; j++) {
+                if (array[j]<array[i]) indices[i]++;
+            }
+        }
+        return indices;
+    }
+
 }
 

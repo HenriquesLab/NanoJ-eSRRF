@@ -15,11 +15,12 @@ import java.util.Map;
 import static nanoj.core.java.imagej.ResultsTableTools.dataMapToResultsTable;
 import static nanoj.liveSRRF.GetShiftAndTiltRCCM.applyCorrection;
 import static nanoj.liveSRRF.gui.GetSpatialCalibrationMFMdata_.getMaxfromArray;
+import static nanoj.liveSRRF.gui.GetSpatialCalibrationMFMdata_.getSortedIndices;
 
 public class ApplyCalibrationMFMdata_ implements PlugIn {
 
-    private double[] shiftX, shiftY, theta;
-    private final String MFMApplyCalibVersion = "v0.1";
+    private double[] shiftX, shiftY, theta, chosenROIsLocations, axialPositions;
+    private final String MFMApplyCalibVersion = "v0.2";
 
     @Override
     public void run(String s) {
@@ -29,7 +30,7 @@ public class ApplyCalibrationMFMdata_ implements PlugIn {
 
         IJ.log("\\Clear");  // Clear the log window
         IJ.log("-------------------------------------------------------------------------------------");
-        IJ.log("MFM Calibration ("+MFMApplyCalibVersion+")");
+        IJ.log("MFM Correction ("+MFMApplyCalibVersion+")");
 
         ImageStack ims = imp.getImageStack();
         int width = imp.getWidth();
@@ -44,6 +45,8 @@ public class ApplyCalibrationMFMdata_ implements PlugIn {
             shiftX = calibTable.get("X-shift (pixels)");
             shiftY = calibTable.get("Y-shift (pixels)");
             theta = calibTable.get("Theta (degrees)");
+            chosenROIsLocations = calibTable.get("ROI #");
+            axialPositions = calibTable.get("Axial positions");
             ResultsTable rt = dataMapToResultsTable(calibTable);
             rt.show("Calibration-Table");
         } catch (IOException e) {
@@ -51,45 +54,45 @@ public class ApplyCalibrationMFMdata_ implements PlugIn {
             e.printStackTrace();
         }
 
-        int nSplits = (int) Math.sqrt(shiftX.length);
-        int cropSizeX = Math.round(width/nSplits); // TODO: assume that size in X and Y are the same?
-        int cropSizeY = Math.round(height/nSplits); // TODO: assume that size in X and Y are the same?
+        int nROI = shiftX.length;
+        int nImageSplits = 3; // TODO: this is hardcoded for the moment
+        int cropSizeX = Math.round(width/nImageSplits); // TODO: assume that size in X and Y are the same?
+        int cropSizeY = Math.round(height/nImageSplits); // TODO: assume that size in X and Y are the same?
 
-        ImagePlus[] impCorrected = new ImagePlus[nSplits*nSplits];
+        ImagePlus[] impCorrected = new ImagePlus[nROI];
 
-        int x,y;
         double[] shiftXslice = new double[nFrames];
         double[] shiftYslice = new double[nFrames];
         double[] thetaSlice = new double[nFrames];
+        int[] sortedIndicesROI = getSortedIndices(axialPositions);
 
-        int[] offsetMFMarray;
-//        if (nSplits == 3){
-        offsetMFMarray = new int[] {2,3,4,-1,0,1,-4,-3,-2};
-        // TODO: add other cases where it's not 9 positions
-//        }
-        int maxOffset = getMaxfromArray(offsetMFMarray);
-
-        IJ.log("Applying calibration...");
-        for (int j = 0; j < nSplits; j++){
-            for (int i = 0; i < nSplits; i++){
-                for (int k = 0; k < nFrames; k++){
-                    shiftXslice[k] = shiftX[j*nSplits+i];
-                    shiftYslice[k] = shiftY[j*nSplits+i];
-                    thetaSlice[k] = theta[j*nSplits+i];
-                }
-                IJ.log("X-shift: "+shiftXslice[0]);
-
-                x = Math.round((width/nSplits)*i);
-                y = Math.round((height/nSplits)*j);
-                ImageStack imsTemp = ims.crop(x, y, 0, cropSizeX,cropSizeY, nFrames);
-                ImagePlus impTemp = new ImagePlus("Substack "+i+"/"+j,imsTemp);
-                impCorrected[offsetMFMarray[j*nSplits+i]+maxOffset] = applyCorrection(impTemp, shiftXslice, shiftYslice, thetaSlice);
+        int i,j,x,y;
+        for (int id=0; id<nROI; id++){
+            i = (int) chosenROIsLocations[id]%3;
+            j = (int) (chosenROIsLocations[id] - i)/3;
+//            IJ.log("i="+i);
+//            IJ.log("j="+j);
+            for (int k = 0; k < nFrames; k++){
+                shiftXslice[k] = shiftX[id];
+                shiftYslice[k] = shiftY[id];
+                thetaSlice[k] = theta[id];
             }
+//                IJ.log("X-shift: "+shiftXslice[0]);
+
+            x = Math.round((width/nImageSplits)*i);
+            y = Math.round((height/nImageSplits)*j);
+//            IJ.log("x="+x);
+//            IJ.log("y="+y);
+            ImageStack imsTemp = ims.crop(x, y, 0, cropSizeX,cropSizeY, nFrames);
+            ImagePlus impTemp = new ImagePlus("Substack "+i+"/"+j,imsTemp);
+            impCorrected[sortedIndicesROI[id]] = applyCorrection(impTemp, shiftXslice, shiftYslice, thetaSlice);
+
         }
 
         IJ.log("Reshaping data...");
         Concatenator concatenator = new Concatenator(); // TODO: convert this into the right stack dimensions
         ImagePlus impStack = concatenator.concatenate(impCorrected, false);
+        impStack.setTitle(imp.getShortTitle()+" - Calibrated");
         impStack.show();
 
         IJ.log("------------");
