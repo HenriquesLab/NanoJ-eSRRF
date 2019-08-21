@@ -14,7 +14,6 @@ import java.util.Map;
 
 import static nanoj.core.java.imagej.ResultsTableTools.dataMapToResultsTable;
 import static nanoj.liveSRRF.GetShiftAndTiltRCCM.applyCorrection;
-import static nanoj.liveSRRF.gui.GetSpatialCalibrationMFMdata_.getMaxfromArray;
 import static nanoj.liveSRRF.gui.GetSpatialCalibrationMFMdata_.getSortedIndices;
 
 public class ApplyCalibrationMFMdata_ implements PlugIn {

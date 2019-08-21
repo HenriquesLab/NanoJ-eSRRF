@@ -1,5 +1,6 @@
 package nanoj.liveSRRF;
 
+import ij.IJ;
 import ij.ImagePlus;
 import ij.ImageStack;
 import ij.process.FloatProcessor;
@@ -64,7 +65,7 @@ public class GetShiftAndTiltRCCM {
         for(int s=0; s<nSlices; s++) {
             ImageStack imsRCCMapSlice = imsRCCMap[s];
 
-            // calculate position and value of maximum pixel
+            // calculate position and value of maximum pixel TODO: avoid spurious pixels that would skew this
             float v, vMax = 0;
             int xMax = 0, yMax = 0, aMax = 0;
             for (int a = 0; a<imsRCCMapSlice.getSize(); a++) {
@@ -79,8 +80,11 @@ public class GetShiftAndTiltRCCM {
                     }
                 }
             }
-
+//            IJ.log("Slice: "+s);
+//            IJ.log("aMax: "+aMax);
             theta[s] = toDegrees(angleArray[aMax]);
+//            IJ.log("theta (in degrees): "+theta[s]);
+
             FloatProcessor fpRCCMslice = imsRCCMapSlice.getProcessor(aMax+1).convertToFloatProcessor();
             float[] shiftAndTilt = getMaxFindByOptimization(fpRCCMslice);
 

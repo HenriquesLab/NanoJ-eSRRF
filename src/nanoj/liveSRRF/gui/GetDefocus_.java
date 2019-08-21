@@ -113,7 +113,6 @@ public class GetDefocus_ implements PlugIn {
             focusPositionArray[n] = fitResults[1]*zStep;
             prof.recordTime("Defocus array: ", prof.endTimer(id));
 
-
             IJ.log("--- Initial guesses results ---");
             IJ.log("Initial x0: "+(fitting.initX0)*zStep+" nm");
             IJ.log("Initial Sigma: "+(fitting.initSigma)*zStep+" nm");
