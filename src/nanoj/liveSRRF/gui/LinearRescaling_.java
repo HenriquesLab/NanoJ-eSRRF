@@ -61,7 +61,7 @@ public class LinearRescaling_ implements PlugIn {
     }
 
 
-    private float[] getLinearRegressionParameters(float[] floatArrayRef, float[] floatArray){
+    public static float[] getLinearRegressionParameters(float[] floatArrayRef, float[] floatArray){
 
         int n = floatArrayRef.length;
         float x_bar = 0;

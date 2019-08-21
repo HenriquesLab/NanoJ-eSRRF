@@ -53,7 +53,6 @@ public class GetAxialPositionMFM {
         defocusPlot.add("line", zPosArray, modelArray[0]);
         defocusPlot.setColor(Color.red);
         defocusPlot.add("line", zPosArray, modelArray[1]);
-//        defocusPlot.add("line", zPosArray, normalizeArray(zCorrArray));
         defocusPlot.show();
 
 //        IJ.log("--- Initial guesses results ---");
@@ -69,6 +68,7 @@ public class GetAxialPositionMFM {
         return (fitResults[1])*zStep;
     }
 
+// ----------------------------------------- FUNCTIONS -----------------------------------------
 
     public double getZcorrelation(ImageStack imsRef, ImageStack ims){
 
@@ -78,8 +78,12 @@ public class GetAxialPositionMFM {
         arrayRef = imsRef.getVoxels(0, 0, 0, imsRef.getWidth(), imsRef.getHeight(), imsRef.getSize(), arrayRef);
         array = ims.getVoxels(0, 0, 0, imsRef.getWidth(), imsRef.getHeight(), imsRef.getSize(), array);
 
-        float[] arrayProduct = multiply(arrayRef, array);
-        return getSumValue(arrayProduct)/nPixels;
+        // Using the dot product ----
+//        float[] arrayProduct = multiply(arrayRef, array);
+//        return getSumValue(arrayProduct)/nPixels;
+
+        // Using the PPMCC ----
+        return calculatePPMCC(array, arrayRef, true);
 
     }
 

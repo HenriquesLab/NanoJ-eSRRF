@@ -18,11 +18,13 @@ import static nanoj.liveSRRF.gui.GetSpatialCalibrationMFMdata_.getSortedIndices;
 
 public class ApplyCalibrationMFMdata_ implements PlugIn {
 
-    private double[] shiftX, shiftY, theta, chosenROIsLocations, axialPositions;
-    private final String MFMApplyCalibVersion = "v0.2";
+    private double[] shiftX, shiftY, theta, chosenROIsLocations, axialPositions, intCoeffs;
+    private final String MFMApplyCalibVersion = "v0.3";
 
     @Override
     public void run(String s) {
+
+        // ---- Getting input data ----
         ImagePlus imp = WindowManager.getCurrentImage();
         if (imp == null) imp = IJ.openImage();
         imp.show();
@@ -31,11 +33,12 @@ public class ApplyCalibrationMFMdata_ implements PlugIn {
         IJ.log("-------------------------------------------------------------------------------------");
         IJ.log("MFM Correction ("+MFMApplyCalibVersion+")");
 
-        ImageStack ims = imp.getImageStack();
+        ImageStack ims = imp.getImageStack().convertToFloat();
         int width = imp.getWidth();
         int height = imp.getHeight();
         int nFrames = imp.getStackSize();
 
+        // ---- Getting calibration data from the NanoJ table ----
         IJ.log("Getting calibration file...");
         String calibTablePath = IJ.getFilePath("Choose Drift-Table to load...");
         Map<String, double[]> calibTable;
@@ -46,6 +49,7 @@ public class ApplyCalibrationMFMdata_ implements PlugIn {
             theta = calibTable.get("Theta (degrees)");
             chosenROIsLocations = calibTable.get("ROI #");
             axialPositions = calibTable.get("Axial positions");
+            intCoeffs = calibTable.get("Intensity scaling");
             ResultsTable rt = dataMapToResultsTable(calibTable);
             rt.show("Calibration-Table");
         } catch (IOException e) {
@@ -63,6 +67,7 @@ public class ApplyCalibrationMFMdata_ implements PlugIn {
         double[] shiftXslice = new double[nFrames];
         double[] shiftYslice = new double[nFrames];
         double[] thetaSlice = new double[nFrames];
+        double[] coeffSlice = new double[nFrames];
         int[] sortedIndicesROI = getSortedIndices(axialPositions);
 
         int i,j,x,y;
@@ -75,6 +80,7 @@ public class ApplyCalibrationMFMdata_ implements PlugIn {
                 shiftXslice[k] = shiftX[id];
                 shiftYslice[k] = shiftY[id];
                 thetaSlice[k] = theta[id];
+                coeffSlice[k] = intCoeffs[id];
             }
 //                IJ.log("X-shift: "+shiftXslice[0]);
 
@@ -84,7 +90,7 @@ public class ApplyCalibrationMFMdata_ implements PlugIn {
 //            IJ.log("y="+y);
             ImageStack imsTemp = ims.crop(x, y, 0, cropSizeX,cropSizeY, nFrames);
             ImagePlus impTemp = new ImagePlus("Substack "+i+"/"+j,imsTemp);
-            impCorrected[sortedIndicesROI[id]] = applyCorrection(impTemp, shiftXslice, shiftYslice, thetaSlice);
+            impCorrected[sortedIndicesROI[id]] = applyCorrection(impTemp, shiftXslice, shiftYslice, thetaSlice, coeffSlice)[0];
 
         }
 

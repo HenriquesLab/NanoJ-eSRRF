@@ -14,6 +14,8 @@ import java.awt.*;
 
 import static java.lang.Math.*;
 import static nanoj.core.java.array.ArrayInitialization.initializeDoubleAndGrowthFill;
+import static nanoj.core.java.array.ArrayMath.getMaxValue;
+import static nanoj.core.java.array.ArrayMath.getMinValue;
 import static nanoj.core.java.image.transform.CrossCorrelationMap.calculateCrossCorrelationMap;
 import static nanoj.core.java.array.ArrayInitialization.initializeFloatAndGrowthFill;
 import static nanoj.core.java.image.drift.EstimateShiftAndTilt.getMaxFindByOptimization;
@@ -38,8 +40,6 @@ public class GetShiftAndTiltRCCM {
         this.angleArray = initializeFloatAndGrowthFill(nAngles, -(float) toRadians(maxAngle), angleStep);
         this.angleArrayDouble = initializeDoubleAndGrowthFill(nAngles, -toRadians(maxAngle), angleStep);
         this.thetaFitPlot = new Plot("Theta fit plot", "Angle (radians)", "Intensity (AU)");
-
-
     }
 
     // This method calculates the RCCM ImageStack array ----------------------------------------------------------------
@@ -120,7 +120,7 @@ public class GetShiftAndTiltRCCM {
         return new double[][] {shiftX, shiftY, theta};
     }
 
-    public static ImagePlus applyCorrection(ImagePlus imp, double[] shiftX, double[] shiftY, double[] theta){
+    public static ImagePlus[] applyCorrection(ImagePlus imp, double[] shiftX, double[] shiftY, double[] theta, double[] intCoeffs){
 
         float[] floatTheta = new float[theta.length];
         for (int i = 0 ; i < theta.length; i++) {
@@ -129,12 +129,26 @@ public class GetShiftAndTiltRCCM {
 
         ApplyDriftCorrection adc = new ApplyDriftCorrection();
         ImageStack ims = imp.getImageStack();
+
+        if (intCoeffs != null){
+            for (int i = 0; i < ims.getSize(); i++) {
+                ims.getProcessor(i+1).multiply( 1/intCoeffs[i]);
+            }
+        }
+
         ImageStack imsRotated = translateOrRotateImage.rotate(ims, floatTheta);
 
         ImagePlus impRot = new ImagePlus(imp.getShortTitle(), imsRotated);
         ImagePlus impAvgCorrected = adc.applyDriftCorrection(impRot, shiftX, shiftY);
 
-        return impAvgCorrected;
+        int x0 = (int) Math.max(Math.ceil(getMaxValue(shiftX)[1]), -Math.ceil(getMinValue(shiftX)[1]));
+        int y0 = (int) Math.max(Math.ceil(getMaxValue(shiftY)[1]), -Math.ceil(getMinValue(shiftY)[1]));
+        ImageStack imsAvgCorrectedCropped = impAvgCorrected.getStack().crop(x0, y0, 0, imp.getWidth()-2*x0, imp.getHeight()-2*y0, imp.getStackSize());
+        ImagePlus[] impCombo = new ImagePlus[2];
+        impCombo[0] = impAvgCorrected;
+        impCombo[1] = new ImagePlus("Corrected crop", imsAvgCorrectedCropped);
+
+        return impCombo;
     }
 
     public static float linearInterpolation(float[] array, float x){
