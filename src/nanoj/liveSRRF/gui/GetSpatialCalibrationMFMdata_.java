@@ -27,7 +27,7 @@ import static nanoj.liveSRRF.StackProjections.calculateAverage;
 public class GetSpatialCalibrationMFMdata_ implements PlugIn {
 
     private NanoJPrefs prefs = new NanoJPrefs(this.getClass().getName());
-    private final String MFMGetCalibVersion = "v0.2";
+    private final String MFMGetCalibVersion = "v0.3";
 
     @Override
     public void run(String s) {

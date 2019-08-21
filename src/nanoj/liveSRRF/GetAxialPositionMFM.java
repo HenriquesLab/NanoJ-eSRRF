@@ -44,7 +44,7 @@ public class GetAxialPositionMFM {
 //            IJ.log("Value: "+zCorrArray[z0]);
         }
 
-        float cropLevel = 0.7f;
+        float cropLevel = 0.8f;
         fitting = new Fit1DGaussian(normalizeArray(zCorrArrayFloat));
         fitting.cropDataArray(cropLevel);
         float[] fitResults = fitting.calculate();
@@ -60,11 +60,11 @@ public class GetAxialPositionMFM {
 //        IJ.log("Initial x0: "+(fitting.initX0)*zStep+" nm");
 //        IJ.log("Initial Sigma: "+(fitting.initSigma)*zStep+" nm");
 
-        IJ.log("--- Fit results ---");
-        IJ.log("Amp: "+fitResults[0]);
-        IJ.log("x0: "+(fitResults[1])*zStep+" nm");
-        IJ.log("Sigma: "+(fitResults[2])*zStep+" nm");
-        IJ.log("BG: "+fitResults[3]);
+//        IJ.log("--- Fit results ---");
+//        IJ.log("Amp: "+fitResults[0]);
+//        IJ.log("x0: "+(fitResults[1])*zStep+" nm");
+//        IJ.log("Sigma: "+(fitResults[2])*zStep+" nm");
+//        IJ.log("BG: "+fitResults[3]);
 
         return (fitResults[1])*zStep;
     }
@@ -83,7 +83,7 @@ public class GetAxialPositionMFM {
 
     }
 
-    public double[] normalizeArray(double[] array){
+    public static double[] normalizeArray(double[] array){
         double max = getMaxValue(array)[1];
         double min = getMinValue(array)[1];
 
@@ -95,7 +95,7 @@ public class GetAxialPositionMFM {
         return normArray;
     }
 
-    public float[] normalizeArray(float[] array){
+    public static float[] normalizeArray(float[] array){
         float max = getMaxValue(array)[1];
         float min = getMinValue(array)[1];
 
