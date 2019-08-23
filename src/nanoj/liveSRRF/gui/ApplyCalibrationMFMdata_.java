@@ -65,6 +65,7 @@ public class ApplyCalibrationMFMdata_ implements PlugIn {
         int cropSizeX = Math.round(width/nImageSplits); // TODO: assume that size in X and Y are the same?
         int cropSizeY = Math.round(height/nImageSplits); // TODO: assume that size in X and Y are the same?
 
+//        ImagePlus[] impCorrected = new ImagePlus[nROI];
         ImageStack[] imsCorrectedArray = new ImageStack[nROI];
         ImageStack imsCorrectedUberStack = new ImageStack();
 
@@ -95,9 +96,16 @@ public class ApplyCalibrationMFMdata_ implements PlugIn {
 //            IJ.log("y="+y);
             ImageStack imsTemp = ims.crop(x, y, 0, cropSizeX,cropSizeY, nFrames);
             imsCorrectedArray[sortedIndicesROI[id]] = RCCMcalculator.applyMFMCorrection(imsTemp, shiftXslice, shiftYslice, thetaSlice, coeffSlice)[0];
+//            imsTemp = RCCMcalculator.applyMFMCorrection(imsTemp, shiftXslice, shiftYslice, thetaSlice, coeffSlice)[0];
+//            ImagePlus impTemp = new ImagePlus("Substack "+i+"/"+j,imsTemp);
+//            impCorrected[sortedIndicesROI[id]] = applyCorrection(impTemp, shiftXslice, shiftYslice, thetaSlice, coeffSlice)[0];
         }
 
         IJ.log("Reshaping data...");
+//        Concatenator concatenator = new Concatenator(); // TODO: convert this into the right stack dimensions
+//        ImagePlus impStack = concatenator.concatenate(impCorrected, false);
+//        ImageStack imsCorrectedUberStack = new ImageStack();
+
         for (int r = 0; r < nROI; r++) {
             for (int k = 0; k < nFrames; k++) {
                 imsCorrectedUberStack.addSlice(imsCorrectedArray[r].getProcessor(k+1));
