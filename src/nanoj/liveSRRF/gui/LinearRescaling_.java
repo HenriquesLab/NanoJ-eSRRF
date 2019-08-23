@@ -8,6 +8,8 @@ import ij.plugin.PlugIn;
 import ij.process.FloatProcessor;
 import ij.process.ImageProcessor;
 
+import static nanoj.liveSRRF.LinearRegressions.linearRegressionLeastSquare;
+
 public class LinearRescaling_ implements PlugIn {
 
     private int width;
@@ -48,7 +50,7 @@ public class LinearRescaling_ implements PlugIn {
             ImageProcessor ip = imsInput.getProcessor(s);
 
             float[] pixels = (float[]) ip.getPixels();
-            float[] ab = getLinearRegressionParameters(pixelsRef, pixels);
+            float[] ab = linearRegressionLeastSquare(pixels, pixelsRef);
             IJ.log("a="+ab[0]+" / b="+ab[1]);
 
             imsOutput.setProcessor(getRescaledFP(ab, pixels), s);
@@ -61,26 +63,26 @@ public class LinearRescaling_ implements PlugIn {
     }
 
 
-    public static float[] getLinearRegressionParameters(float[] floatArrayRef, float[] floatArray){
-
-        int n = floatArrayRef.length;
-        float x_bar = 0;
-        float y_bar = 0;
-        float x2 = 0;
-        float xy = 0;
-
-        for (int i=0; i<n; i++){
-            x_bar += floatArray[i]/(float) n;
-            y_bar += floatArrayRef[i]/(float) n;
-            x2 += floatArray[i]*floatArray[i];
-            xy += floatArray[i]*floatArrayRef[i];
-        }
-
-        float[] ab = new float[2];
-        ab[0] = (y_bar*x2 - x_bar*xy)/(x2 - n*x_bar*x_bar);
-        ab[1] = (xy - n*x_bar*y_bar)/(x2-n*x_bar*x_bar);
-        return ab;
-    }
+//    public static float[] getLinearRegressionParameters(float[] floatArrayRef, float[] floatArray){
+//
+//        int n = floatArrayRef.length;
+//        float x_bar = 0;
+//        float y_bar = 0;
+//        float x2 = 0;
+//        float xy = 0;
+//
+//        for (int i=0; i<n; i++){
+//            x_bar += floatArray[i]/(float) n;
+//            y_bar += floatArrayRef[i]/(float) n;
+//            x2 += floatArray[i]*floatArray[i];
+//            xy += floatArray[i]*floatArrayRef[i];
+//        }
+//
+//        float[] ab = new float[2];
+//        ab[0] = (y_bar*x2 - x_bar*xy)/(x2 - n*x_bar*x_bar);
+//        ab[1] = (xy - n*x_bar*y_bar)/(x2-n*x_bar*x_bar);
+//        return ab;
+//    }
 
 
     private FloatProcessor getRescaledFP(float[] ab, float[] floatArray){

@@ -5,21 +5,21 @@ import ij.ImagePlus;
 import ij.ImageStack;
 import ij.WindowManager;
 import ij.measure.ResultsTable;
-import ij.plugin.Concatenator;
+import ij.plugin.HyperStackConverter;
 import ij.plugin.PlugIn;
 import nanoj.core.java.io.LoadNanoJTable;
+import nanoj.liveSRRF.MFMCalibration;
 
 import java.io.IOException;
 import java.util.Map;
 
 import static nanoj.core.java.imagej.ResultsTableTools.dataMapToResultsTable;
-import static nanoj.liveSRRF.GetShiftAndTiltRCCM.applyCorrection;
 import static nanoj.liveSRRF.gui.GetSpatialCalibrationMFMdata_.getSortedIndices;
 
 public class ApplyCalibrationMFMdata_ implements PlugIn {
 
     private double[] shiftX, shiftY, theta, chosenROIsLocations, axialPositions, intCoeffs;
-    private final String MFMApplyCalibVersion = "v0.3";
+    private final String MFMApplyCalibVersion = "v0.5";
 
     @Override
     public void run(String s) {
@@ -27,6 +27,7 @@ public class ApplyCalibrationMFMdata_ implements PlugIn {
         // ---- Getting input data ----
         ImagePlus imp = WindowManager.getCurrentImage();
         if (imp == null) imp = IJ.openImage();
+        if (imp == null) return;
         imp.show();
 
         IJ.log("\\Clear");  // Clear the log window
@@ -41,6 +42,8 @@ public class ApplyCalibrationMFMdata_ implements PlugIn {
         // ---- Getting calibration data from the NanoJ table ----
         IJ.log("Getting calibration file...");
         String calibTablePath = IJ.getFilePath("Choose Drift-Table to load...");
+        if (calibTablePath == null) return;
+
         Map<String, double[]> calibTable;
         try {
             calibTable = new LoadNanoJTable(calibTablePath).getData();
@@ -62,13 +65,16 @@ public class ApplyCalibrationMFMdata_ implements PlugIn {
         int cropSizeX = Math.round(width/nImageSplits); // TODO: assume that size in X and Y are the same?
         int cropSizeY = Math.round(height/nImageSplits); // TODO: assume that size in X and Y are the same?
 
-        ImagePlus[] impCorrected = new ImagePlus[nROI];
+//        ImagePlus[] impCorrected = new ImagePlus[nROI];
+        ImageStack[] imsCorrectedArray = new ImageStack[nROI];
+        ImageStack imsCorrectedUberStack = new ImageStack();
 
         double[] shiftXslice = new double[nFrames];
         double[] shiftYslice = new double[nFrames];
         double[] thetaSlice = new double[nFrames];
         double[] coeffSlice = new double[nFrames];
         int[] sortedIndicesROI = getSortedIndices(axialPositions);
+        MFMCalibration RCCMcalculator = new MFMCalibration();
 
         int i,j,x,y;
         for (int id=0; id<nROI; id++){
@@ -89,15 +95,27 @@ public class ApplyCalibrationMFMdata_ implements PlugIn {
 //            IJ.log("x="+x);
 //            IJ.log("y="+y);
             ImageStack imsTemp = ims.crop(x, y, 0, cropSizeX,cropSizeY, nFrames);
-            ImagePlus impTemp = new ImagePlus("Substack "+i+"/"+j,imsTemp);
-            impCorrected[sortedIndicesROI[id]] = applyCorrection(impTemp, shiftXslice, shiftYslice, thetaSlice, coeffSlice)[0];
-
+            imsCorrectedArray[sortedIndicesROI[id]] = RCCMcalculator.applyMFMCorrection(imsTemp, shiftXslice, shiftYslice, thetaSlice, coeffSlice)[0];
+//            imsTemp = RCCMcalculator.applyMFMCorrection(imsTemp, shiftXslice, shiftYslice, thetaSlice, coeffSlice)[0];
+//            ImagePlus impTemp = new ImagePlus("Substack "+i+"/"+j,imsTemp);
+//            impCorrected[sortedIndicesROI[id]] = applyCorrection(impTemp, shiftXslice, shiftYslice, thetaSlice, coeffSlice)[0];
         }
 
         IJ.log("Reshaping data...");
-        Concatenator concatenator = new Concatenator(); // TODO: convert this into the right stack dimensions
-        ImagePlus impStack = concatenator.concatenate(impCorrected, false);
-        impStack.setTitle(imp.getShortTitle()+" - Calibrated");
+//        Concatenator concatenator = new Concatenator(); // TODO: convert this into the right stack dimensions
+//        ImagePlus impStack = concatenator.concatenate(impCorrected, false);
+//        ImageStack imsCorrectedUberStack = new ImageStack();
+
+        for (int r = 0; r < nROI; r++) {
+            for (int k = 0; k < nFrames; k++) {
+                imsCorrectedUberStack.addSlice(imsCorrectedArray[r].getProcessor(k+1));
+            }
+        }
+
+        ImagePlus impStack = new ImagePlus(imp.getShortTitle()+" - Calibrated", imsCorrectedUberStack);
+        impStack.setTitle(imp.getShortTitle()+" - Calibrated stack");
+        HyperStackConverter hsC = new HyperStackConverter();
+        impStack = hsC.toHyperStack(impStack, 1, nROI, nFrames, "xyctz", "Color");
         impStack.show();
 
         IJ.log("------------");

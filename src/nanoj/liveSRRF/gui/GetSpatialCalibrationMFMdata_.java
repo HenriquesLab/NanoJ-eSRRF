@@ -8,11 +8,12 @@ import ij.gui.NonBlockingGenericDialog;
 import ij.io.FileInfo;
 import ij.measure.ResultsTable;
 import ij.plugin.Concatenator;
+import ij.plugin.HyperStackConverter;
 import ij.plugin.PlugIn;
 import ij.process.ImageProcessor;
 import nanoj.core2.NanoJPrefs;
 import nanoj.liveSRRF.GetAxialPositionMFM;
-import nanoj.liveSRRF.GetShiftAndTiltRCCM;
+import nanoj.liveSRRF.MFMCalibration;
 
 import java.io.IOException;
 import java.util.LinkedHashMap;
@@ -21,13 +22,14 @@ import java.util.Map;
 import static nanoj.core.java.imagej.FilesAndFoldersTools.getSavePath;
 import static nanoj.core.java.imagej.ResultsTableTools.dataMapToResultsTable;
 import static nanoj.core.java.io.SaveNanoJTable.saveNanoJTable;
-import static nanoj.liveSRRF.GetShiftAndTiltRCCM.applyCorrection;
+import static nanoj.liveSRRF.LinearRegressions.linearRegressionLeastSquareNoOffset;
 import static nanoj.liveSRRF.StackProjections.calculateAverage;
+import static nanoj.liveSRRF.StackProjections.calculateMIP;
 
 public class GetSpatialCalibrationMFMdata_ implements PlugIn {
 
     private NanoJPrefs prefs = new NanoJPrefs(this.getClass().getName());
-    private final String MFMGetCalibVersion = "v0.4";
+    private final String MFMGetCalibVersion = "v0.5";
 
     @Override
     public void run(String s) {
@@ -35,6 +37,7 @@ public class GetSpatialCalibrationMFMdata_ implements PlugIn {
         // ---- Getting input data ----
         ImagePlus imp = WindowManager.getCurrentImage();
         if (imp == null) imp = IJ.openImage();
+        if (imp == null) return;
         imp.show();
 
         FileInfo imageInfo;
@@ -138,6 +141,7 @@ public class GetSpatialCalibrationMFMdata_ implements PlugIn {
         IJ.log("Number of angles: "+nAngles+" with Max. angle: "+maxAngle+" degrees ("+(2*maxAngle/(nAngles-1))+" degree(s) step)");
 
         ImageStack imsAvg = new ImageStack(cropSizeX, cropSizeY, nROI);
+        ImageStack imsMIP = new ImageStack(cropSizeX, cropSizeY, nROI);
 
         // ---- Cropping loop based on nominal xyz positions ----
         IJ.log("------------");
@@ -153,6 +157,7 @@ public class GetSpatialCalibrationMFMdata_ implements PlugIn {
 //                IJ.log("x/y/z: "+x+"/"+y+"/"+z);
                     ImageStack imsTemp = ims.crop(x, y, z, cropSizeX, cropSizeY, 2*nFramesToAverage);
                     imsAvg.setProcessor(calculateAverage(imsTemp), id+1);
+                    imsMIP.setProcessor(calculateMIP(imsTemp), id+1);
                     id++;
                 }
             }
@@ -164,10 +169,12 @@ public class GetSpatialCalibrationMFMdata_ implements PlugIn {
         impAvg.show();
 
         // ---- Calculation xy shift and theta rotation ----
-        ImageProcessor ipRef = imsAvg.getProcessor(referenceFrameNumber+1);
-        GetShiftAndTiltRCCM RCCMcalculator = new GetShiftAndTiltRCCM(ipRef, nAngles, maxAngle);
+        ImageProcessor ipRef = imsMIP.getProcessor(referenceFrameNumber+1);
+//        GetShiftAndTiltRCCM RCCMcalculator = new GetShiftAndTiltRCCM(ipRef, nAngles, maxAngle);
+        MFMCalibration RCCMcalculator = new MFMCalibration();
+
         IJ.log("Calculating RCCM...");
-        RCCMcalculator.computeRCCM(imsAvg);
+        RCCMcalculator.computeRCCM(ipRef, imsMIP, nAngles, maxAngle);
         IJ.log("Extracting calibration parameters...");
         double[][] allShiftAndRot = RCCMcalculator.getShiftAndTiltfromRCCM();
         double[] shiftX = new double[nROI];
@@ -182,26 +189,33 @@ public class GetSpatialCalibrationMFMdata_ implements PlugIn {
         }
 
         // ---- Applying corrections to average data stack ----
-        ImagePlus[] impCombo = applyCorrection(impAvg, shiftX, shiftY, theta, null);
-        ImagePlus impAvgCorr = impCombo[0];
-        impAvgCorr.setTitle(imp.getShortTitle()+" - Average & Registered");
+//        ImagePlus[] impCombo = applyCorrection(impAvg, shiftX, shiftY, theta, null);
+        ImageStack[] imsCorr = RCCMcalculator.applyMFMCorrection(imsAvg, shiftX, shiftY, theta, null);
+
+//        ImagePlus impAvgCorr = impCombo[0];
+        ImagePlus impAvgCorr = new ImagePlus(imp.getShortTitle()+" - Average & Registered", imsCorr[0]);
+//        impAvgCorr.setTitle(imp.getShortTitle()+" - Average & Registered");
         impAvgCorr.show();
 
-        ImagePlus impAvgCorrCropped = impCombo[1];
-        impAvgCorrCropped.setTitle(imp.getShortTitle()+" - Average & Registered & Cropped");
+//        ImagePlus impAvgCorrCropped = impCombo[1];
+        ImagePlus impAvgCorrCropped = new ImagePlus(imp.getShortTitle()+" - Average & Registered", imsCorr[1]);
+//        impAvgCorrCropped.setTitle(imp.getShortTitle()+" - Average & Registered & Cropped");
         impAvgCorrCropped.show();
         double[] intensityScalingCoeffs = getLinearRegressionParameters(impAvgCorrCropped.getStack(), referenceFrameNumber);
 
         ImageStack imsAvgCorrCropRescaled = impAvgCorrCropped.getStack().duplicate();
         for (int i = 0; i < nROI; i++) {
-            imsAvgCorrCropRescaled.getProcessor(i+1).multiply( 1/intensityScalingCoeffs[i]);
+            imsAvgCorrCropRescaled.getProcessor(i+1).multiply(1/intensityScalingCoeffs[i]);
         }
         ImagePlus impAvgCorrCropRescaled = new ImagePlus(imp.getShortTitle()+" - Average & Registered & Cropped & Rescaled", imsAvgCorrCropRescaled);
         impAvgCorrCropRescaled.show();
 
         // ---- Applying correction to the whole stack stack ----
         IJ.log("Applying corrections to stack...");
-        ImagePlus[] impCorrected = new ImagePlus[nROI];
+//        ImagePlus[] impCorrected = new ImagePlus[nROI];
+        ImageStack[] imsCorrected = new ImageStack[nROI];
+        ImageStack imsCorrectedUberStack = new ImageStack();
+
         double[] shiftXslice = new double[nSlices];
         double[] shiftYslice = new double[nSlices];
         double[] thetaSlice = new double[nSlices];
@@ -221,8 +235,9 @@ public class GetSpatialCalibrationMFMdata_ implements PlugIn {
                     x = Math.round((width / nImageSplits) * i) + borderCrop;
                     y = Math.round((height / nImageSplits) * j) + borderCrop;
                     ImageStack imsTemp = ims.crop(x, y, 0, cropSizeX, cropSizeY, nSlices);
-                    ImagePlus impTemp = new ImagePlus("Substack-" + i + "/" + j, imsTemp);
-                    impCorrected[sortedIndicesROI[id]] = applyCorrection(impTemp, shiftXslice, shiftYslice, thetaSlice, coeffSlice)[0];
+                    imsCorrected[sortedIndicesROI[id]] = RCCMcalculator.applyMFMCorrection(imsTemp, shiftXslice, shiftYslice, thetaSlice, coeffSlice)[0];
+//                    ImagePlus impTemp = new ImagePlus("Substack-" + i + "/" + j, imsTemp);
+//                    impCorrected[sortedIndicesROI[id]] = applyCorrection(impTemp, shiftXslice, shiftYslice, thetaSlice, coeffSlice)[0];
                     id++;
                 }
             }
@@ -230,12 +245,12 @@ public class GetSpatialCalibrationMFMdata_ implements PlugIn {
 
         // ---- Obtaining the relative axial positions ----
         IJ.log("Getting axial positions...");
-        ImageStack imsRef = impCorrected[referenceFrameNumber].getImageStack(); // TODO: check reference number 0 vs 1-based here
+        ImageStack imsRef = imsCorrected[referenceFrameNumber]; // TODO: check reference number 0 vs 1-based here
         imsRef = imsRef.crop(0, 0, z0 - nFramesToAverage/2, cropSizeX, cropSizeY, nFramesToAverage); // TODO: which chunk is best? currently divided by 2
         GetAxialPositionMFM getAxialPositionMFM = new GetAxialPositionMFM(imsRef, (float) zStep, nSlices);
         double[] axialPositions = new double[nROI];
         for (int i = 0; i < nROI; i++) {
-            axialPositions[i] = getAxialPositionMFM.computeZcorrelation(impCorrected[i].getImageStack());
+            axialPositions[i] = getAxialPositionMFM.computeZcorrelation(imsCorrected[i]);
         }
 
         // ---- Calculating the mean offset ----
@@ -243,9 +258,9 @@ public class GetSpatialCalibrationMFMdata_ implements PlugIn {
         double axialPositionRef = axialPositions[referenceFrameNumber];
         for (int i = 0; i < nROI; i++) {
             axialPositions[i] -= axialPositionRef;
-            if (i!=referenceFrameNumber) meanOffset += axialPositions[i]/nominalAxialPositions[sortedIndicesROI[i]];
         }
-        meanOffset /= nROI-1;
+        meanOffset = linearRegressionLeastSquareNoOffset(sortArray(nominalAxialPositions, sortedIndicesROI), axialPositions);
+
 
         // ---- Creating the NanoJ table and save it ----
         IJ.log("Creating calibration table...");
@@ -267,13 +282,28 @@ public class GetSpatialCalibrationMFMdata_ implements PlugIn {
         }
 
         // ---- Reshape the stack into Hyperstack ---- TODO: fix Stack to Hyperstack
-        Concatenator concatenator = new Concatenator();
-        ImagePlus impStack = concatenator.concatenate(impCorrected, false);
+//        Concatenator concatenator = new Concatenator();
+//        ImagePlus impStack = concatenator.concatenate(impCorrected, false);
+
+        for (int i = 0; i < nROI; i++) {
+            for (int k = 0; k < nSlices; k++) {
+                imsCorrectedUberStack.addSlice(imsCorrected[i].getProcessor(k+1));
+            }
+        }
+
+        ImagePlus impStack = new ImagePlus(imp.getShortTitle()+" - Calibrated", imsCorrectedUberStack);
         impStack.setTitle(imp.getShortTitle()+" - Calibrated");
+        HyperStackConverter hsC = new HyperStackConverter();
+        impStack = hsC.toHyperStack(impStack, 1, nROI, nSlices, "xyctz", "Color");
+//        ImagePlus impHyperStack = impStack.duplicate();
+//        impHyperStack.setTitle(imp.getShortTitle()+" - Calibrated hyperstack");
+//        impHyperStack.show();
+
         impStack.show();
 
+
         IJ.log("------------");
-        IJ.log("Mean offset: "+meanOffset+" nm");
+        IJ.log("Offset: "+meanOffset+" nm");
         IJ.log("------------");
         IJ.log("All done.");
 

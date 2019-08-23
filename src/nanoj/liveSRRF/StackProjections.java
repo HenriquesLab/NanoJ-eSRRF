@@ -47,10 +47,32 @@ public class StackProjections {
                     avg += pixels[s]/nSlices;
                     avgSquare += pixels[s]*pixels[s]/nSlices;
                 }
-                stdArray[x*ims.getWidth()+y] = (float) Math.sqrt(avgSquare - avg*avg);
+                stdArray[x + y*ims.getHeight()] = (float) Math.sqrt(avgSquare - avg*avg);
             }
         }
         return new FloatProcessor(ims.getWidth(), ims.getHeight(), stdArray);
+    }
+
+    // Maximum intensity projection
+    public static FloatProcessor calculateMIP(ImageStack ims){
+
+        float mip;
+        float[] mipArray = new float[ims.getWidth()*ims.getHeight()];
+
+        int nSlices = ims.getSize();
+        float[] pixels = new float[nSlices];
+
+        for (int x=0; x<ims.getWidth(); x++){
+            for (int y=0; y<ims.getHeight(); y++){
+                mip = 0;
+                ims.getVoxels(x, y, 0, 1,1, nSlices, pixels); // pulls the array of data from a single x,y position over the stack
+                for (int s=0; s<nSlices; s++){
+                    if (pixels[s]>mip) mip = pixels[s];
+                }
+                mipArray[x + y*ims.getHeight()] = mip;
+            }
+        }
+        return new FloatProcessor(ims.getWidth(), ims.getHeight(), mipArray);
     }
 
 }
