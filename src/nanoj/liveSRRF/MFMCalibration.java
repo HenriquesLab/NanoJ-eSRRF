@@ -1,5 +1,6 @@
 package nanoj.liveSRRF;
 
+import ij.IJ;
 import ij.ImagePlus;
 import ij.ImageStack;
 import ij.gui.Plot;
@@ -22,50 +23,58 @@ import static nanoj.core.java.image.drift.EstimateShiftAndTilt.getMaxFindByOptim
 import static nanoj.liveSRRF.GetAxialPositionMFM.normalizeArray;
 
 public class MFMCalibration {
-    private static final TranslateOrRotateImage translateOrRotateImage = new TranslateOrRotateImage();
 
-    //    private ImageProcessor ipRef;
-    private float[] angleArray;
-    private double[] angleArrayDouble;
-//    private float angleStep;
+    private double[] angleArray;
     private static final Log log = new Log();
     //    private int radiusX, radiusY; // TODO: include radius X and Y to speed things up?
     public ImageStack[] imsRCCMap;
     Plot thetaFitPlot;
 
     // Initialisation
-//    public GetShiftAndTiltRCCM(ImageProcessor ipRef, int nAngles, float maxAngle){
     public MFMCalibration(){
-//        this.ipRef = ipRef.duplicate();
-//        this.angleStep = 2*(float) toRadians(maxAngle)/(nAngles-1);
-//        this.angleArray = initializeFloatAndGrowthFill(nAngles, -(float) toRadians(maxAngle), angleStep);
-//        this.angleArrayDouble = initializeDoubleAndGrowthFill(nAngles, -toRadians(maxAngle), angleStep);
-        this.thetaFitPlot = new Plot("Theta fit plot", "Angle (radians)", "Intensity (AU)");
+        this.thetaFitPlot = new Plot("Theta fit plot", "Angle (degrees)", "Intensity (AU)");
     }
 
     // This method calculates the RCCM ImageStack array ----------------------------------------------------------------
     public void computeRCCM(ImageProcessor ipRef, ImageStack ims, int nAngles, float maxAngle) {
-        int nSlices = ims.getSize();
-        imsRCCMap = new ImageStack[nSlices];
 
-        float angleStep = 2*(float) toRadians(maxAngle)/(nAngles-1);
-        angleArray = initializeFloatAndGrowthFill(nAngles, -(float) toRadians(maxAngle), angleStep);
-        angleArrayDouble = initializeDoubleAndGrowthFill(nAngles, -toRadians(maxAngle), angleStep);
+        int nROI = ims.getSize();
+        imsRCCMap = new ImageStack[nROI];
+        double angleStep = 2* maxAngle/(nAngles-1); // in degrees
+        angleArray = initializeDoubleAndGrowthFill(nAngles, -maxAngle, angleStep); // in degrees
 
         // Rotate and then calculate Cross Correlation
-        for (int s = 1; s <= nSlices; s++) {
+        for (int s = 1; s <= nROI; s++) {
 
-            log.progress(s, nSlices);
+            log.progress(s, nROI);
 
             // build rotated stack
             ImageStack imsRotated = new ImageStack(ipRef.getWidth(), ipRef.getHeight());
-            for (int n = 0; n < angleArray.length; n++) {
+            for (int n = 0; n < nAngles; n++) {
                 imsRotated.addSlice(ims.getProcessor(s));
             }
 
             // rotate
-            imsRotated = translateOrRotateImage.rotate(imsRotated, angleArray);
-            imsRCCMap[s - 1] = calculateCrossCorrelationMap(ipRef, imsRotated, false);
+            NanoJThreadExecutor NTE = new NanoJThreadExecutor(false);
+            NTE.showProgress = false;
+            for (int n = 1; n <= nAngles; n++) {
+                ThreadedRotate r = new ThreadedRotate(imsRotated, n, angleArray[n - 1]);
+                NTE.execute(r);
+            }
+            NTE.finish();
+
+            // --- Using aparapi ---
+//            imsRotated = translateOrRotateImage.rotate(imsRotated, angleArray);
+
+            // --- Manual rotation ---
+//            for (int n = 0; n < nAngles; n++) {
+//                ImageProcessor ip = imsRotated.getProcessor(n+1).duplicate();
+//                ip.setInterpolationMethod(ip.BICUBIC);
+//                ip.rotate(toDegrees(angleArrayDouble[n]));
+//                imsRotated.setProcessor(ip, n+1);
+//            }
+
+            imsRCCMap[s - 1] = calculateCrossCorrelationMap(ipRef, imsRotated,false);
         }
     }
 
@@ -108,16 +117,16 @@ public class MFMCalibration {
 //            IJ.log("Sigma: "+(fitResults[2]));
 //            IJ.log("BG: "+fitResults[3]);
 
-            theta[s] = toDegrees(linearInterpolation(angleArray, fitResults[1]));
+            theta[s] = linearInterpolation(angleArray, fitResults[1]); // convert it back to degrees
 //            shiftX[s] = (imsRCCMapSlice.getWidth()-1)/2 - shiftXY[0][Math.round(fitResults[1])];
 //            shiftY[s] = (imsRCCMapSlice.getHeight()-1)/2 - shiftXY[1][Math.round(fitResults[1])];
             shiftX[s] = (imsRCCMapSlice.getWidth()-1)/2 - linearInterpolation(shiftXY[0], fitResults[1]); // TODO: this assumes that shiftXY is relatively continuous wrt to theta
             shiftY[s] = (imsRCCMapSlice.getHeight()-1)/2 - linearInterpolation(shiftXY[1], fitResults[1]);
 
             thetaFitPlot.setColor(Color.black);
-            thetaFitPlot.add("line", angleArrayDouble, modelArray[0]);
+            thetaFitPlot.add("line", angleArray, modelArray[0]);
             thetaFitPlot.setColor(Color.red);
-            thetaFitPlot.add("line", angleArrayDouble, modelArray[1]);
+            thetaFitPlot.add("line", angleArray, modelArray[1]);
 //        defocusPlot.add("line", zPosArray, normalizeArray(zCorrArray));
             thetaFitPlot.show();
         }
@@ -126,12 +135,13 @@ public class MFMCalibration {
     }
 
     // This uses Aparapi to do the rotation
-    public static ImagePlus[] applyCorrection(ImagePlus imp, double[] shiftX, double[] shiftY, double[] theta, double[] intCoeffs){
+    public ImagePlus[] applyCorrection(ImagePlus imp, double[] shiftX, double[] shiftY, double[] theta, double[] intCoeffs){
 
-        float[] floatTheta = new float[theta.length];
-        for (int i = 0 ; i < theta.length; i++) {
-            floatTheta[i] = (float) toRadians(theta[i]);
-        }
+        int nAngles = theta.length;
+//        float[] floatTheta = new float[theta.length];
+//        for (int i = 0 ; i < theta.length; i++) {
+//            floatTheta[i] = (float) toRadians(theta[i]);
+//        }
 
         ApplyDriftCorrection adc = new ApplyDriftCorrection();
         ImageStack ims = imp.getImageStack();
@@ -142,7 +152,15 @@ public class MFMCalibration {
             }
         }
 
-        ImageStack imsRotated = translateOrRotateImage.rotate(ims, floatTheta);
+        ImageStack imsRotated = imp.getStack().duplicate();
+        NanoJThreadExecutor NTE = new NanoJThreadExecutor(false);
+        for (int n = 1; n <= nAngles; n++) {
+            ThreadedRotate r = new ThreadedRotate(imsRotated, n, theta[n - 1]);
+            NTE.execute(r);
+        }
+        NTE.finish();
+
+//        ImageStack imsRotated = translateOrRotateImage.rotate(ims, floatTheta);
 
         ImagePlus impRot = new ImagePlus(imp.getShortTitle(), imsRotated);
         ImagePlus impAvgCorrected = adc.applyDriftCorrection(impRot, shiftX, shiftY);
@@ -198,6 +216,16 @@ public class MFMCalibration {
             return ((1-x+x0)*array[x0]+(x-x0)*array[x0+1]);}
     }
 
+    // TODO: could be moved to NanoJ-Core
+    public static double linearInterpolation(double[] array, float x){
+
+        if (x<0) return array[0];
+        else if (x>array.length-1) return array[array.length-1];
+        else {
+            int x0 = (int) Math.floor(x);
+            return ((1-x+x0)*array[x0]+(x-x0)*array[x0+1]);}
+    }
+
     // Adapted from nanoj.core.java.gui.ApplyDriftCorrection;
     // TODO: could be moved to NanoJ-Core
     class ThreadedRotateTranslate extends Thread {
@@ -218,7 +246,7 @@ public class MFMCalibration {
 
         @Override
         public void run() {
-            ImageProcessor ip = ims.getProcessor(slice);
+            ImageProcessor ip = ims.getProcessor(slice).duplicate(); // TODO duplicate or not duplicate, that is the question????
             ip.setInterpolationMethod(ip.BICUBIC);
             ip.rotate(angle);
             ip.translate(shiftX, shiftY);
@@ -226,7 +254,27 @@ public class MFMCalibration {
         }
     }
 
+    // Adapted from nanoj.core.java.gui.ApplyDriftCorrection;
+    // TODO: could be moved to NanoJ-Core
+    class ThreadedRotate extends Thread {
+        private final double angle;
+        private final int slice;
+        private final ImageStack ims;
 
+        public ThreadedRotate(ImageStack ims, int slice, double angle) {
+            this.angle = angle;
+            this.ims = ims;
+            this.slice = slice;
+        }
+
+        @Override
+        public void run() {
+            ImageProcessor ip = ims.getProcessor(slice).duplicate(); // needs to be duplicated for rotate to work
+            ip.setInterpolationMethod(ip.BICUBIC);
+            ip.rotate(angle);
+            ims.setProcessor(ip, slice);
+        }
+    }
 
 
 }
