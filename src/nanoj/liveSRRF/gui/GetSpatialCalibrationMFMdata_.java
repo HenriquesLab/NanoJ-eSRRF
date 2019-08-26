@@ -261,15 +261,16 @@ public class GetSpatialCalibrationMFMdata_ implements PlugIn {
 
 
         // ---- Creating the NanoJ table and save it ----
+        int digitsToRound = 2;
         IJ.log("Creating calibration table...");
         Map<String, double[]> data = new LinkedHashMap<>();
-        data.put("X-shift (pixels)", sortArray(shiftX, sortedIndicesROI));
-        data.put("Y-shift (pixels)", sortArray(shiftY, sortedIndicesROI));
-        data.put("Theta (degrees)", sortArray(theta, sortedIndicesROI)); // in degrees !!!
-        data.put("Axial positions", axialPositions);
-        data.put("Nominal positions", sortArray(nominalAxialPositions, sortedIndicesROI));
-        data.put("ROI #", sortArray(chosenROIsLocations, sortedIndicesROI));
-        data.put("Intensity scaling", sortArray(intensityScalingCoeffs, sortedIndicesROI));
+        data.put("X-shift (pixels)", sortArray(roundToNdigits(shiftX, digitsToRound), sortedIndicesROI));
+        data.put("Y-shift (pixels)", sortArray(roundToNdigits(shiftY, digitsToRound), sortedIndicesROI));
+        data.put("Theta (degrees)", sortArray(roundToNdigits(theta, digitsToRound), sortedIndicesROI)); // in degrees !!!
+        data.put("Axial positions", roundToNdigits(axialPositions, digitsToRound));
+        data.put("Nominal positions", sortArray(roundToNdigits(nominalAxialPositions, digitsToRound), sortedIndicesROI));
+        data.put("ROI #", sortArray(roundToNdigits(chosenROIsLocations, digitsToRound), sortedIndicesROI));
+        data.put("Intensity scaling", sortArray(roundToNdigits(intensityScalingCoeffs, digitsToRound), sortedIndicesROI));
 
         ResultsTable rt = dataMapToResultsTable(data);
         rt.show("Calibration-Table");
@@ -293,7 +294,7 @@ public class GetSpatialCalibrationMFMdata_ implements PlugIn {
 
 
         IJ.log("------------");
-        IJ.log("Offset: "+meanOffset+" nm");
+        IJ.log("Offset: "+roundToNdigits(new double[]{meanOffset}, digitsToRound)[0]+" nm");
         IJ.log("------------");
         IJ.log("All done.");
 
@@ -354,6 +355,17 @@ public class GetSpatialCalibrationMFMdata_ implements PlugIn {
 //            IJ.log("Coeffs: "+coeffs[i]);
         }
         return coeffs;
+    }
+
+    // Helper function --- this rounds an array to "digits" digits
+    public static double[] roundToNdigits(double[] array, int digits){
+
+        double R = Math.pow(10, digits);
+        double[] roundedArray = new double[array.length];
+        for (int i = 0; i < array.length; i++) {
+            roundedArray[i] = Math.round(array[i]*R)/R;
+        }
+        return roundedArray;
     }
 
 }

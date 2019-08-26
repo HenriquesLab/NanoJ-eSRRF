@@ -40,8 +40,14 @@ public class MFMCalibration {
 
         int nROI = ims.getSize();
         imsRCCMap = new ImageStack[nROI];
-        double angleStep = 2* maxAngle/(nAngles-1); // in degrees
-        angleArray = initializeDoubleAndGrowthFill(nAngles, -maxAngle, angleStep); // in degrees
+        if (nAngles <= 0 | maxAngle == 0){
+            nAngles = 1;
+            angleArray = new double[]{0};
+        }
+        else {
+            double angleStep = 2 * maxAngle / (nAngles - 1); // in degrees
+            angleArray = initializeDoubleAndGrowthFill(nAngles, -maxAngle, angleStep); // in degrees
+        }
 
         // Rotate and then calculate Cross Correlation
         for (int s = 1; s <= nROI; s++) {
@@ -89,17 +95,17 @@ public class MFMCalibration {
         double[] shiftY = new double[nROI];
         double[] theta = new double[nROI];
 
-        int nSlices;
+        int nAngles;
 
         for(int s=0; s<nROI; s++) {
             ImageStack imsRCCMapSlice = imsRCCMap[s];
 
-            // calculate position and value of maximum pixel TODO: avoid spurious pixels that would skew this
-            nSlices = imsRCCMapSlice.getSize();
-            float[][] shiftXY = new float[2][nSlices];
-            float[] maxValue = new float[nSlices];
+            // calculate position and value of maximum pixel TODO: avoid spurious pixels that would skew this?
+            nAngles = imsRCCMapSlice.getSize();
+            float[][] shiftXY = new float[2][nAngles];
+            float[] maxValue = new float[nAngles];
 
-            for (int a = 0; a<nSlices; a++) {
+            for (int a = 0; a<nAngles; a++) {
                 FloatProcessor fpRCCMslice = imsRCCMapSlice.getProcessor(a+1).convertToFloatProcessor();
                 float[] resultsOfOpimisation = getMaxFindByOptimization(fpRCCMslice);
                 shiftXY[0][a] = resultsOfOpimisation[0];
@@ -107,73 +113,80 @@ public class MFMCalibration {
                 maxValue[a] = resultsOfOpimisation[2];
             }
 
-            fitting = new Fit1DGaussian(normalizeArray(maxValue));
-            fitting.cropDataArray(cropLevel);
-            float[] fitResults = fitting.calculate();
-            double[][] modelArray = fitting.fittedCurve();
+            if (nAngles > 1) {
+                fitting = new Fit1DGaussian(normalizeArray(maxValue));
+                fitting.cropDataArray(cropLevel);
+                float[] fitResults = fitting.calculate();
+                double[][] modelArray = fitting.fittedCurve();
 //            IJ.log("--- Fit results ---");
 //            IJ.log("Amp: "+fitResults[0]);
 //            IJ.log("x0: "+(fitResults[1]));
 //            IJ.log("Sigma: "+(fitResults[2]));
 //            IJ.log("BG: "+fitResults[3]);
 
-            theta[s] = linearInterpolation(angleArray, fitResults[1]); // convert it back to degrees
+                theta[s] = linearInterpolation(angleArray, fitResults[1]); // convert it back to degrees
 //            shiftX[s] = (imsRCCMapSlice.getWidth()-1)/2 - shiftXY[0][Math.round(fitResults[1])];
 //            shiftY[s] = (imsRCCMapSlice.getHeight()-1)/2 - shiftXY[1][Math.round(fitResults[1])];
-            shiftX[s] = (imsRCCMapSlice.getWidth()-1)/2 - linearInterpolation(shiftXY[0], fitResults[1]); // TODO: this assumes that shiftXY is relatively continuous wrt to theta
-            shiftY[s] = (imsRCCMapSlice.getHeight()-1)/2 - linearInterpolation(shiftXY[1], fitResults[1]);
+                shiftX[s] = (imsRCCMapSlice.getWidth() - 1) / 2 - linearInterpolation(shiftXY[0], fitResults[1]); // This assumes that shiftXY is relatively continuous wrt to theta
+                shiftY[s] = (imsRCCMapSlice.getHeight() - 1) / 2 - linearInterpolation(shiftXY[1], fitResults[1]);
 
-            thetaFitPlot.setColor(Color.black);
-            thetaFitPlot.add("line", angleArray, modelArray[0]);
-            thetaFitPlot.setColor(Color.red);
-            thetaFitPlot.add("line", angleArray, modelArray[1]);
+                thetaFitPlot.setColor(Color.black);
+                thetaFitPlot.add("line", angleArray, modelArray[0]);
+                thetaFitPlot.setColor(Color.red);
+                thetaFitPlot.add("line", angleArray, modelArray[1]);
 //        defocusPlot.add("line", zPosArray, normalizeArray(zCorrArray));
-            thetaFitPlot.show();
+                thetaFitPlot.show();
+            }
+            else {
+                theta[s] = angleArray[0]; // don't fit if there's only one angle in the array
+                shiftX[s] = (imsRCCMapSlice.getWidth() - 1) / 2 - shiftXY[0][0];
+                shiftY[s] = (imsRCCMapSlice.getHeight() - 1) / 2 - shiftXY[1][0];
+            }
         }
 
         return new double[][] {shiftX, shiftY, theta};
     }
 
     // This uses Aparapi to do the rotation
-    public ImagePlus[] applyCorrection(ImagePlus imp, double[] shiftX, double[] shiftY, double[] theta, double[] intCoeffs){
-
-        int nAngles = theta.length;
-//        float[] floatTheta = new float[theta.length];
-//        for (int i = 0 ; i < theta.length; i++) {
-//            floatTheta[i] = (float) toRadians(theta[i]);
+//    public ImagePlus[] applyCorrection(ImagePlus imp, double[] shiftX, double[] shiftY, double[] theta, double[] intCoeffs){
+//
+//        int nAngles = theta.length;
+////        float[] floatTheta = new float[theta.length];
+////        for (int i = 0 ; i < theta.length; i++) {
+////            floatTheta[i] = (float) toRadians(theta[i]);
+////        }
+//
+//        ApplyDriftCorrection adc = new ApplyDriftCorrection();
+//        ImageStack ims = imp.getImageStack();
+//
+//        if (intCoeffs != null){
+//            for (int i = 0; i < ims.getSize(); i++) {
+//                ims.getProcessor(i+1).multiply( 1/intCoeffs[i]);
+//            }
 //        }
-
-        ApplyDriftCorrection adc = new ApplyDriftCorrection();
-        ImageStack ims = imp.getImageStack();
-
-        if (intCoeffs != null){
-            for (int i = 0; i < ims.getSize(); i++) {
-                ims.getProcessor(i+1).multiply( 1/intCoeffs[i]);
-            }
-        }
-
-        ImageStack imsRotated = imp.getStack().duplicate();
-        NanoJThreadExecutor NTE = new NanoJThreadExecutor(false);
-        for (int n = 1; n <= nAngles; n++) {
-            ThreadedRotate r = new ThreadedRotate(imsRotated, n, theta[n - 1]);
-            NTE.execute(r);
-        }
-        NTE.finish();
-
-//        ImageStack imsRotated = translateOrRotateImage.rotate(ims, floatTheta);
-
-        ImagePlus impRot = new ImagePlus(imp.getShortTitle(), imsRotated);
-        ImagePlus impAvgCorrected = adc.applyDriftCorrection(impRot, shiftX, shiftY);
-
-        int x0 = (int) Math.max(Math.ceil(getMaxValue(shiftX)[1]), -Math.ceil(getMinValue(shiftX)[1]));
-        int y0 = (int) Math.max(Math.ceil(getMaxValue(shiftY)[1]), -Math.ceil(getMinValue(shiftY)[1]));
-        ImageStack imsAvgCorrectedCropped = impAvgCorrected.getStack().crop(x0, y0, 0, imp.getWidth()-2*x0, imp.getHeight()-2*y0, imp.getStackSize());
-        ImagePlus[] impCombo = new ImagePlus[2];
-        impCombo[0] = impAvgCorrected;
-        impCombo[1] = new ImagePlus("Corrected crop", imsAvgCorrectedCropped);
-
-        return impCombo;
-    }
+//
+//        ImageStack imsRotated = imp.getStack().duplicate();
+//        NanoJThreadExecutor NTE = new NanoJThreadExecutor(false);
+//        for (int n = 1; n <= nAngles; n++) {
+//            ThreadedRotate r = new ThreadedRotate(imsRotated, n, theta[n - 1]);
+//            NTE.execute(r);
+//        }
+//        NTE.finish();
+//
+////        ImageStack imsRotated = translateOrRotateImage.rotate(ims, floatTheta);
+//
+//        ImagePlus impRot = new ImagePlus(imp.getShortTitle(), imsRotated);
+//        ImagePlus impAvgCorrected = adc.applyDriftCorrection(impRot, shiftX, shiftY);
+//
+//        int x0 = (int) Math.max(Math.ceil(getMaxValue(shiftX)[1]), -Math.ceil(getMinValue(shiftX)[1]));
+//        int y0 = (int) Math.max(Math.ceil(getMaxValue(shiftY)[1]), -Math.ceil(getMinValue(shiftY)[1]));
+//        ImageStack imsAvgCorrectedCropped = impAvgCorrected.getStack().crop(x0, y0, 0, imp.getWidth()-2*x0, imp.getHeight()-2*y0, imp.getStackSize());
+//        ImagePlus[] impCombo = new ImagePlus[2];
+//        impCombo[0] = impAvgCorrected;
+//        impCombo[1] = new ImagePlus("Corrected crop", imsAvgCorrectedCropped);
+//
+//        return impCombo;
+//    }
 
     // Threaded version which does not use Aparapi
     public ImageStack[] applyMFMCorrection(ImageStack ims, double[] shiftX, double[] shiftY, double[] theta, double[] intCoeffs){

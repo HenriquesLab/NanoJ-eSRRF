@@ -61,6 +61,7 @@ public class ApplyCalibrationMFMdata_ implements PlugIn {
         }
 
         int nROI = shiftX.length;
+        IJ.log("Number of blocks: "+nROI);
         int nImageSplits = 3; // TODO: this is hardcoded for the moment
         int cropSizeX = Math.round(width/nImageSplits); // TODO: assume that size in X and Y are the same?
         int cropSizeY = Math.round(height/nImageSplits); // TODO: assume that size in X and Y are the same?
@@ -76,7 +77,7 @@ public class ApplyCalibrationMFMdata_ implements PlugIn {
         MFMCalibration RCCMcalculator = new MFMCalibration();
 
         int i,j,x,y;
-        for (int id=0; id<nROI; id++){
+        for (int id = 0; id < nROI; id++){
             i = (int) chosenROIsLocations[id]%3;
             j = (int) (chosenROIsLocations[id] - i)/3;
 //            IJ.log("i="+i);
