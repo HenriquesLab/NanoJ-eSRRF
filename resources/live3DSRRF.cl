@@ -16,6 +16,14 @@
 #define nFrameForSRRF $NFRAMEFORSRRF$
 #define intWeighting $INTWEIGHTING$
 
+#define wS $WIDTHTHREED$
+#define hS $HEIGHTTHREED$
+#define whS $WHS$
+#define wSInt $WSINT$
+#define hSInt $HSINT$
+#define whSInt $WHSINT$
+#define nPlanes $NPLANES$ // TODO: ever necessary?
+
 #define vxy_offset $VXY_OFFSET$
 #define vxy_ArrayShift $VXY_ARRAYSHIFT$
 
@@ -32,12 +40,10 @@ static float cubic(float x) {
 }
 
 // Interpolation function: interpolate in continuous space with respect to the reference of the array // TODO: check confusion between width and w height and h
-//static float getInterpolatedValue(__global float* array, int const width, int const height, float const x, float const y, int const f) {
-static float getInterpolatedValue(__global float* array, float const x, float const y, int const f) {
+static float getInterpolatedValue(__global float* array, float const x, float const y, int const f, int const z) {
     const int u0 = (int) floor(x);
     const int v0 = (int) floor(y);
-//    const int whf = width*height*f;
-    const int whf = wh*f;
+    const int whfwhSz = wh*f + whS*z;
 
     float q = 0.0f;
 
@@ -48,8 +54,7 @@ static float getInterpolatedValue(__global float* array, float const x, float co
             float p = 0.0f;
             for (int i = 0; i <= 3; i++) {
                 int u = min(max(u0 - 1 + i, 0), w-1);
-                p = p + array[v*w + u + whf] * cubic(x - (float) (u));
-//                p = p + array[v*width + u + whf] * cubic(x - (float) (u));
+                p = p + array[u + v*wS + whfwhSz] * cubic(x - (float) (u));
             }
             q = q + p * cubic(y - (float) (v));
         }
@@ -117,10 +122,10 @@ static float getInterpolatedValue(__global float* array, float const x, float co
 //        xFraction = fmax(xFraction, 0);
 //        yFraction = fmax(yFraction, 0);
 
-        float lowerLeft = array[whf + ybase * w + xbase];
-        float lowerRight = array[whf + ybase * w + xbase1];
-        float upperRight = array[whf + ybase1 * w + xbase1];
-        float upperLeft = array[whf + ybase1 * w + xbase];
+        float lowerLeft = array[whfwhSz + ybase * wS + xbase];
+        float lowerRight = array[whfwhSz + ybase * wS + xbase1];
+        float upperRight = array[whfwhSz + ybase1 * wS + xbase1];
+        float upperLeft = array[whfwhSz + ybase1 * wS + xbase];
         float upperAverage = upperLeft + xFraction * (upperRight - upperLeft);
         float lowerAverage = lowerLeft + xFraction * (lowerRight - lowerLeft);
         q = lowerAverage + yFraction * (upperAverage - lowerAverage);
@@ -136,6 +141,7 @@ static float getVBoundaryCheck(__global float* array, int const width, int const
     const int _y = min(max(y, 0), height-1);
     return array[_y*width+_x + width*height*f];
 }
+
 
 
 //// First kernel: evaluating gradient from image: 3-point gradient --------------------------------------------------------------
@@ -186,20 +192,25 @@ __kernel void calculateGradient_2point(
     __global float* pixels,
     __global float* GxArray,
     __global float* GyArray,
+    __global float* GzArray,
     __global int* nCurrentFrame
 
     ) {
-    const int x1 = get_global_id(0);
-    const int y1 = get_global_id(1);
-    const int f = get_global_id(2);
+    const int offset = get_global_id(0);
 
-    const int offset = y1 * w + x1 + wh * f;
-    const int x0 = max(x1-1, 0);
+    const int f = offset/wh;
+    const int z1 = (offset - f*wh)/whS;
+    const int y1 = (offset - f*wh - z1*whS)/w;
+    const int x1 =  offset - f*wh - z1*whS - y1*w;
+
+    const int x0 = max(x1-1, 0); // this sets the gradient to zero on the edges, assumes same value adjacent
     const int y0 = max(y1-1, 0);
+    const int z0 = max(z1-1, 0);
 
     // 2-point gradient
-    GxArray[offset] = pixels[offset] - pixels[y1 * w + x0 + wh * f];
-    GyArray[offset] = pixels[offset] - pixels[y0 * w + x1 + wh * f];
+    GxArray[offset] = pixels[offset] - pixels[x0 + y1*w + z1*whS + wh*f];
+    GyArray[offset] = pixels[offset] - pixels[x1 + y0*w + z1*whS + wh*f];
+    GzArray[offset] = pixels[offset] - pixels[x1 + y1*w + z0*whS + wh*f];
 
     // Reset the local current frame
     nCurrentFrame[1] = 0;
@@ -215,19 +226,31 @@ __kernel void calculateGradient_2point(
 __kernel void calculateGradientInterpolation(
     __global float* GxArray,
     __global float* GyArray,
+    __global float* GzArray,
     __global float* GxIntArray,
-    __global float* GyIntArray
+    __global float* GyIntArray,
+    __global float* GzIntArray
 
     ){
-    const int x = get_global_id(0);
-    const int y = get_global_id(1);
-    const int f = get_global_id(2);
 
-    const int offset = y * wInt + x + f * wInt * hInt;
+    const int offset = get_global_id(0);
 
-    // Two-fold interpolation of the gradients
-    GxIntArray[offset] = getInterpolatedValue(GxArray, (float) (x)/2.0f, (float) (y)/2.0f, f);
-    GyIntArray[offset] = getInterpolatedValue(GyArray, (float) (x)/2.0f, (float) (y)/2.0f, f);
+    const int whInt = wInt*hInt; // TODO: add as #define?
+    const int f = offset/whInt;
+    const int z = (offset - f*whInt)/whSInt;
+    const int y = (offset - f*whInt - z*whSInt)/wSInt;
+    const int x =  offset - f*whInt - z*whSInt - y*wSInt;
+
+//    const int x = get_global_id(0);
+//    const int y = get_global_id(1);
+//    const int f = get_global_id(2);
+//
+//    const int offset = y * wInt + x + f * wInt * hInt;
+
+    // LATERAL interpolation of the gradients
+    GxIntArray[offset] = getInterpolatedValue(GxArray, (float) (x)/2.0f, (float) (y)/2.0f, f, z);
+    GyIntArray[offset] = getInterpolatedValue(GyArray, (float) (x)/2.0f, (float) (y)/2.0f, f, z);
+    GzIntArray[offset] = getInterpolatedValue(GzArray, (float) (x)/2.0f, (float) (y)/2.0f, f, z);
 }
 
 
@@ -235,8 +258,9 @@ __kernel void calculateGradientInterpolation(
 // Second kernel: evaluating RGC from gradient -----------------------------------------------------------------
 __kernel void calculateRadialGradientConvergence(
     __global float* pixels,
-    __global float* GxArray,
+    __global float* GxArray, // these do not have the Int in the name but are the interpolated versions
     __global float* GyArray,
+    __global float* GzArray,
     __global float* OutArray,
     __global float* shiftXY,
     __global int* nCurrentFrame
@@ -247,14 +271,16 @@ __kernel void calculateRadialGradientConvergence(
 
     ) {
 
-//    const int xM = get_global_id(0);
-//    const int yM = get_global_id(1);
-//
-//    const int offset = yM * wM + xM;
 
     const int offset = get_global_id(0);
-    const int yM = offset/wM;
-    const int xM = offset - yM*wM;
+
+    const int f = offset/(wh);
+    const int z = (offset - f*wh)/whS;
+    const int yM = (offset - f*wh - z*whS)/w;
+    const int xM =  offset - f*wh - z*whS - yM*w;
+
+//    const int yM = offset/wM;
+//    const int xM = offset - yM*wM;
 
     const float shiftX = shiftXY[nCurrentFrame[0]];
     const float shiftY = shiftXY[nCurrentFrame[0] + nFrameForSRRF];
@@ -354,7 +380,7 @@ __kernel void calculateRadialGradientConvergence(
     if (CGLH >= 0) CGLH = pow(CGLH, sensitivity);
     else CGLH = 0;
 
-    float v = getInterpolatedValue(pixels, ((float) xM)/magnification + shiftX - 0.5f, ((float) yM)/magnification + shiftY - 0.5f, nCurrentFrame[1]);
+    float v = getInterpolatedValue(pixels, ((float) xM)/magnification + shiftX - 0.5f, ((float) yM)/magnification + shiftY - 0.5f, nCurrentFrame[1], z);
 
     if (intWeighting == 1) {
             if (nCurrentFrame[0] == 0) {

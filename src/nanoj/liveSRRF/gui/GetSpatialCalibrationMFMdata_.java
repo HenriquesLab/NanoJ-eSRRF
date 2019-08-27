@@ -128,11 +128,12 @@ public class GetSpatialCalibrationMFMdata_ implements PlugIn {
         }
 
         // ---- Initialize the variables and the Log ----
-        int cropSizeX = Math.round(width/nImageSplits) - 2*borderCrop;
-        int cropSizeY = Math.round(height/nImageSplits) - 2*borderCrop;
+        int cropSizeX = width/nImageSplits - 2*borderCrop; // int division rounds down automatically, ignoring the remainder
+        int cropSizeY = height/nImageSplits - 2*borderCrop;
+//IJ.log("CropSizeX: "+cropSizeX);
 
-        int z0 = Math.round(nSlices/2);
-        int nFramesToAverage = z0 - (int) Math.round(getMaxfromArray(nominalAxialPositions) * axialSpacing/zStep); //one-sided: so 2x this
+        int z0 = Math.round((float) nSlices/2);
+        int nFramesToAverage = z0 - (int) Math.ceil(getMaxfromArray(nominalAxialPositions) * axialSpacing / zStep + 1); //one-sided: so 2x this
         IJ.log("Number of frames averaged: "+2*nFramesToAverage);
         IJ.log("z0: "+z0);
         int referenceFrameNumber = (int) Math.ceil((double) (nROI)/2)-1;
@@ -150,9 +151,9 @@ public class GetSpatialCalibrationMFMdata_ implements PlugIn {
         for (int j = 0; j < nImageSplits; j++){
             for (int i = 0; i < nImageSplits; i++){
                 if (splitLocations[j*nImageSplits+i]) {
-                    x = Math.round((width / nImageSplits) * i) + borderCrop;
-                    y = Math.round((height / nImageSplits) * j) + borderCrop;
-                    z = z0 + (int) Math.round(offsetMFMarray[i + j * nImageSplits] * axialSpacing / zStep) - nFramesToAverage;
+                    x = Math.round((float) width / nImageSplits * i) + borderCrop;
+                    y = Math.round((float) height / nImageSplits * j) + borderCrop;
+                    z = z0 + Math.round(offsetMFMarray[i + j * nImageSplits] * axialSpacing / (float) zStep) - nFramesToAverage;
 //                IJ.log("x/y/z: "+x+"/"+y+"/"+z);
                     ImageStack imsTemp = ims.crop(x, y, z, cropSizeX, cropSizeY, 2*nFramesToAverage);
                     imsAvg.setProcessor(calculateAverage(imsTemp), id+1);
@@ -233,8 +234,8 @@ public class GetSpatialCalibrationMFMdata_ implements PlugIn {
                         thetaSlice[k] = theta[id];
                         coeffSlice[k] = intensityScalingCoeffs[id];
                     }
-                    x = Math.round((width / nImageSplits) * i) + borderCrop;
-                    y = Math.round((height / nImageSplits) * j) + borderCrop;
+                    x = Math.round((float) width / nImageSplits * i) + borderCrop;
+                    y = Math.round((float) height / nImageSplits * j) + borderCrop;
                     ImageStack imsTemp = ims.crop(x, y, 0, cropSizeX, cropSizeY, nSlices);
                     imsCorrected[sortedIndicesROI[id]] = RCCMcalculator.applyMFMCorrection(imsTemp, shiftXslice, shiftYslice, thetaSlice, coeffSlice)[0];
                     id++;
@@ -311,7 +312,7 @@ public class GetSpatialCalibrationMFMdata_ implements PlugIn {
         return max;
     }
 
-    // Helper function // TODO: could be migrated to core
+    // Helper function // TODO: could be migrated to core, assumes that there is an order to be found and no repeats
     public static int[] getSortedIndices(double[] array){
         int[] indices = new int[array.length];
         for (int i=0; i<array.length; i++){

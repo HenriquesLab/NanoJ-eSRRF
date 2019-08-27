@@ -7,6 +7,7 @@ import ij.WindowManager;
 import ij.measure.ResultsTable;
 import ij.plugin.HyperStackConverter;
 import ij.plugin.PlugIn;
+import nanoj.core.java.array.ArrayMath;
 import nanoj.core.java.io.LoadNanoJTable;
 import nanoj.liveSRRF.MFMCalibration;
 
@@ -18,7 +19,7 @@ import static nanoj.liveSRRF.gui.GetSpatialCalibrationMFMdata_.getSortedIndices;
 
 public class ApplyCalibrationMFMdata_ implements PlugIn {
 
-    private double[] shiftX, shiftY, theta, chosenROIsLocations, axialPositions, intCoeffs;
+    private double[] shiftX, shiftY, theta, chosenROIsLocations, axialPositions, intCoeffs, nominalPositions;
     private final String MFMApplyCalibVersion = "v0.6";
 
     @Override
@@ -52,6 +53,7 @@ public class ApplyCalibrationMFMdata_ implements PlugIn {
             theta = calibTable.get("Theta (degrees)");
             chosenROIsLocations = calibTable.get("ROI #");
             axialPositions = calibTable.get("Axial positions");
+            nominalPositions = calibTable.get("Nominal positions");
             intCoeffs = calibTable.get("Intensity scaling");
             ResultsTable rt = dataMapToResultsTable(calibTable);
             rt.show("Calibration-Table");
@@ -63,17 +65,20 @@ public class ApplyCalibrationMFMdata_ implements PlugIn {
         int nROI = shiftX.length;
         IJ.log("Number of blocks: "+nROI);
         int nImageSplits = 3; // TODO: this is hardcoded for the moment
-        int cropSizeX = Math.round(width/nImageSplits); // TODO: assume that size in X and Y are the same?
-        int cropSizeY = Math.round(height/nImageSplits); // TODO: assume that size in X and Y are the same?
+        int cropSizeX = width/nImageSplits; // TODO: assume that size in X and Y are the same?
+        int cropSizeY = height/nImageSplits; // TODO: assume that size in X and Y are the same?
+        IJ.log("CropSize: "+cropSizeX);
 
         ImageStack[] imsCorrectedArray = new ImageStack[nROI];
-        ImageStack imsCorrectedUberStack = new ImageStack();
 
         double[] shiftXslice = new double[nFrames];
         double[] shiftYslice = new double[nFrames];
         double[] thetaSlice = new double[nFrames];
         double[] coeffSlice = new double[nFrames];
-        int[] sortedIndicesROI = getSortedIndices(axialPositions);
+
+        int[] sortedIndicesROI;
+        if (ArrayMath.sum(axialPositions) == 0) sortedIndicesROI = getSortedIndices(nominalPositions); // case where all axial positions are 0 (simulated data for reg.)
+        else sortedIndicesROI = getSortedIndices(axialPositions);
         MFMCalibration RCCMcalculator = new MFMCalibration();
 
         int i,j,x,y;
@@ -90,17 +95,19 @@ public class ApplyCalibrationMFMdata_ implements PlugIn {
             }
 //                IJ.log("X-shift: "+shiftXslice[0]);
 
-            x = Math.round((width/nImageSplits)*i);
-            y = Math.round((height/nImageSplits)*j);
+            x = Math.round((float) width/nImageSplits * i);
+            y = Math.round((float) height/nImageSplits * j);
 //            IJ.log("x="+x);
 //            IJ.log("y="+y);
             ImageStack imsTemp = ims.crop(x, y, 0, cropSizeX,cropSizeY, nFrames);
             imsCorrectedArray[sortedIndicesROI[id]] = RCCMcalculator.applyMFMCorrection(imsTemp, shiftXslice, shiftYslice, thetaSlice, coeffSlice)[0];
         }
 
+        ImageStack imsCorrectedUberStack = new ImageStack();
         IJ.log("Reshaping data...");
         for (int r = 0; r < nROI; r++) {
             for (int k = 0; k < nFrames; k++) {
+//                IJ.log("r/k "+r+"/"+k);
                 imsCorrectedUberStack.addSlice(imsCorrectedArray[r].getProcessor(k+1));
             }
         }

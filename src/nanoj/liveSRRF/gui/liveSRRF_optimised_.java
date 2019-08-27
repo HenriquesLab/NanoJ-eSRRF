@@ -22,7 +22,6 @@ import java.io.IOException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
-import static ij.IJ.selectWindow;
 import static java.lang.Math.min;
 
 public class liveSRRF_optimised_ implements PlugIn {
@@ -57,9 +56,14 @@ public class liveSRRF_optimised_ implements PlugIn {
             writeSuggestOKeyed = false,
             doMPmapCorrection,
             showImStabPlot,
-            intWeighting;
+            intWeighting,
+            showGradient,
+            showIntGradient,
 
-    private final String LiveSRRFVersion = "v1.10";
+    enable3DSRRF = true,
+            do3DSRRF;
+
+    private final String LiveSRRFVersion = "v1.11";
     private String pathToDisk = "",
             fileName,
             chosenDeviceName,
@@ -71,9 +75,8 @@ public class liveSRRF_optimised_ implements PlugIn {
     private float[] shiftX, shiftY;
 
     // Image formats
-    private ImagePlus imp;
-
-    private ImagePlus impSRRFavg,
+    private ImagePlus imp,
+            impSRRFavg,
             impSRRFstd,
             impRawInterpolated;
 
@@ -152,6 +155,14 @@ public class liveSRRF_optimised_ implements PlugIn {
             return;
         }
 
+        String threeDimSRRFcalibTablePath = null;
+        if (do3DSRRF){
+            // ---- Getting calibration data from the NanoJ table ----
+            IJ.log("Getting 3D-SRRF calibration file...");
+            threeDimSRRFcalibTablePath = IJ.getFilePath("Choose 3D-SRRF calibration table to load...");
+            if (threeDimSRRFcalibTablePath == null) return;
+        }
+
         // Check if something has gone wrong with the momory
         if (!calculatenFrameOnGPU()){
             liveSRRF.release();
@@ -204,7 +215,7 @@ public class liveSRRF_optimised_ implements PlugIn {
 
         ImageStack imsAllRawData = imp.getImageStack();
 
-        liveSRRF.initialise(width, height, magnification, fwhm, sensitivity, nFrameOnGPU, nFrameForSRRFtoUse, blockSize, chosenDevice, intWeighting, doMPmapCorrection);
+        liveSRRF.initialise(width, height, magnification, fwhm, sensitivity, nFrameOnGPU, nFrameForSRRFtoUse, blockSize, chosenDevice, intWeighting, doMPmapCorrection, threeDimSRRFcalibTablePath);
 
         shiftX = new float[nFrameForSRRFtoUse];
         shiftY = new float[nFrameForSRRFtoUse];
@@ -339,6 +350,18 @@ public class liveSRRF_optimised_ implements PlugIn {
         }
         // End looping trough SRRF frames --------------------------------------------
 
+        if (showGradient) {
+            // Read off the gradient (single frame, which one needs to be checked)
+            ImageStack imsGradient = liveSRRF.readGradientBuffers(false);
+            ImagePlus impGradients = new ImagePlus("Gradients", imsGradient);
+            impGradients.show();
+        }
+
+        if (showIntGradient) {
+            ImageStack imsGradientInt = liveSRRF.readGradientBuffers(true);
+            ImagePlus impGradientsInt = new ImagePlus("Interpolated gradients", imsGradientInt);
+            impGradientsInt.show();
+        }
 
         // Release the GPU
         liveSRRF.release();
@@ -472,6 +495,7 @@ public class liveSRRF_optimised_ implements PlugIn {
 
         gd.addMessage("-=-= Advanced settings =-=-\n", headerFont);
         gd.addCheckbox("Show advanced settings", false);
+        if (enable3DSRRF) gd.addCheckbox("3D-SRRF from MFM data", false);
 
         gd.addHelp("https://www.youtube.com/watch?v=PJQVlVHsFF8"); // If you're hooked on a feeling
 
@@ -540,11 +564,13 @@ public class liveSRRF_optimised_ implements PlugIn {
         if (showAdvancedSettings && !previousAdvSettings) advancedSettingsGUI();
         previousAdvSettings = showAdvancedSettings;
 
+        if (enable3DSRRF) do3DSRRF = gd.getNextBoolean();
+        else do3DSRRF = false;
+
         nGPUloadPerSRRFframe = (int) math.ceil((float) nFrameForSRRFtoUse / (float) nFrameOnGPU);
 
         return goodToGo;
     }
-
 
     // -- Advanced settings GUI --
     private void advancedSettingsGUI() {
@@ -575,6 +601,10 @@ public class liveSRRF_optimised_ implements PlugIn {
         gd.addCheckbox("Macro-pixel patterning correction", prefs.get("doMPmapCorrection", true));
         gd.addCheckbox("Show image stabilisation scatter plot", prefs.get("showImStabPlot", false));
 
+        gd.addMessage("-=-= Advanced display settings =-=-\n", headerFont);
+        gd.addCheckbox("Show gradients", prefs.get("showGradient", true));
+        gd.addCheckbox("Show interpolated gradients", prefs.get("showIntGradient", true));
+
         gd.addHelp("https://www.youtube.com/watch?v=otCpCn0l4Wo"); // it's Hammer time
 
         MyDialogListenerAdvancedGUI dl = new MyDialogListenerAdvancedGUI(); // this serves to estimate a few indicators such as RAM usage
@@ -589,6 +619,8 @@ public class liveSRRF_optimised_ implements PlugIn {
             intWeighting = prefs.get("intWeighting", true);
             doMPmapCorrection = prefs.get("doMPmapCorrection", true);
             showImStabPlot = prefs.get("showImStabPlot", false);
+            showGradient = prefs.get("showGradient", false);
+            showIntGradient = prefs.get("showIntGradient", false);
 
             // re-initialises to how it was before entering advanced GUI
             writeToDiskToUse = writeToDiskTemp;
@@ -601,6 +633,8 @@ public class liveSRRF_optimised_ implements PlugIn {
             prefs.set("intWeighting", intWeighting);
             prefs.set("doMPmapCorrection", doMPmapCorrection);
             prefs.set("showImStabPlot", showImStabPlot);
+            prefs.set("showGradient", showGradient);
+            prefs.set("showIntGradient", showIntGradient);
             prefs.save();
         }
 
@@ -628,6 +662,8 @@ public class liveSRRF_optimised_ implements PlugIn {
         intWeighting = gd.getNextBoolean();
         doMPmapCorrection = gd.getNextBoolean();
         showImStabPlot = gd.getNextBoolean();
+        showGradient = gd.getNextBoolean();
+        showIntGradient = gd.getNextBoolean();
 
         if (writeToDiskTemp && !previousWriteToDisk) {
             pathToDisk = IJ.getDirectory("");
