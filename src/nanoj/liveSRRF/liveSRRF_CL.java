@@ -33,10 +33,11 @@ public class liveSRRF_CL {
             nFrameForSRRF,
             blockLength,
             magnification,
-            nSplits = 3, // TODO: currently hard-coded
-            nPlanes;
+            nSplits = 3; // TODO: currently hard-coded;
 
-    public int widthS, heightS;
+    public int widthS, heightS,
+            nPlanes,
+    nPlanesM;
 
     private double[] intCoeffs3D,
             chosenROIsLocations3D;
@@ -201,6 +202,7 @@ public class liveSRRF_CL {
             nPlanes = shiftX3D.length;
             widthS = width / nSplits;
             heightS = height / nSplits;
+            nPlanesM = nPlanes*magnification;
 
             if (ArrayMath.sum(axialPositions3D) != 0)
                 axialOffset = (float) linearRegressionLeastSquareNoOffset(nominalPositions3D, axialPositions3D);
@@ -212,6 +214,7 @@ public class liveSRRF_CL {
             nPlanes = 1;
             widthS = width;
             heightS = height;
+            nPlanesM = 1;
         }
 
         singleFrameSize = nPlanes * widthS * heightS; // nPlanes = 1 in 2D case
@@ -479,54 +482,88 @@ public class liveSRRF_CL {
         // Calculate the STD on the OutputArray on the GPU
         int id = prof.startTimer();
         queue.finish(); // Make sure everything is done
-        queue.put1DRangeKernel(kernelCalculateStd, 0, singleFrameSize*magnification*magnification,0);
+        int singleFrameSizeM;
+        if (do3DSRRF) singleFrameSizeM = singleFrameSize * magnification * magnification * magnification;
+        else singleFrameSizeM = singleFrameSize * magnification * magnification;
+        queue.put1DRangeKernel(kernelCalculateStd, 0, singleFrameSizeM,0);
         prof.recordTime("Calculate STD image", prof.endTimer(id));
 
-        if (doMPmapCorrection) { // TODO: is this going to be a problem for 3D? probably yes
-            id = prof.startTimer();
-            queue.put1DRangeKernel(kernelCalculateMPmap, 0, 2 * magnification * magnification, 0);
-            prof.recordTime("Calculate MP map", prof.endTimer(id));
-
-            id = prof.startTimer();
-            queue.put1DRangeKernel(kernelCorrectMPmap, 0, 2 * singleFrameSize*magnification*magnification, 0);
-            prof.recordTime("Correct for MP map", prof.endTimer(id));
-        }
+//        if (doMPmapCorrection) { // TODO: is this going to be a problem for 3D? probably yes
+//            id = prof.startTimer();
+//            queue.put1DRangeKernel(kernelCalculateMPmap, 0, 2 * magnification * magnification, 0);
+//            prof.recordTime("Calculate MP map", prof.endTimer(id));
+//
+//            id = prof.startTimer();
+//            queue.put1DRangeKernel(kernelCorrectMPmap, 0, 2 * singleFrameSize*magnification*magnification, 0);
+//            prof.recordTime("Correct for MP map", prof.endTimer(id));
+//        }
 
         queue.finish(); // Make sure everything is done
         queue.putReadBuffer(clBufferOut, true);
         FloatBuffer bufferSRRF = clBufferOut.getBuffer();
+//        IJ.log("FloatBugger limit: "+bufferSRRF.limit());
+//        IJ.log("FloatBuffer string: "+bufferSRRF.toString());
 
         imsSRRF = new ImageStack(widthM, heightM);
 
-        // Load average
-        float[] dataSRRF = new float[widthM * heightM];
-        for (int n = 0; n < widthM * heightM; n++) {
-            dataSRRF[n] = bufferSRRF.get(n);
-            if (Float.isNaN(dataSRRF[n])) dataSRRF[n] = 0; // make sure we dont get any weirdness
-        }
-        imsSRRF.addSlice(new FloatProcessor(widthM, heightM, dataSRRF));
+        for (int p = 0; p < nPlanesM; p++) {
+//            IJ.log("Reading frame " + p);
 
-        // Load standard deviation // TODO: do this on GPU - test but this looks fine
-        dataSRRF = new float[widthM * heightM];
-        for (int n = 0; n < widthM * heightM; n++) {
-            //dataSRRF[n] = bufferSRRF.get(n + widthM * heightM) - bufferSRRF.get(n) * bufferSRRF.get(n); // Var[X] = E[X^2] - (E[X])^2
-            dataSRRF[n] = bufferSRRF.get(n + widthM * heightM);
-            //if (dataSRRF[n] < 0) {
-            //    dataSRRF[n] = 0;
-            //    //IJ.log("!!Negative VAR value!!");
-            //}
-            if (Float.isNaN(dataSRRF[n])) dataSRRF[n] = 0; // make sure we dont get any weirdness
-            //dataSRRF[n] = (float) math.sqrt(dataSRRF[n]);
+            // Load average
+            float[] dataSRRF = new float[widthM * heightM];
+            for (int n = 0; n < widthM * heightM; n++) {
+                dataSRRF[n] = bufferSRRF.get(n + p * widthM * widthM);
+                if (Float.isNaN(dataSRRF[n])) dataSRRF[n] = 0; // make sure we dont get any weirdness
+            }
+            imsSRRF.addSlice(new FloatProcessor(widthM, heightM, dataSRRF));
         }
-        imsSRRF.addSlice(new FloatProcessor(widthM, heightM, dataSRRF));
 
-        // Load interpolated data
-        dataSRRF = new float[widthM * heightM];
-        for (int n = 0; n < widthM * heightM; n++) {
-            dataSRRF[n] = bufferSRRF.get(n + 2 * widthM * heightM);
-            if (Float.isNaN(dataSRRF[n])) dataSRRF[n] = 0; // make sure we don't get any weirdness
+        for (int p = 0; p < nPlanesM; p++) {
+//            IJ.log("Reading frame " + p);
+
+            // Load average
+            float[] dataSRRF = new float[widthM * heightM];
+            for (int n = 0; n < widthM * heightM; n++) {
+                dataSRRF[n] = bufferSRRF.get(n + p * widthM * widthM + singleFrameSizeM);
+                if (Float.isNaN(dataSRRF[n])) dataSRRF[n] = 0; // make sure we dont get any weirdness
+            }
+            imsSRRF.addSlice(new FloatProcessor(widthM, heightM, dataSRRF));
         }
-        imsSRRF.addSlice(new FloatProcessor(widthM, heightM, dataSRRF));
+
+        for (int p = 0; p < nPlanesM; p++) {
+//            IJ.log("Reading frame " + p);
+
+            // Load average
+            float[] dataSRRF = new float[widthM * heightM];
+            for (int n = 0; n < widthM * heightM; n++) {
+                dataSRRF[n] = bufferSRRF.get(n + p * widthM * widthM + 2*singleFrameSizeM);
+                if (Float.isNaN(dataSRRF[n])) dataSRRF[n] = 0; // make sure we dont get any weirdness
+            }
+            imsSRRF.addSlice(new FloatProcessor(widthM, heightM, dataSRRF));
+        }
+
+//            // Load standard deviation // TODO: do this on GPU - test but this looks fine
+//            dataSRRF = new float[widthM * heightM];
+//            for (int n = 0; n < widthM * heightM; n++) {
+//                //dataSRRF[n] = bufferSRRF.get(n + widthM * heightM) - bufferSRRF.get(n) * bufferSRRF.get(n); // Var[X] = E[X^2] - (E[X])^2
+//                dataSRRF[n] = bufferSRRF.get(n + widthM * heightM + p*singleFrameSize*magnification*magnification);
+//                //if (dataSRRF[n] < 0) {
+//                //    dataSRRF[n] = 0;
+//                //    //IJ.log("!!Negative VAR value!!");
+//                //}
+//                if (Float.isNaN(dataSRRF[n])) dataSRRF[n] = 0; // make sure we dont get any weirdness
+//                //dataSRRF[n] = (float) math.sqrt(dataSRRF[n]);
+//            }
+//            imsSRRF.addSlice(new FloatProcessor(widthM, heightM, dataSRRF));
+//
+//            // Load interpolated data
+//            dataSRRF = new float[widthM * heightM];
+//            for (int n = 0; n < widthM * heightM; n++) {
+//                dataSRRF[n] = bufferSRRF.get(n + 2 * widthM * heightM + p*singleFrameSize*magnification*magnification);
+//                if (Float.isNaN(dataSRRF[n])) dataSRRF[n] = 0; // make sure we don't get any weirdness
+//            }
+//            imsSRRF.addSlice(new FloatProcessor(widthM, heightM, dataSRRF));
+//        }
 
     }
 

@@ -42,7 +42,9 @@ public class liveSRRF_optimised_ implements PlugIn {
             blockSize,
             nGPUloadPerSRRFframe,
             gradMag,
-            nRecons;
+            nRecons,
+            nPlanes,
+            nPlanesM;
 
     private float fwhm, maxMemoryGPU, axialOffset,
             maxMemoryRAMij = (float) IJ.maxMemory()/1e6f; // maximum RAM set for Fiji in MB
@@ -229,7 +231,10 @@ public class liveSRRF_optimised_ implements PlugIn {
         liveSRRF.initialise(width, height, magnification, fwhm, sensitivity, nFrameOnGPU, nFrameForSRRFtoUse, blockSize, chosenDevice, intWeighting, doMPmapCorrection, calibTablePath3DSRRF, axialOffset, (float) pixelSize);
         widthS = liveSRRF.widthS;
         heightS = liveSRRF.heightS;
+        nPlanes = liveSRRF.nPlanes;
+        nPlanesM = liveSRRF.nPlanesM;
         IJ.log("WidthS/HeightS: "+widthS+"/"+heightS);
+        IJ.log("Number of planes: "+nPlanes);
 
         shiftX = new float[nFrameForSRRFtoUse];
         shiftY = new float[nFrameForSRRFtoUse];
@@ -335,7 +340,7 @@ public class liveSRRF_optimised_ implements PlugIn {
 //            IJ.run(impMPmap, "Enhance Contrast", "saturated=0.5");
 //            impMPmap.show();
 
-            if (writeToDiskToUse) {
+            if (writeToDiskToUse) {//  TODO: this will not work in 3D
                 try {
                     if (calculateAVG) {
                         impTemp = new ImagePlus("\"liveSRRF (AVG) - frame=" + r + ".tif", imsBuffer.getProcessor(1));
@@ -358,10 +363,18 @@ public class liveSRRF_optimised_ implements PlugIn {
                 }
 
             } else {
-                if (calculateAVG) imsSRRFavg.addSlice(imsBuffer.getProcessor(1));
-                if (calculateSTD) imsSRRFstd.addSlice(imsBuffer.getProcessor(2));
-                if (getInterpolatedImage) imsRawInterpolated.addSlice(imsBuffer.getProcessor(3));
-            }
+
+                    if (calculateAVG) {
+                        for (int p = 0; p < nPlanesM; p++) imsSRRFavg.addSlice(imsBuffer.getProcessor(p+1));
+                    }
+                    if (calculateSTD) {
+                        for (int p = 0; p < nPlanesM; p++) imsSRRFstd.addSlice(imsBuffer.getProcessor(p + nPlanesM+1));
+                    }
+                    if (getInterpolatedImage) {
+                        for (int p = 0; p < nPlanesM; p++) imsRawInterpolated.addSlice(imsBuffer.getProcessor(p + 2*nPlanesM+1));
+                    }
+                }
+
             IJ.log("RAM used: " + IJ.freeMemory());
         }
         // End looping trough SRRF frames --------------------------------------------

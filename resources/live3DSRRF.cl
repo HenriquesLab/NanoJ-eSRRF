@@ -44,7 +44,7 @@ static float cubic(float x) {
 }
 
 // Interpolation function: interpolate in continuous space with respect to the reference of the array // TODO: check confusion between width and w height and h
-static float getInterpolatedValue(__global float* array, float const x, float const y, int const f, int const z) {
+static float getInterpolatedValue(__global float* array, float const x, float const y, int const z, int const f) {
     const int u0 = (int) floor(x);
     const int v0 = (int) floor(y);
     const int fdOffset = whd*f + wh*z;
@@ -260,9 +260,9 @@ __kernel void calculateGradientInterpolation(
 //    const int offset = y * wInt + x + f * wInt * hInt;
 
     // LATERAL interpolation of the gradients
-    GxIntArray[offset] = getInterpolatedValue(GxArray, (float) (x)/2.0f, (float) (y)/2.0f, f, z);
-    GyIntArray[offset] = getInterpolatedValue(GyArray, (float) (x)/2.0f, (float) (y)/2.0f, f, z);
-    GzIntArray[offset] = getInterpolatedValue(GzArray, (float) (x)/2.0f, (float) (y)/2.0f, f, z);
+    GxIntArray[offset] = getInterpolatedValue(GxArray, (float) (x)/2.0f, (float) (y)/2.0f, z, f);
+    GyIntArray[offset] = getInterpolatedValue(GyArray, (float) (x)/2.0f, (float) (y)/2.0f, z, f);
+    GzIntArray[offset] = getInterpolatedValue(GzArray, (float) (x)/2.0f, (float) (y)/2.0f, z, f);
 }
 
 
@@ -286,11 +286,10 @@ __kernel void calculateRadialGradientConvergence(
 
     const int offset = get_global_id(0);
 
-    const int f = offset/(whdM);
-    const int zM = (offset - f*whdM)/whM;
+    const int zM = offset/whM;
 //    const int z = (offset - f*whdM)/whM; // TODO: work out the z position for the shift and implement
-    const int yM = (offset - f*whdM - zM*whM)/wM;
-    const int xM =  offset - f*whdM - zM*whM - yM*wM;
+    const int yM = (offset - zM*whM)/wM;
+    const int xM =  offset - zM*whM - yM*wM;
 
     const float driftX = driftXY[nCurrentFrame[0]];
     const float driftY = driftXY[nCurrentFrame[0] + nFrameForSRRF];
@@ -311,11 +310,11 @@ __kernel void calculateRadialGradientConvergence(
 //    float radius = ((float) ((int) (GxGyMagnification*fradius)))/GxGyMagnification + 1;    // this reduces the radius for speed, works when using dGauss^4 and 2p+I
 //    int radius = (int) (fradius) + 1;    // this should be used otherwise
 
-    for (int j=-GxGyMagnification*radius; j<=(GxGyMagnification*radius+1); j++) {
+    for (int j=-GxGyMagnification*radius; j<=(GxGyMagnification*radius+1); j++) { // steps in space of interpolated gradient
         vy = ((float) ((int) (GxGyMagnification*yc)) + j)/GxGyMagnification; // position in continuous space TODO: problems with negative values and (int)?
-
         if (vy > 0 && vy < h){
-            for (int i=-GxGyMagnification*radius; i<=(GxGyMagnification*radius+1); i++) {
+
+            for (int i=-GxGyMagnification*radius; i<=(GxGyMagnification*radius+1); i++) { // steps in space of interpolated gradient
                 vx = ((float) ((int) (GxGyMagnification*xc)) + i)/GxGyMagnification; // position in continuous space TODO: problems with negative values and (int)?
                 if (vx > 0 && vx < w){
 
@@ -400,30 +399,30 @@ __kernel void calculateRadialGradientConvergence(
     if (CGLH >= 0) CGLH = pow(CGLH, sensitivity);
     else CGLH = 0;
 
-    float v = getInterpolatedValue(pixels, ((float) xM)/magnification + driftX - 0.5f, ((float) yM)/magnification + driftY - 0.5f, nCurrentFrame[1], zM);
+    float v = getInterpolatedValue(pixels, ((float) xM)/magnification + driftX - 0.5f, ((float) yM)/magnification + driftY - 0.5f, (int) zc, nCurrentFrame[1]);
 
     if (intWeighting == 1) {
             if (nCurrentFrame[0] == 0) {
                 OutArray[offset] = v * CGLH / nFrameForSRRF;
-                OutArray[offset + whM] = v * CGLH * v * CGLH / nFrameForSRRF;
-                OutArray[offset + 2 * whM] = v / nFrameForSRRF;
+                OutArray[offset + whdM] = v * CGLH * v * CGLH / nFrameForSRRF;
+                OutArray[offset + 2 * whdM] = v / nFrameForSRRF;
             }
             else {
                 OutArray[offset] = OutArray[offset] + v * CGLH / nFrameForSRRF;
-                OutArray[offset + whM] = OutArray[offset + whM] + v * CGLH * v * CGLH / nFrameForSRRF;
-                OutArray[offset + 2 * whM] = OutArray[offset + 2 * whM] + v / nFrameForSRRF;
+                OutArray[offset + whdM] = OutArray[offset + whdM] + v * CGLH * v * CGLH / nFrameForSRRF;
+                OutArray[offset + 2 * whdM] = OutArray[offset + 2 * whdM] + v / nFrameForSRRF;
             }
     }
     else{
             if (nCurrentFrame[0] == 0) {
                 OutArray[offset] = CGLH / nFrameForSRRF;
-                OutArray[offset + whM] = CGLH * CGLH / nFrameForSRRF;
-                OutArray[offset + 2 * whM] = v / nFrameForSRRF;
+                OutArray[offset + whdM] = CGLH * CGLH / nFrameForSRRF;
+                OutArray[offset + 2 * whdM] = v / nFrameForSRRF;
             }
             else {
                 OutArray[offset] = OutArray[offset] + CGLH / nFrameForSRRF;
-                OutArray[offset + whM] = OutArray[offset + whM] + CGLH * CGLH / nFrameForSRRF;
-                OutArray[offset + 2 * whM] = OutArray[offset + 2 * whM] + v / nFrameForSRRF;
+                OutArray[offset + whdM] = OutArray[offset + whdM] + CGLH * CGLH / nFrameForSRRF;
+                OutArray[offset + 2 * whdM] = OutArray[offset + 2 * whdM] + v / nFrameForSRRF;
             }
     }
 
@@ -464,7 +463,7 @@ __kernel void kernelCalculateStd(
     ){
 
     const int offset = get_global_id(0);
-    OutArray[offset + whM] = sqrt(OutArray[offset + whM] - OutArray[offset]*OutArray[offset]);
+    OutArray[offset + whdM] = sqrt(OutArray[offset + whdM] - OutArray[offset]*OutArray[offset]);
 
 }
 
@@ -494,7 +493,7 @@ __kernel void kernelResetFramePosition(
 }
 
 // kernel: calculate the Macro-Pixel artefact map -----------------------------------------------------------------
-__kernel void kernelCalculateMPmap(
+__kernel void kernelCalculateMPmap( // TODO: this needs fixing for 3D
     __global float* OutArray,
     __global float* MPmap
     ){
