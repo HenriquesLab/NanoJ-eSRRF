@@ -6,6 +6,7 @@ import ij.gui.DialogListener;
 import ij.gui.GenericDialog;
 import ij.gui.NonBlockingGenericDialog;
 import ij.gui.Plot;
+import ij.io.FileInfo;
 import ij.measure.Calibration;
 import ij.plugin.PlugIn;
 import nanoj.core.java.io.zip.SaveFileInZip;
@@ -36,12 +37,14 @@ public class liveSRRF_optimised_ implements PlugIn {
             nFrameOnGPU,
             nSRRFframe,
             nSlices,
-            width,
-            height,
+            width, height,
+            widthS, heightS,
             blockSize,
-            nGPUloadPerSRRFframe;
+            nGPUloadPerSRRFframe,
+            gradMag,
+            nRecons;
 
-    private float fwhm, maxMemoryGPU,
+    private float fwhm, maxMemoryGPU, axialOffset,
             maxMemoryRAMij = (float) IJ.maxMemory()/1e6f; // maximum RAM set for Fiji in MB
 
     private boolean correctVibration,
@@ -59,11 +62,11 @@ public class liveSRRF_optimised_ implements PlugIn {
             intWeighting,
             showGradient,
             showIntGradient,
-
-    enable3DSRRF = true,
             do3DSRRF;
 
+    private final boolean enable3DSRRF = true;
     private final String LiveSRRFVersion = "v1.11";
+
     private String pathToDisk = "",
             fileName,
             chosenDeviceName,
@@ -105,6 +108,11 @@ public class liveSRRF_optimised_ implements PlugIn {
         if (imp == null) return;
         imp.show();
 
+        FileInfo imageInfo;
+        imageInfo = imp.getFileInfo();
+        double pixelSize = imageInfo.pixelHeight; //um if it is
+        String pixelSizeUnit = imageInfo.unit;
+
         nSlices = imp.getImageStack().getSize();
         width = imp.getImageStack().getWidth();
         height = imp.getImageStack().getHeight();
@@ -133,11 +141,14 @@ public class liveSRRF_optimised_ implements PlugIn {
         LocalDateTime now = LocalDateTime.now();
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
         IJ.log(now.format(formatter));
+        IJ.log("Pixel size: "+pixelSize+" "+pixelSizeUnit);
 
         // Initialize the liveSRRF class and check the devices
         liveSRRF = new liveSRRF_CL();
         liveSRRF.checkDevices();
         CLDevice[] allDevices = liveSRRF_CL.allCLdevices;
+        gradMag = liveSRRF.gradientMag;
+        nRecons = liveSRRF.nReconstructions;
 
         // Initializing string for device choice
         deviceNames = new String[allDevices.length + 1];
@@ -150,22 +161,14 @@ public class liveSRRF_optimised_ implements PlugIn {
         // Main GUI ----
         boolean cancelled = mainGUI();
         if (cancelled) {
-            liveSRRF.release();
+//            liveSRRF.release(); // no need te release contex prior to initilisation of liveSRRF
             IJ.log("Cancelled by user.");
             return;
         }
 
-        String threeDimSRRFcalibTablePath = null;
-        if (do3DSRRF){
-            // ---- Getting calibration data from the NanoJ table ----
-            IJ.log("Getting 3D-SRRF calibration file...");
-            threeDimSRRFcalibTablePath = IJ.getFilePath("Choose 3D-SRRF calibration table to load...");
-            if (threeDimSRRFcalibTablePath == null) return;
-        }
-
-        // Check if something has gone wrong with the momory
+        // Check if something has gone wrong with the memory
         if (!calculatenFrameOnGPU()){
-            liveSRRF.release();
+//            liveSRRF.release(); // no need te release contex prior to initilisation of liveSRRF
             IJ.log("Problems with memory. Check advanced settings or else...");
             return;
         }
@@ -174,6 +177,14 @@ public class liveSRRF_optimised_ implements PlugIn {
         if (chosenDeviceName == null) chosenDeviceName = "Default device";
         for (CLDevice thisDevice : allDevices) {
             if (chosenDeviceName.equals(thisDevice.getName())) chosenDevice = thisDevice;
+        }
+
+        // ---- Getting calibration data from the NanoJ table ----
+        String calibTablePath3DSRRF = null;
+        if (do3DSRRF){
+            IJ.log("Getting 3D-SRRF calibration file...");
+            calibTablePath3DSRRF = IJ.getFilePath("Choose 3D-SRRF calibration table to load...");
+            if (calibTablePath3DSRRF == null) return;
         }
 
         // Save last user entries
@@ -215,7 +226,10 @@ public class liveSRRF_optimised_ implements PlugIn {
 
         ImageStack imsAllRawData = imp.getImageStack();
 
-        liveSRRF.initialise(width, height, magnification, fwhm, sensitivity, nFrameOnGPU, nFrameForSRRFtoUse, blockSize, chosenDevice, intWeighting, doMPmapCorrection, threeDimSRRFcalibTablePath);
+        liveSRRF.initialise(width, height, magnification, fwhm, sensitivity, nFrameOnGPU, nFrameForSRRFtoUse, blockSize, chosenDevice, intWeighting, doMPmapCorrection, calibTablePath3DSRRF, axialOffset, (float) pixelSize);
+        widthS = liveSRRF.widthS;
+        heightS = liveSRRF.heightS;
+        IJ.log("WidthS/HeightS: "+widthS+"/"+heightS);
 
         shiftX = new float[nFrameForSRRFtoUse];
         shiftY = new float[nFrameForSRRFtoUse];
@@ -224,9 +238,13 @@ public class liveSRRF_optimised_ implements PlugIn {
         ImageStack imsBuffer;
 
         ImageStack imsRawData;
-        ImageStack imsSRRFavg = new ImageStack(width * magnification, height * magnification);
-        ImageStack imsSRRFstd = new ImageStack(width * magnification, height * magnification);
-        ImageStack imsRawInterpolated = new ImageStack(width * magnification, height * magnification);
+        ImageStack imsSRRFavg = new ImageStack(widthS * magnification, heightS * magnification);
+        ImageStack imsSRRFstd = new ImageStack(widthS * magnification, heightS * magnification);
+        ImageStack imsRawInterpolated = new ImageStack(widthS * magnification, heightS * magnification);
+
+//        ImageStack imsSRRFavg = new ImageStack();
+//        ImageStack imsSRRFstd = new ImageStack();
+//        ImageStack imsRawInterpolated = new ImageStack();
 
         ImagePlus impTemp = new ImagePlus();
         impTemp.copyScale(imp); // make sure we copy the pixel sizes correctly across
@@ -235,7 +253,7 @@ public class liveSRRF_optimised_ implements PlugIn {
         cal.pixelHeight /= magnification;
         cal.setUnit(imp.getCalibration().getUnit());
 
-        IJ.log("Distance units: "+cal.getUnit());
+//        IJ.log("Distance units: "+cal.getUnit());
 
         boolean userPressedEscape;
         long loopStart = System.nanoTime();
@@ -244,7 +262,6 @@ public class liveSRRF_optimised_ implements PlugIn {
         double singleLoadTime;
         double remainingTime;
         int currentNLoad;
-
 
         // Start looping trough SRRF frames --------------------------------------------
         for (int r = 1; r <= nSRRFframe; r++) {
@@ -277,7 +294,7 @@ public class liveSRRF_optimised_ implements PlugIn {
 
             }
 
-            liveSRRF.loadShiftXYGPUbuffer(shiftX, shiftY);
+            liveSRRF.loadDriftXYGPUbuffer(shiftX, shiftY);
 
             IJ.showProgress(r - 1, nSRRFframe);
 
@@ -340,7 +357,6 @@ public class liveSRRF_optimised_ implements PlugIn {
                     e.printStackTrace();
                 }
 
-
             } else {
                 if (calculateAVG) imsSRRFavg.addSlice(imsBuffer.getProcessor(1));
                 if (calculateSTD) imsSRRFstd.addSlice(imsBuffer.getProcessor(2));
@@ -350,7 +366,7 @@ public class liveSRRF_optimised_ implements PlugIn {
         }
         // End looping trough SRRF frames --------------------------------------------
 
-        if (showGradient) {
+        if (showGradient) { // TODO: small bug leading to not remembering choices of showGradient
             // Read off the gradient (single frame, which one needs to be checked)
             ImageStack imsGradient = liveSRRF.readGradientBuffers(false);
             ImagePlus impGradients = new ImagePlus("Gradients", imsGradient);
@@ -495,7 +511,10 @@ public class liveSRRF_optimised_ implements PlugIn {
 
         gd.addMessage("-=-= Advanced settings =-=-\n", headerFont);
         gd.addCheckbox("Show advanced settings", false);
-        if (enable3DSRRF) gd.addCheckbox("3D-SRRF from MFM data", false);
+        if (enable3DSRRF) {
+            gd.addCheckbox("3D-SRRF from MFM data", false);
+            gd.addNumericField("Axial offset (in nm): ",400, 2);
+        }
 
         gd.addHelp("https://www.youtube.com/watch?v=PJQVlVHsFF8"); // If you're hooked on a feeling
 
@@ -542,10 +561,7 @@ public class liveSRRF_optimised_ implements PlugIn {
             calculateSTD = true;
         }
 
-//        calculateAVG = gd.getNextBoolean();
-//        calculateSTD = gd.getNextBoolean();
         getInterpolatedImage = gd.getNextBoolean();
-
         doRollingAnalysis = gd.getNextBoolean();
         frameGapFromUser = (int) gd.getNextNumber();
 
@@ -559,13 +575,20 @@ public class liveSRRF_optimised_ implements PlugIn {
         nSRRFframe = (int) ((float) (nSlices - nFrameForSRRFtoUse) / (float) frameGapToUse) + 1;
 
         boolean goodToGo = calculatenFrameOnGPU();
+//boolean goodToGo = true;
 
         boolean showAdvancedSettings = gd.getNextBoolean();
         if (showAdvancedSettings && !previousAdvSettings) advancedSettingsGUI();
         previousAdvSettings = showAdvancedSettings;
 
-        if (enable3DSRRF) do3DSRRF = gd.getNextBoolean();
-        else do3DSRRF = false;
+        if (enable3DSRRF) {
+            do3DSRRF = gd.getNextBoolean();
+            axialOffset = (float) gd.getNextNumber();
+        }
+        else {
+            do3DSRRF = false;
+            axialOffset = 0; // this doesn't matter if 3D is not performed
+        }
 
         nGPUloadPerSRRFframe = (int) math.ceil((float) nFrameForSRRFtoUse / (float) nFrameOnGPU);
 
@@ -619,8 +642,8 @@ public class liveSRRF_optimised_ implements PlugIn {
             intWeighting = prefs.get("intWeighting", true);
             doMPmapCorrection = prefs.get("doMPmapCorrection", true);
             showImStabPlot = prefs.get("showImStabPlot", false);
-            showGradient = prefs.get("showGradient", false);
-            showIntGradient = prefs.get("showIntGradient", false);
+            showGradient = prefs.get("showGradient", true);
+            showIntGradient = prefs.get("showIntGradient", true);
 
             // re-initialises to how it was before entering advanced GUI
             writeToDiskToUse = writeToDiskTemp;
@@ -676,30 +699,39 @@ public class liveSRRF_optimised_ implements PlugIn {
 
 
     // --- Predict memory usage in MB ---
-    private double[] predictMemoryUsed(int nFrameOnGPU) {
+    private double[] predictMemoryUsed(int nFrameOnGPU) { // TODO: adjust this for 3D case (more memory needed !)
 
         double[] memUsed = new double[2];
 
-        // Memory on GPU ----
+        // Memory on GPU ---- (estimated roughly, especially in teh case of 3D)
         memUsed[0] = 0;
         memUsed[0] += width * height * nFrameOnGPU; // clBufferPx
         memUsed[0] += nFrameOnGPU; // clBufferShiftX
         memUsed[0] += nFrameOnGPU; // clBufferShiftY
         memUsed[0] += width * height * nFrameOnGPU; // clBufferGx
         memUsed[0] += width * height * nFrameOnGPU; // clBufferGy
-        memUsed[0] += 4 * width * height * nFrameOnGPU; // clBufferGxInt
-        memUsed[0] += 4 * width * height * nFrameOnGPU; // clBufferGyInt
-        memUsed[0] += 2 * width * height * magnification * magnification; // clBufferRGC
+        if (do3DSRRF) memUsed[0] += width * height * nFrameOnGPU; // clBufferGz
+        memUsed[0] += gradMag * gradMag * width * height * nFrameOnGPU; // clBufferGxInt
+        memUsed[0] += gradMag * gradMag * width * height * nFrameOnGPU; // clBufferGyInt
+        if (do3DSRRF) memUsed[0] += gradMag * gradMag * width * height * nFrameOnGPU; // clBufferGzInt
+
+        memUsed[0] += nRecons * width * height * magnification * magnification; // clBufferRGC
         memUsed[0] += width * height * magnification * magnification; // clBufferInt
 
         // Memory on CPU ---- (largely underestimated)
         memUsed[1] = 0;
-        memUsed[1] += width * height * nSlices; // clBufferPx
-        memUsed[1] += 2 * nSRRFframe * width * height * magnification * magnification; // clBufferSRRF
-        memUsed[1] += nSRRFframe * width * height * magnification * magnification; // clBufferInt
+        memUsed[1] += width * height * nSlices; // RAM raw data
+        if (do3DSRRF){
+            memUsed[1] += nRecons * nSRRFframe * width * height * magnification * magnification * magnification; // clBufferSRRF
+            memUsed[1] += nSRRFframe * width * height * magnification * magnification * magnification; // clBufferInt
+        }
+        else{
+            memUsed[1] += nRecons * nSRRFframe * width * height * magnification * magnification; // clBufferSRRF
+            memUsed[1] += nSRRFframe * width * height * magnification * magnification; // clBufferInt
+        }
 
-        memUsed[0] *= Float.SIZE / 8000000d;
-        memUsed[1] *= Float.SIZE / 8000000d;
+        memUsed[0] *= Float.SIZE / 8000000d; // convert to MB
+        memUsed[1] *= Float.SIZE / 8000000d; // TODO: make a difference between Mac and PC?
 
 
         return memUsed;
@@ -725,6 +757,9 @@ public class liveSRRF_optimised_ implements PlugIn {
         prefs.set("chosenDeviceName", chosenDeviceName);
         prefs.set("maxMemoryGPU", maxMemoryGPU);
         prefs.set("blockSize", blockSize);
+
+        prefs.set("showGradient", showGradient);
+        prefs.set("showIntGradient", showIntGradient);
 
         prefs.save();
 

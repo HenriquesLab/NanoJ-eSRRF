@@ -10,6 +10,7 @@
 #define wh $WH$
 #define wInt $WINT$
 #define hInt $HINT$
+#define whInt $WHINT$
 #define wM $WM$
 #define hM $HM$
 #define whM $WHM$
@@ -223,7 +224,7 @@ __kernel void calculateGradientInterpolation(
     const int y = get_global_id(1);
     const int f = get_global_id(2);
 
-    const int offset = y * wInt + x + f * wInt * hInt;
+    const int offset = y * wInt + x + f * whInt;
 
     // Two-fold interpolation of the gradients
     GxIntArray[offset] = getInterpolatedValue(GxArray, (float) (x)/2.0f, (float) (y)/2.0f, f);
@@ -244,7 +245,6 @@ __kernel void calculateRadialGradientConvergence(
             // nCurrentFrame[0] is the global current frame in the current SRRF frame (reset every SRRF frame)
             // nCurrentFrame[1] is the local current frame in the current GPU-loaded dataset (reset every turn of the method calculateSRRF (within the gradient calculation))
 
-
     ) {
 
 //    const int xM = get_global_id(0);
@@ -258,7 +258,6 @@ __kernel void calculateRadialGradientConvergence(
 
     const float shiftX = shiftXY[nCurrentFrame[0]];
     const float shiftY = shiftXY[nCurrentFrame[0] + nFrameForSRRF];
-
     const float xc = (xM + 0.5) / magnification + shiftX; // continuous space position at the centre of magnified pixel
     const float yc = (yM + 0.5) / magnification + shiftY;
     const float sigma22 = 2 * sigma * sigma; // TODO: add as hardcoded value?
@@ -474,7 +473,7 @@ __kernel void kernelCalculateMPmap(
 
 }
 
-// kernel: correct for Macro-pixel artefacts
+// kernel: correct for Macro-pixel artefacts -----------------------------------------------------------------
 __kernel void kernelCorrectMPmap(
      __global float* OutArray,
      __global float* MPmap

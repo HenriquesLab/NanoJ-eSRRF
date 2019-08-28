@@ -176,7 +176,7 @@ public class GetSpatialCalibrationMFMdata_ implements PlugIn {
         RCCMcalculator.computeRCCM(ipRef, imsMIP, nAngles, maxAngle); // angles are fed in degrees
 
 
-        // -----------
+        // ----------- // TODO: add an option in GUI for displaying RCCM?
 //        ImageStack[] imsRCCM = RCCMcalculator.imsRCCMap;
 //        for (int i = 0; i < imsRCCM.length; i++) {
 //            ImagePlus impRCCMTemp = new ImagePlus("RCCM"+i,imsRCCM[i]);

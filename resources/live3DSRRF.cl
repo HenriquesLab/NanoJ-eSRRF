@@ -5,24 +5,28 @@
 #define GxGyMagnification $GXGYMAGNIFICATION$
 #define sigma $SIGMA$
 #define radius $RADIUS$
-#define w $WIDTH$
+#define w $WIDTH$ // these are width and height of the individual split images
 #define h $HEIGHT$
 #define wh $WH$
 #define wInt $WINT$
 #define hInt $HINT$
+#define whInt $WHINT$
 #define wM $WM$
 #define hM $HM$
 #define whM $WHM$
+#define whdM $WHDM$
 #define nFrameForSRRF $NFRAMEFORSRRF$
 #define intWeighting $INTWEIGHTING$
 
-#define wS $WIDTHTHREED$
-#define hS $HEIGHTTHREED$
-#define whS $WHS$
-#define wSInt $WSINT$
-#define hSInt $HSINT$
-#define whSInt $WHSINT$
-#define nPlanes $NPLANES$ // TODO: ever necessary?
+//#define wS $WIDTHTHREED$
+//#define hS $HEIGHTTHREED$
+//#define whS $WHS$
+//#define wSInt $WSINT$
+//#define hSInt $HSINT$
+//#define whSInt $WHSINT$
+#define nPlanes $NPLANES$ // TODO: necessary when doing differnt number of planes! Big bug ahead with different pixels between full frame and sum of crops splits
+#define dimRatio $DIMRATIO$
+#define whd $WHD$ // w * h * nPlanes
 
 #define vxy_offset $VXY_OFFSET$
 #define vxy_ArrayShift $VXY_ARRAYSHIFT$
@@ -43,7 +47,7 @@ static float cubic(float x) {
 static float getInterpolatedValue(__global float* array, float const x, float const y, int const f, int const z) {
     const int u0 = (int) floor(x);
     const int v0 = (int) floor(y);
-    const int whfwhSz = wh*f + whS*z;
+    const int fdOffset = whd*f + wh*z;
 
     float q = 0.0f;
 
@@ -54,7 +58,7 @@ static float getInterpolatedValue(__global float* array, float const x, float co
             float p = 0.0f;
             for (int i = 0; i <= 3; i++) {
                 int u = min(max(u0 - 1 + i, 0), w-1);
-                p = p + array[u + v*wS + whfwhSz] * cubic(x - (float) (u));
+                p = p + array[u + v*w + fdOffset] * cubic(x - (float) (u));
             }
             q = q + p * cubic(y - (float) (v));
         }
@@ -122,10 +126,10 @@ static float getInterpolatedValue(__global float* array, float const x, float co
 //        xFraction = fmax(xFraction, 0);
 //        yFraction = fmax(yFraction, 0);
 
-        float lowerLeft = array[whfwhSz + ybase * wS + xbase];
-        float lowerRight = array[whfwhSz + ybase * wS + xbase1];
-        float upperRight = array[whfwhSz + ybase1 * wS + xbase1];
-        float upperLeft = array[whfwhSz + ybase1 * wS + xbase];
+        float lowerLeft = array[fdOffset + ybase * w + xbase];
+        float lowerRight = array[fdOffset + ybase * w + xbase1];
+        float upperRight = array[fdOffset + ybase1 * w + xbase1];
+        float upperLeft = array[fdOffset + ybase1 * w + xbase];
         float upperAverage = upperLeft + xFraction * (upperRight - upperLeft);
         float lowerAverage = lowerLeft + xFraction * (lowerRight - lowerLeft);
         q = lowerAverage + yFraction * (upperAverage - lowerAverage);
@@ -136,10 +140,10 @@ static float getInterpolatedValue(__global float* array, float const x, float co
 }
 
 // Check boundaries of the image and returns the gradient value // TODO: extrapolate instead of boundary check?
-static float getVBoundaryCheck(__global float* array, int const width, int const height, int const x, int const y, int const f) {
-    const int _x = min(max(x, 0), width-1);
-    const int _y = min(max(y, 0), height-1);
-    return array[_y*width+_x + width*height*f];
+static float getVBoundaryCheck(__global float* array, int const thisWidth, int const thisHeight, int const x, int const y, int const f) {
+    const int _x = min(max(x, 0), thisWidth-1);
+    const int _y = min(max(y, 0), thisHeight-1);
+    return array[_y*thisWidth+_x + thisWidth*thisHeight*f];
 }
 
 
@@ -198,19 +202,19 @@ __kernel void calculateGradient_2point(
     ) {
     const int offset = get_global_id(0);
 
-    const int f = offset/wh;
-    const int z1 = (offset - f*wh)/whS;
-    const int y1 = (offset - f*wh - z1*whS)/w;
-    const int x1 =  offset - f*wh - z1*whS - y1*w;
+    const int f = offset/whd;
+    const int z1 = (offset - f*whd)/wh;
+    const int y1 = (offset - f*whd - z1*wh)/w;
+    const int x1 =  offset - f*whd - z1*wh - y1*w;
 
     const int x0 = max(x1-1, 0); // this sets the gradient to zero on the edges, assumes same value adjacent
     const int y0 = max(y1-1, 0);
     const int z0 = max(z1-1, 0);
 
     // 2-point gradient
-    GxArray[offset] = pixels[offset] - pixels[x0 + y1*w + z1*whS + wh*f];
-    GyArray[offset] = pixels[offset] - pixels[x1 + y0*w + z1*whS + wh*f];
-    GzArray[offset] = pixels[offset] - pixels[x1 + y1*w + z0*whS + wh*f];
+    GxArray[offset] = pixels[offset] - pixels[x0 + y1*w + z1*wh + whd*f];
+    GyArray[offset] = pixels[offset] - pixels[x1 + y0*w + z1*wh + whd*f];
+    GzArray[offset] = pixels[offset] - pixels[x1 + y1*w + z0*wh + whd*f];
 
     // Reset the local current frame
     nCurrentFrame[1] = 0;
@@ -235,11 +239,11 @@ __kernel void calculateGradientInterpolation(
 
     const int offset = get_global_id(0);
 
-    const int whInt = wInt*hInt; // TODO: add as #define?
-    const int f = offset/whInt;
-    const int z = (offset - f*whInt)/whSInt;
-    const int y = (offset - f*whInt - z*whSInt)/wSInt;
-    const int x =  offset - f*whInt - z*whSInt - y*wSInt;
+    const int whdInt = wInt*hInt*nPlanes; // TODO: add as #define?
+    const int f = offset/whdInt;
+    const int z = (offset - f*whdInt)/whInt;
+    const int y = (offset - f*whdInt - z*whInt)/wInt;
+    const int x =  offset - f*whdInt - z*whInt - y*wInt;
 
 //    const int x = get_global_id(0);
 //    const int y = get_global_id(1);
@@ -262,7 +266,8 @@ __kernel void calculateRadialGradientConvergence(
     __global float* GyArray,
     __global float* GzArray,
     __global float* OutArray,
-    __global float* shiftXY,
+    __global float* driftXY,
+    __global float* shiftXY3D,
     __global int* nCurrentFrame
     // Current frame is a 2 element Int buffer:
             // nCurrentFrame[0] is the global current frame in the current SRRF frame (reset every SRRF frame)
@@ -271,22 +276,20 @@ __kernel void calculateRadialGradientConvergence(
 
     ) {
 
-
     const int offset = get_global_id(0);
 
-    const int f = offset/(wh);
-    const int z = (offset - f*wh)/whS;
-    const int yM = (offset - f*wh - z*whS)/w;
-    const int xM =  offset - f*wh - z*whS - yM*w;
+    const int f = offset/(whdM);
+    const int zM = (offset - f*whdM)/whM;
+//    const int z = (offset - f*whdM)/whM; // TODO: work out the z position for the shift and implement
+    const int yM = (offset - f*whdM - zM*whM)/wM;
+    const int xM =  offset - f*whdM - zM*whM - yM*wM;
 
-//    const int yM = offset/wM;
-//    const int xM = offset - yM*wM;
+    const float driftX = driftXY[nCurrentFrame[0]];
+    const float driftY = driftXY[nCurrentFrame[0] + nFrameForSRRF];
 
-    const float shiftX = shiftXY[nCurrentFrame[0]];
-    const float shiftY = shiftXY[nCurrentFrame[0] + nFrameForSRRF];
-
-    const float xc = (xM + 0.5) / magnification + shiftX; // continuous space position at the centre of magnified pixel
-    const float yc = (yM + 0.5) / magnification + shiftY;
+    const float xc = (xM + 0.5) / magnification + driftX; // continuous space position at the centre of magnified pixel
+    const float yc = (yM + 0.5) / magnification + driftY;
+    const float zc = (zM + 0.5) / magnification; // TODO: consider drift in Z?
     const float sigma22 = 2 * sigma * sigma; // TODO: add as hardcoded value?
 
     float CGLH = 0; // CGLH stands for Radiality original name - Culley-Gustafsson-Laine-Henriques transform
@@ -380,7 +383,7 @@ __kernel void calculateRadialGradientConvergence(
     if (CGLH >= 0) CGLH = pow(CGLH, sensitivity);
     else CGLH = 0;
 
-    float v = getInterpolatedValue(pixels, ((float) xM)/magnification + shiftX - 0.5f, ((float) yM)/magnification + shiftY - 0.5f, nCurrentFrame[1], z);
+    float v = getInterpolatedValue(pixels, ((float) xM)/magnification + driftX - 0.5f, ((float) yM)/magnification + driftY - 0.5f, nCurrentFrame[1], zM);
 
     if (intWeighting == 1) {
             if (nCurrentFrame[0] == 0) {
@@ -471,7 +474,6 @@ __kernel void kernelResetFramePosition(
         // Current frame is a 2 element Int buffer:
                 // nCurrentFrame[0] is the global current frame in the current SRRF frame (reset every SRRF frame)
                 // nCurrentFrame[1] is the local current frame in the current GPU-loaded dataset (reset every turn of the method calculateSRRF (within the gradient calculation))
-
 }
 
 // kernel: calculate the Macro-Pixel artefact map -----------------------------------------------------------------
