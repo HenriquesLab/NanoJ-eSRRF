@@ -140,13 +140,21 @@ static float getInterpolatedValue(__global float* array, float const x, float co
 }
 
 // Check boundaries of the image and returns the gradient value // TODO: extrapolate instead of boundary check?
-static float getVBoundaryCheck(__global float* array, int const thisWidth, int const thisHeight, int const x, int const y, int const f) {
+static float getVBoundaryCheck(__global float* array, int const thisWidth, int const thisHeight, int const thisDepth, int const x, int const y, int const z, int const f) {
     const int _x = min(max(x, 0), thisWidth-1);
     const int _y = min(max(y, 0), thisHeight-1);
-    return array[_y*thisWidth+_x + thisWidth*thisHeight*f];
+    const int _z = min(max(z, 0), thisDepth-1);
+    return array[thisDepth*thisWidth*thisHeight*f + thisWidth*thisHeight*_z + _y*thisWidth + _x];
 }
 
-
+// Calculate the amplitude of the cross-product between two 3D vectors
+static float getCrossProductMagnitude(float const a1, float const a2, float const a3, float const b1, float const b2, float const b3){
+    const float G1 = a2*b3 - a3*b2;
+    const float G2 = a3*b1 - a1*b3;
+    const float G3 = a1*b2 - a2*b1;
+    const float CP = sqrt(G1*G1 + G2*G2 + G3*G3);
+    return CP;
+}
 
 //// First kernel: evaluating gradient from image: 3-point gradient --------------------------------------------------------------
 //__kernel void calculateGradient(
@@ -286,21 +294,22 @@ __kernel void calculateRadialGradientConvergence(
 
     const float driftX = driftXY[nCurrentFrame[0]];
     const float driftY = driftXY[nCurrentFrame[0] + nFrameForSRRF];
+    const float sigma21 = 2 * sigma + 1;
 
+    // Coordinates of the pixel of interest in continuous space
     const float xc = (xM + 0.5) / magnification + driftX; // continuous space position at the centre of magnified pixel
     const float yc = (yM + 0.5) / magnification + driftY;
     const float zc = (zM + 0.5) / magnification; // TODO: consider drift in Z?
-    const float sigma22 = 2 * sigma * sigma; // TODO: add as hardcoded value?
+    const float sigSquare = 2 * sigma * sigma; // TODO: add as hardcoded value?
 
     float CGLH = 0; // CGLH stands for Radiality original name - Culley-Gustafsson-Laine-Henriques transform
     float distanceWeightSum = 0;
 
-    float vx, vy, Gx, Gy;
+    float vx, vy, vz, Gx, Gy, Gz;
 //    float sigma = fwhm / 2.354f; // Sigma = 0.21 * lambda/NA in theory
 //    float fradius = sigma * 2;
 //    float radius = ((float) ((int) (GxGyMagnification*fradius)))/GxGyMagnification + 1;    // this reduces the radius for speed, works when using dGauss^4 and 2p+I
 //    int radius = (int) (fradius) + 1;    // this should be used otherwise
-
 
     for (int j=-GxGyMagnification*radius; j<=(GxGyMagnification*radius+1); j++) {
         vy = ((float) ((int) (GxGyMagnification*yc)) + j)/GxGyMagnification; // position in continuous space TODO: problems with negative values and (int)?
@@ -310,27 +319,33 @@ __kernel void calculateRadialGradientConvergence(
                 vx = ((float) ((int) (GxGyMagnification*xc)) + i)/GxGyMagnification; // position in continuous space TODO: problems with negative values and (int)?
                 if (vx > 0 && vx < w){
 
-                    float distance = sqrt((vx - xc)*(vx - xc) + (vy - yc)*(vy - yc));    // Distance D
+                    for (int k=-radius; k<=(radius); k++) {
+                        vz = ((float) ((int) (zc)) + k); // position in continuous space TODO: problems with negative values and (int)?
+                        if (vz > 0 && vz < nPlanes){
 
-                    if (distance != 0 && distance <= (2*sigma+1)) {
+                            float distance = sqrt((vx - xc)*(vx - xc) + (vy - yc)*(vy - yc) + (vz - zc)*(vz - zc));    // Distance D
 
-                        Gx = getVBoundaryCheck(GxArray, wInt, hInt, GxGyMagnification*(vx - vxy_offset) + vxy_ArrayShift, GxGyMagnification*(vy - vxy_offset), nCurrentFrame[1]);
-                        Gy = getVBoundaryCheck(GyArray, wInt, hInt, GxGyMagnification*(vx - vxy_offset), GxGyMagnification*(vy - vxy_offset) + vxy_ArrayShift, nCurrentFrame[1]);
+                            if (distance != 0 && distance <= sigma21) {
 
-                        float distanceWeight = distance*exp(-(distance*distance)/sigma22);  // TODO: dGauss: can use Taylor expansion there
-                        distanceWeight = distanceWeight * distanceWeight * distanceWeight * distanceWeight ;
-                        distanceWeightSum += distanceWeight;
-                        float GdotR = (Gx * (vx - xc) + Gy * (vy - yc)); // tells you if vector was pointing inward or outward
+                                Gx = getVBoundaryCheck(GxArray, wInt, hInt, nPlanes, GxGyMagnification*(vx - vxy_offset) + vxy_ArrayShift, GxGyMagnification*(vy - vxy_offset), vz, nCurrentFrame[1]);
+                                Gy = getVBoundaryCheck(GyArray, wInt, hInt, nPlanes, GxGyMagnification*(vx - vxy_offset), GxGyMagnification*(vy - vxy_offset) + vxy_ArrayShift, vz, nCurrentFrame[1]);
+                                Gz = getVBoundaryCheck(GzArray, wInt, hInt, nPlanes, GxGyMagnification*(vx - vxy_offset), GxGyMagnification*(vy - vxy_offset), vz + vxy_ArrayShift, nCurrentFrame[1]);
 
-                        if (GdotR < 0) {
-                            // Calculate perpendicular distance from (xc,yc) to gradient line through (vx,vy)
-                            float GMag = sqrt(Gx * Gx + Gy * Gy);
-                            float Dk = fabs(Gy * (xc - vx) - Gx * (yc - vy)) / GMag;    // Dk = D*sin(theta) obtained from cross-product
-                            if (isnan(Dk)) Dk = distance; // this makes Dk = 0 in the next line
+                                float distanceWeight = distance*exp(-(distance*distance)/sigSquare);  // TODO: dGauss: can use Taylor expansion there
+                                distanceWeight = distanceWeight * distanceWeight * distanceWeight * distanceWeight ;
+                                distanceWeightSum += distanceWeight;
+                                float GdotR = (Gx * (vx - xc) + Gy * (vy - yc) + Gz * (vz - zc)); // tells you if vector was pointing inward or outward
+
+                                if (GdotR < 0) {
+                                    // Calculate perpendicular distance from (xc,yc) to gradient line through (vx,vy)
+                                    float GMag = sqrt(Gx * Gx + Gy * Gy + Gz * Gz);
+                                    float Dk = getCrossProductMagnitude(xc-vx, yc-vy, zc-vz, Gx, Gy, Gz)/GMag; // Dk = D*sin(theta) obtained from cross-product
+//                                  float Dk = fabs(Gy * (xc - vx) - Gx * (yc - vy)) / GMag;    // Dk = D*sin(theta) obtained from cross-product
+                                    if (isnan(Dk)) Dk = distance; // this makes Dk = 0 in the next line
 
 
-                            // Linear function ----------------------
-                            Dk = 1 - Dk / distance; // Dk is now between 0 to 1, 1 if vector points precisely to (xc, yx), Dk = 1-sin(theta)
+                                    // Linear function ----------------------
+                                    Dk = 1 - Dk / distance; // Dk is now between 0 to 1, 1 if vector points precisely to (xc, yx), Dk = 1-sin(theta)
 
                     //Linear truncated ----------------------
 //                  Dk = 1 - Dk / distance; // Dk is now between 0 to 1, 1 if vector points precisely to (xc, yx), Dk = 1-sin(theta)
@@ -362,7 +377,9 @@ __kernel void calculateRadialGradientConvergence(
 //                  float SigmaTheta = 0.25;
 //                  Dk = exp(-1.0f*(float) (Dk/SigmaTheta));
 
-                            CGLH += Dk*distanceWeight;
+                                    CGLH += Dk*distanceWeight;
+                                }
+                            }
                         }
 
 

@@ -260,7 +260,8 @@ __kernel void calculateRadialGradientConvergence(
     const float shiftY = shiftXY[nCurrentFrame[0] + nFrameForSRRF];
     const float xc = (xM + 0.5) / magnification + shiftX; // continuous space position at the centre of magnified pixel
     const float yc = (yM + 0.5) / magnification + shiftY;
-    const float sigma22 = 2 * sigma * sigma; // TODO: add as hardcoded value?
+    const float sigma22 = 2 * sigma * sigma; // TODO: add as hardcoded value? Something wrong happens when doing that
+    const float sigma21 = 2 * sigma + 1;
 
     float CGLH = 0; // CGLH stands for Radiality original name - Culley-Gustafsson-Laine-Henriques transform
     float distanceWeightSum = 0;
@@ -273,16 +274,16 @@ __kernel void calculateRadialGradientConvergence(
 
 
     for (int j=-GxGyMagnification*radius; j<=(GxGyMagnification*radius+1); j++) {
-        vy = ((float) ((int) (GxGyMagnification*yc)) + j)/GxGyMagnification; // position in continuous space TODO: problems with negative values and (int)?
+        vy = ((float) ((int) (GxGyMagnification*yc)) + j)/GxGyMagnification; // position in continuous space CHECKED: optimised for 2-point gradient
 
         if (vy > 0 && vy < h){
             for (int i=-GxGyMagnification*radius; i<=(GxGyMagnification*radius+1); i++) {
-                vx = ((float) ((int) (GxGyMagnification*xc)) + i)/GxGyMagnification; // position in continuous space TODO: problems with negative values and (int)?
+                vx = ((float) ((int) (GxGyMagnification*xc)) + i)/GxGyMagnification; // position in continuous space
                 if (vx > 0 && vx < w){
 
                     float distance = sqrt((vx - xc)*(vx - xc) + (vy - yc)*(vy - yc));    // Distance D
 
-                    if (distance != 0 && distance <= (2*sigma+1)) {
+                    if (distance != 0 && distance <= sigma21) {
 
                         Gx = getVBoundaryCheck(GxArray, wInt, hInt, GxGyMagnification*(vx - vxy_offset) + vxy_ArrayShift, GxGyMagnification*(vy - vxy_offset), nCurrentFrame[1]);
                         Gy = getVBoundaryCheck(GyArray, wInt, hInt, GxGyMagnification*(vx - vxy_offset), GxGyMagnification*(vy - vxy_offset) + vxy_ArrayShift, nCurrentFrame[1]);
