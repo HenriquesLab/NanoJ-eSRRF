@@ -7,8 +7,8 @@
 #define tSS $TWOSIGSQUARE$
 #define tSO $TWOSIGpONE$
 #define radius $RADIUS$
-#define w $WIDTH$ // these are width and height of the individual split images
-#define h $HEIGHT$
+#define width $WIDTH$ // these are width and height of the individual split images
+#define height $HEIGHT$
 #define wh $WH$
 #define wInt $WINT$
 #define hInt $HINT$
@@ -49,20 +49,25 @@ static float cubic(float x) {
 static float getInterpolatedValue(__global float* array, float const x, float const y, int const z, int const f) {
     const int u0 = (int) floor(x);
     const int v0 = (int) floor(y);
+//    const int w0 = (int) floor(z);
     const int fdOffset = whd*f + wh*z;
 
     float q = 0.0f;
 
     // Bicubic interpolation
-    if (u0 > 0 && u0 < w - 2 && v0 > 0 && v0 < h - 2) {
-        for (int j = 0; j <= 3; j++) {
-            int v = min(max(v0 - 1 + j, 0), h-1);
-            float p = 0.0f;
-            for (int i = 0; i <= 3; i++) {
-                int u = min(max(u0 - 1 + i, 0), w-1);
-                p = p + array[u + v*w + fdOffset] * cubic(x - (float) (u));
-            }
-            q = q + p * cubic(y - (float) (v));
+//    if (u0 > 0 && u0 < width - 2 && v0 > 0 && v0 < height - 2 && w0 > 0 && w0 < nPlanes) {
+        if (u0 > 0 && u0 < width - 2 && v0 > 0 && v0 < height - 2) {
+//        for (int k = 0; k <= 3; k++){
+//            int w = min(max(w0 - 1 + k, 0), nPlanes-1);
+            for (int j = 0; j <= 3; j++) {
+                int v = min(max(v0 - 1 + j, 0), height-1);
+                float p = 0.0f;
+                for (int i = 0; i <= 3; i++) {
+                    int u = min(max(u0 - 1 + i, 0), width-1);
+                    p = p + array[u + v*width +  + fdOffset] * cubic(x - (float) (u));
+                }
+                q = q + p * cubic(y - (float) (v));
+//            }
         }
     }
 
@@ -117,10 +122,10 @@ static float getInterpolatedValue(__global float* array, float const x, float co
 //            ybase1 = ybase+1;
 //            }
 
-        int xbase = (int) fmin((float) w-2, fmax(x,0.0f));
+        int xbase = (int) fmin((float) width-2, fmax(x,0.0f));
         int xbase1 = xbase+1;
 
-        int ybase = (int) fmin((float) h-2, fmax(y,0.0f));
+        int ybase = (int) fmin((float) height-2, fmax(y,0.0f));
         int ybase1 = ybase+1;
 
         float xFraction = x - (float) xbase;
@@ -128,10 +133,10 @@ static float getInterpolatedValue(__global float* array, float const x, float co
 //        xFraction = fmax(xFraction, 0);
 //        yFraction = fmax(yFraction, 0);
 
-        float lowerLeft = array[fdOffset + ybase * w + xbase];
-        float lowerRight = array[fdOffset + ybase * w + xbase1];
-        float upperRight = array[fdOffset + ybase1 * w + xbase1];
-        float upperLeft = array[fdOffset + ybase1 * w + xbase];
+        float lowerLeft = array[fdOffset + ybase * width + xbase];
+        float lowerRight = array[fdOffset + ybase * width + xbase1];
+        float upperRight = array[fdOffset + ybase1 * width + xbase1];
+        float upperLeft = array[fdOffset + ybase1 * width + xbase];
         float upperAverage = upperLeft + xFraction * (upperRight - upperLeft);
         float lowerAverage = lowerLeft + xFraction * (lowerRight - lowerLeft);
         q = lowerAverage + yFraction * (upperAverage - lowerAverage);
@@ -214,17 +219,17 @@ __kernel void calculateGradient_2point(
 
     const int f = offset/whd;
     const int z1 = (offset - f*whd)/wh;
-    const int y1 = (offset - f*whd - z1*wh)/w;
-    const int x1 =  offset - f*whd - z1*wh - y1*w;
+    const int y1 = (offset - f*whd - z1*wh)/width;
+    const int x1 =  offset - f*whd - z1*wh - y1*width;
 
     const int x0 = max(x1-1, 0); // this sets the gradient to zero on the edges, assumes same value adjacent
     const int y0 = max(y1-1, 0);
     const int z0 = max(z1-1, 0);
 
     // 2-point gradient
-    GxArray[offset] = pixels[offset] - pixels[x0 + y1*w + z1*wh + whd*f];
-    GyArray[offset] = pixels[offset] - pixels[x1 + y0*w + z1*wh + whd*f];
-    GzArray[offset] = pixels[offset] - pixels[x1 + y1*w + z0*wh + whd*f];
+    GxArray[offset] = pixels[offset] - pixels[x0 + y1*width + z1*wh + whd*f];
+    GyArray[offset] = pixels[offset] - pixels[x1 + y0*width + z1*wh + whd*f];
+    GzArray[offset] = pixels[offset] - pixels[x1 + y1*width + z0*wh + whd*f];
 
     // Reset the local current frame
     nCurrentFrame[1] = 0;
@@ -312,19 +317,25 @@ __kernel void calculateRadialGradientConvergence(
 //    float radius = ((float) ((int) (GxGyMagnification*fradius)))/GxGyMagnification + 1;    // this reduces the radius for speed, works when using dGauss^4 and 2p+I
 //    int radius = (int) (fradius) + 1;    // this should be used otherwise
 
+    float dx, dy, dz; // TODO: define dx and dy as the differences of coordinates
+    float distance, distanceWeight, GdotR, GMag, Dk;
+
     for (int j=-(int) ((float) GxGyMagnification*(float) radius); j<=(int)((float) GxGyMagnification*(float) radius+1); j++) {
         vy = ((float) ((int) (GxGyMagnification*yc)) + j)/(float) GxGyMagnification; // position in continuous space CHECKED: optimised for 2-point gradient
 
-        if (vy > 0 && vy < h){
+        if (vy > 0 && vy < height){
             for (int i=-(int) ((float) GxGyMagnification*(float) radius); i<=(int)((float) GxGyMagnification*(float) radius+1); i++) {
                 vx = ((float) ((int) (GxGyMagnification*xc)) + i)/(float) GxGyMagnification; // position in continuous space
-                if (vx > 0 && vx < w){
+                if (vx > 0 && vx < width){
 
                     for (int k=-(int) radius; k<=((int) radius + 1); k++) {
                         vz = ((float) ((int) (zc)) + k); // position in continuous space TODO: problems with negative values and (int)?
                         if (vz > 0 && vz < nPlanes){
 
-                            float distance = sqrt((vx - xc)*(vx - xc) + (vy - yc)*(vy - yc) + (vz - zc)*(vz - zc));    // Distance D
+                            dx = vx - xc;
+                            dy = vy - yc;
+                            dz = vz - zc;
+                            distance = sqrt(dx*dx + dy*dy + dz*dz);    // Distance D
 
                             if (distance != 0 && distance <= (float) tSO) {
 
@@ -332,15 +343,15 @@ __kernel void calculateRadialGradientConvergence(
                                 Gy = getVBoundaryCheck(GyArray, wInt, hInt, nPlanes, GxGyMagnification*(vx - vxy_offset), GxGyMagnification*(vy - vxy_offset) + vxy_ArrayShift, vz, nCurrentFrame[1]);
                                 Gz = getVBoundaryCheck(GzArray, wInt, hInt, nPlanes, GxGyMagnification*(vx - vxy_offset), GxGyMagnification*(vy - vxy_offset), vz + vxy_ArrayShift, nCurrentFrame[1]);
 
-                                float distanceWeight = distance*exp(-(distance*distance)/(float) tSS);  // TODO: dGauss: can use Taylor expansion there
+                                distanceWeight = distance*exp(-(distance*distance)/(float) tSS);  // TODO: dGauss: can use Taylor expansion there
                                 distanceWeight = distanceWeight * distanceWeight * distanceWeight * distanceWeight ;
                                 distanceWeightSum += distanceWeight;
-                                float GdotR = (Gx * (vx - xc) + Gy * (vy - yc) + Gz * (vz - zc)); // tells you if vector was pointing inward or outward
+                                GdotR = (Gx*dx + Gy*dy + Gz*dz); // tells you if vector was pointing inward or outward
 
                                 if (GdotR < 0) {
                                     // Calculate perpendicular distance from (xc,yc) to gradient line through (vx,vy)
-                                    float GMag = sqrt(Gx * Gx + Gy * Gy + Gz * Gz);
-                                    float Dk = getCrossProductMagnitude(xc-vx, yc-vy, zc-vz, Gx, Gy, Gz)/GMag; // Dk = D*sin(theta) obtained from cross-product
+                                    GMag = sqrt(Gx*Gx + Gy*Gy + Gz*Gz);
+                                    Dk = getCrossProductMagnitude(dx, dy, dz, Gx, Gy, Gz)/GMag; // Dk = D*sin(theta) obtained from cross-product
 //                                  float Dk = fabs(Gy * (xc - vx) - Gx * (yc - vy)) / GMag;    // Dk = D*sin(theta) obtained from cross-product
                                     if (isnan(Dk)) Dk = distance; // this makes Dk = 0 in the next line
 
@@ -511,8 +522,8 @@ __kernel void kernelCalculateMPmap( // TODO: this needs fixing for 3D
     int offset;
 
     for (int i=0; i<wh; i++) {
-        y = i/w;
-        x = i - y*w;
+        y = i/width;
+        x = i - y*width;
         offset = x_MPmap + x * magnification + wM * (y_MPmap + y * magnification) + frame * whM;
         thisMPmapValue += OutArray[offset];
     }
