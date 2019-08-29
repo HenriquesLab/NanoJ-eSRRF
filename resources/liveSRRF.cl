@@ -1,9 +1,11 @@
 //#pragma OPENCL EXTENSION cl_khr_fp64: enable
 #define magnification $MAGNIFICATION$
-#define fwhm $FWHM$
+//#define fwhm $FWHM$
 #define sensitivity $SENSITIVITY$
 #define GxGyMagnification $GXGYMAGNIFICATION$
-#define sigma $SIGMA$
+//#define sigma $SIGMA$
+#define tSS $TWOSIGSQUARE$ // TODO: figure out why it's not possible to pass these this way !!!
+#define tSO $TWOSIGpONE$
 #define radius $RADIUS$
 #define w $WIDTH$
 #define h $HEIGHT$
@@ -260,8 +262,8 @@ __kernel void calculateRadialGradientConvergence(
     const float shiftY = shiftXY[nCurrentFrame[0] + nFrameForSRRF];
     const float xc = (xM + 0.5) / magnification + shiftX; // continuous space position at the centre of magnified pixel
     const float yc = (yM + 0.5) / magnification + shiftY;
-    const float sigma22 = 2 * sigma * sigma; // TODO: add as hardcoded value? Something wrong happens when doing that
-    const float sigma21 = 2 * sigma + 1;
+//    const float sigma22 = 2 * sigma * sigma; // TODO: add as hardcoded value? Something wrong happens when doing that
+//    const float sigma21 = 2 * sigma + 1;
 
     float CGLH = 0; // CGLH stands for Radiality original name - Culley-Gustafsson-Laine-Henriques transform
     float distanceWeightSum = 0;
@@ -273,22 +275,22 @@ __kernel void calculateRadialGradientConvergence(
 //    int radius = (int) (fradius) + 1;    // this should be used otherwise
 
 
-    for (int j=-GxGyMagnification*radius; j<=(GxGyMagnification*radius+1); j++) {
-        vy = ((float) ((int) (GxGyMagnification*yc)) + j)/GxGyMagnification; // position in continuous space CHECKED: optimised for 2-point gradient
+    for (int j=-(int) ((float) GxGyMagnification*(float) radius); j<=(int)((float) GxGyMagnification*(float) radius+1); j++) {
+        vy = ((float) ((int) (GxGyMagnification*yc)) + j)/(float) GxGyMagnification; // position in continuous space CHECKED: optimised for 2-point gradient
 
         if (vy > 0 && vy < h){
-            for (int i=-GxGyMagnification*radius; i<=(GxGyMagnification*radius+1); i++) {
-                vx = ((float) ((int) (GxGyMagnification*xc)) + i)/GxGyMagnification; // position in continuous space
+            for (int i=-(int) ((float) GxGyMagnification*(float) radius); i<=(int)((float) GxGyMagnification*(float) radius+1); i++) {
+                vx = ((float) ((int) (GxGyMagnification*xc)) + i)/(float) GxGyMagnification; // position in continuous space
                 if (vx > 0 && vx < w){
 
                     float distance = sqrt((vx - xc)*(vx - xc) + (vy - yc)*(vy - yc));    // Distance D
 
-                    if (distance != 0 && distance <= sigma21) {
+                    if (distance != 0 && distance <= (float) tSO) {
 
                         Gx = getVBoundaryCheck(GxArray, wInt, hInt, GxGyMagnification*(vx - vxy_offset) + vxy_ArrayShift, GxGyMagnification*(vy - vxy_offset), nCurrentFrame[1]);
                         Gy = getVBoundaryCheck(GyArray, wInt, hInt, GxGyMagnification*(vx - vxy_offset), GxGyMagnification*(vy - vxy_offset) + vxy_ArrayShift, nCurrentFrame[1]);
 
-                        float distanceWeight = distance*exp(-(distance*distance)/sigma22);  // TODO: dGauss: can use Taylor expansion there
+                        float distanceWeight = distance*exp(-(distance*distance)/(float) tSS);  // TODO: dGauss: can use Taylor expansion there
                         distanceWeight = distanceWeight * distanceWeight * distanceWeight * distanceWeight ;
                         distanceWeightSum += distanceWeight;
                         float GdotR = (Gx * (vx - xc) + Gy * (vy - yc)); // tells you if vector was pointing inward or outward

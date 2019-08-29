@@ -263,12 +263,14 @@ public class liveSRRF_CL {
         else programString = getResourceAsString(liveSRRF_CL.class, "liveSRRF.cl");
 
         programString = replaceFirst(programString, "$MAGNIFICATION$", "" + magnification);
-        programString = replaceFirst(programString, "$FWHM$", "" + fwhm);
+//        programString = replaceFirst(programString, "$FWHM$", "" + fwhm);
         programString = replaceFirst(programString, "$SENSITIVITY$", "" + sensitivity);
         programString = replaceFirst(programString, "$GXGYMAGNIFICATION$", "" + gradientMag);
 
-        programString = replaceFirst(programString, "$SIGMA$", "" + sigma);
-        programString = replaceFirst(programString, "$SIGMA22$", "" + 2 * sigma * sigma);
+//        programString = replaceFirst(programString, "$SIGMA$", "" + sigma);
+        programString = replaceFirst(programString, "$TWOSIGSQUARE$", "" + 2 * sigma * sigma);
+        programString = replaceFirst(programString, "$TWOSIGpONE$", "" + 2 * sigma + 1);
+
         programString = replaceFirst(programString, "$RADIUS$", "" + radius);
         programString = replaceFirst(programString, "$WIDTH$", "" + widthS);
         programString = replaceFirst(programString, "$HEIGHT$", "" + heightS);
