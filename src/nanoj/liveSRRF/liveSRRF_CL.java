@@ -172,7 +172,11 @@ public class liveSRRF_CL {
 
         // 3D-SRRF initialisation
         do3DSRRF = (calibTablePath3DSRRF != null);
-        if (do3DSRRF) IJ.log("3D-SRRRRRRRRRF!!!");
+        if (do3DSRRF) {
+            IJ.log("3D-LiveSRRRRRRRRRF!!! ~~~~~~~~~~~ ");
+            print3Dglasses();
+        }
+
 //        System.out.print("voila!!");
 
         double[] shiftX3D = null;
@@ -220,7 +224,7 @@ public class liveSRRF_CL {
         singleFrameSize = nPlanes * widthS * heightS; // nPlanes = 1 in 2D case
         this.widthM = widthS * magnification;
         this.heightM = heightS * magnification;
-        IJ.log("WidthM/HeightM: "+widthM+"/"+heightM);
+//        IJ.log("WidthM/HeightM: "+widthM+"/"+heightM);
 
         System.out.println("using " + chosenDevice);
         //IJ.log("Using " + chosenDevice.getName());
@@ -296,8 +300,11 @@ public class liveSRRF_CL {
         else programString = replaceFirst(programString, "$INTWEIGHTING$", "" + 0);
 
         programLiveSRRF = context.createProgram(programString).build();
-        IJ.log("Program executable? "+programLiveSRRF.isExecutable());
+//        IJ.log("Program executable? "+programLiveSRRF.isExecutable());
+        IJ.log("------------------------------------");
         IJ.log(programLiveSRRF.getBuildLog());
+        IJ.log("------------------------------------");
+
 
         kernelCalculateGradient = programLiveSRRF.createCLKernel("calculateGradient_2point");
         kernelInterpolateGradient = programLiveSRRF.createCLKernel("calculateGradientInterpolation");
@@ -307,7 +314,6 @@ public class liveSRRF_CL {
         kernelCalculateMPmap = programLiveSRRF.createCLKernel("kernelCalculateMPmap");
         kernelCalculateStd = programLiveSRRF.createCLKernel("kernelCalculateStd");
         kernelCorrectMPmap = programLiveSRRF.createCLKernel("kernelCorrectMPmap");
-        IJ.log("Program executable? "+programLiveSRRF.isExecutable());
 
         int argn;
         argn = 0;
@@ -323,7 +329,10 @@ public class liveSRRF_CL {
         if (do3DSRRF) kernelInterpolateGradient.setArg(argn++, clBufferGz); // make sure type is the same !!
         kernelInterpolateGradient.setArg(argn++, clBufferGxInt); // make sure type is the same !!
         kernelInterpolateGradient.setArg(argn++, clBufferGyInt); // make sure type is the same !!
-        if (do3DSRRF) kernelInterpolateGradient.setArg(argn++, clBufferGzInt); // make sure type is the same !!
+        if (do3DSRRF) {
+            kernelInterpolateGradient.setArg(argn++, clBufferGzInt); // make sure type is the same !!
+            kernelInterpolateGradient.setArg(argn++, clBufferShiftXY3D); // make sure type is the same !!
+        }
 
         argn = 0;
         kernelCalculateSRRF.setArg(argn++, clBufferPx); // make sure type is the same !!
@@ -332,7 +341,7 @@ public class liveSRRF_CL {
         if (do3DSRRF) kernelCalculateSRRF.setArg(argn++, clBufferGzInt); // make sure type is the same !!
         kernelCalculateSRRF.setArg(argn++, clBufferOut); // make sure type is the same !!
         kernelCalculateSRRF.setArg(argn++, clBufferDriftXY); // make sure type is the same !!
-        if (do3DSRRF) kernelCalculateSRRF.setArg(argn++, clBufferShiftXY3D); // make sure type is the same !!
+//        if (do3DSRRF) kernelCalculateSRRF.setArg(argn++, clBufferShiftXY3D); // make sure type is the same !!
         kernelCalculateSRRF.setArg(argn++, clBufferCurrentFrame); // make sure type is the same !!
 
         argn = 0;
@@ -379,15 +388,12 @@ public class liveSRRF_CL {
             prof.recordTime("Uploading ShiftXY3D array to GPU", prof.endTimer(id));
         }
 
-        IJ.log("Program executable? "+programLiveSRRF.isExecutable());
-
     }
 
 
     // --- Load Drift array on GPU ---
     public void loadDriftXYGPUbuffer(float[] driftX, float[] driftY) {
 
-        System.out.println("TAG1");
         float[] driftXY = new float[2 * nFrameForSRRF]; // TODO: change to do manually
         System.arraycopy(driftX, 0, driftXY, 0, nFrameForSRRF);
         System.arraycopy(driftY, 0, driftXY, nFrameForSRRF, nFrameForSRRF);
@@ -412,7 +418,6 @@ public class liveSRRF_CL {
             fillBuffer(clBufferPx, imsData3D);
         }
         else fillBuffer(clBufferPx, imsRawData);
-        System.out.println("TAG2");
 
         queue.putWriteBuffer(clBufferPx, false);
         prof.recordTime("Uploading data to GPU", prof.endTimer(id));
@@ -423,7 +428,6 @@ public class liveSRRF_CL {
         queue.finish(); // Make sure everything is done
         if(do3DSRRF) queue.put1DRangeKernel(kernelCalculateGradient, 0,  singleFrameSize * nFrameToLoad, 0);
         else         queue.put3DRangeKernel(kernelCalculateGradient, 0, 0, 0, widthS, heightS, nFrameToLoad, 0, 0, 0);
-        System.out.println("TAG3");
 
         prof.recordTime("kernelCalculateGradient", prof.endTimer(id));
 
@@ -434,7 +438,6 @@ public class liveSRRF_CL {
         else         queue.put3DRangeKernel(kernelInterpolateGradient, 0, 0, 0, gradientMag * widthS, gradientMag * heightS, nFrameToLoad, 0, 0, 0);
 
         prof.recordTime("kernelInterpolateGradient", prof.endTimer(id));
-        System.out.println("TAG4");
 
         // Make kernelCalculateSRRF assignment, in blocks as defined by user (blocksize from GUI)
 //        IJ.log("Calculating SRRF...");
@@ -445,7 +448,6 @@ public class liveSRRF_CL {
         int nBlocks;
         if (do3DSRRF) nBlocks = nPlanes * magnification * widthM * heightM / blockLength + ((nPlanes * magnification * widthM * heightM % blockLength == 0) ? 0 : 1);
         else nBlocks = widthM * heightM / blockLength + ((widthM * heightM % blockLength == 0) ? 0 : 1);
-        System.out.println("TAG5");
 
         for (int f = 0; f < nFrameToLoad; f++) {
             for (int nB = 0; nB < nBlocks; nB++) {
@@ -471,8 +473,6 @@ public class liveSRRF_CL {
             queue.put1DRangeKernel(kernelIncrementFramePosition, 0, 2, 0); // this internally increment the frame position f
             prof.recordTime("Increment frame count", prof.endTimer(id));
         }
-
-        System.out.println("TAG6");
 
         return false;
 
@@ -701,6 +701,17 @@ public class liveSRRF_CL {
 //        impReshaped.show();
 
         return reshapedIms;
+    }
+
+    public void print3Dglasses(){
+        IJ.log("                                                                                      \n" +
+                ",----. ,------.         ,--.   ,--.                 ,---.  ,------. ,------. ,------. \n" +
+                "'.-.  ||  .-.  \\ ,-----.|  |   `--',--.  ,--.,---. '   .-' |  .--. '|  .--. '|  .---' \n" +
+                "  .' < |  |  \\  :'-----'|  |   ,--. \\  `'  /| .-. :`.  `-. |  '--'.'|  '--'.'|  `--,  \n" +
+                "/'-'  ||  '--'  /       |  '--.|  |  \\    / \\   --..-'    ||  |\\  \\ |  |\\  \\ |  |`    \n" +
+                "`----' `-------'        `-----'`--'   `--'   `----'`-----' `--' '--'`--' '--'`--'     \n" +
+                "                                                                                      ");
+
     }
 
 }

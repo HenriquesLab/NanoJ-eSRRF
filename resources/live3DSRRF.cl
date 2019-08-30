@@ -64,7 +64,7 @@ static float getInterpolatedValue(__global float* array, float const x, float co
                 float p = 0.0f;
                 for (int i = 0; i <= 3; i++) {
                     int u = min(max(u0 - 1 + i, 0), width-1);
-                    p = p + array[u + v*width +  + fdOffset] * cubic(x - (float) (u));
+                    p = p + array[u + v*width + fdOffset] * cubic(x - (float) (u));
                 }
                 q = q + p * cubic(y - (float) (v));
 //            }
@@ -145,6 +145,8 @@ static float getInterpolatedValue(__global float* array, float const x, float co
 
     return q;
 }
+
+
 
 // Check boundaries of the image and returns the gradient value // TODO: extrapolate instead of boundary check?
 static float getVBoundaryCheck(__global float* array, int const thisWidth, int const thisHeight, int const thisDepth, int const x, int const y, int const z, int const f) {
@@ -231,6 +233,10 @@ __kernel void calculateGradient_2point(
     GyArray[offset] = pixels[offset] - pixels[x1 + y0*width + z1*wh + whd*f];
     GzArray[offset] = pixels[offset] - pixels[x1 + y1*width + z0*wh + whd*f];
 
+// linear interpolation (3-point gradient) to match the grids of XY (because z has no interpolation) -- not true for current z loop
+//    const int z2 = min(z1+1, nPlanes-1);
+//    GzArray[offset] = 0.5*pixels[x1 + y1*width + z2*wh + whd*f] - 0.5*pixels[x1 + y1*width + z0*wh + whd*f];
+
     // Reset the local current frame
     nCurrentFrame[1] = 0;
 //    if (nCurrentFrame[0] == nFrameForSRRF) nCurrentFrame[0] = 0; // reset the frame number if it's reached the end
@@ -248,7 +254,8 @@ __kernel void calculateGradientInterpolation(
     __global float* GzArray,
     __global float* GxIntArray,
     __global float* GyIntArray,
-    __global float* GzIntArray
+    __global float* GzIntArray,
+    __global float* ShiftXY3D
 
     ){
 
@@ -257,8 +264,12 @@ __kernel void calculateGradientInterpolation(
     const int whdInt = wInt*hInt*nPlanes; // TODO: add as #define?
     const int f = offset/whdInt;
     const int z = (offset - f*whdInt)/whInt;
-    const int y = (offset - f*whdInt - z*whInt)/wInt;
-    const int x =  offset - f*whdInt - z*whInt - y*wInt;
+    const int y = (offset - f*whdInt - z*whInt)/wInt; // integers in the interpolated space
+    const int x =  offset - f*whdInt - z*whInt - y*wInt; // integers in the interpolated space
+
+    const float xf = (float) x / 2.0f + ShiftXY3D[z]; // Important: apply the shift in real space
+    const float yf = (float) y / 2.0f + ShiftXY3D[z + nPlanes]; // TODO: check the sign of the correction for the shift, but should be good
+    // The shift correction needs to be done either at pixel level or gradient level so that Gx, Gy and Gz are all on the same voxels
 
 //    const int x = get_global_id(0);
 //    const int y = get_global_id(1);
@@ -267,9 +278,12 @@ __kernel void calculateGradientInterpolation(
 //    const int offset = y * wInt + x + f * wInt * hInt;
 
     // LATERAL interpolation of the gradients
-    GxIntArray[offset] = getInterpolatedValue(GxArray, (float) (x)/2.0f, (float) (y)/2.0f, z, f);
-    GyIntArray[offset] = getInterpolatedValue(GyArray, (float) (x)/2.0f, (float) (y)/2.0f, z, f);
-    GzIntArray[offset] = getInterpolatedValue(GzArray, (float) (x)/2.0f, (float) (y)/2.0f, z, f);
+    GxIntArray[offset] = getInterpolatedValue(GxArray, xf, yf, z, f);
+    GyIntArray[offset] = getInterpolatedValue(GyArray, xf, yf, z, f);
+    GzIntArray[offset] = getInterpolatedValue(GzArray, xf, yf, z, f);
+//        GxIntArray[offset] = getInterpolatedValue(GxArray, (float) (x)/2.0f, (float) (y)/2.0f, z, f);
+//        GyIntArray[offset] = getInterpolatedValue(GyArray, (float) (x)/2.0f, (float) (y)/2.0f, z, f);
+//        GzIntArray[offset] = getInterpolatedValue(GzArray, (float) (x)/2.0f, (float) (y)/2.0f, z, f);
 }
 
 
@@ -282,7 +296,7 @@ __kernel void calculateRadialGradientConvergence(
     __global float* GzArray,
     __global float* OutArray,
     __global float* driftXY,
-    __global float* shiftXY3D,
+//    __global float* shiftXY3D,
     __global int* nCurrentFrame
     // Current frame is a 2 element Int buffer:
             // nCurrentFrame[0] is the global current frame in the current SRRF frame (reset every SRRF frame)
@@ -306,14 +320,14 @@ __kernel void calculateRadialGradientConvergence(
     const float xc = (xM + 0.5) / magnification + driftX; // continuous space position at the centre of magnified pixel
     const float yc = (yM + 0.5) / magnification + driftY;
     const float zc = (zM + 0.5) / magnification; // TODO: consider drift in Z?
-//    const float sigSquare = 2 * sigma * sigma; // TODO: add as hardcoded value?
+
+    const float vz_ArrayShift = 0; // TODO: this will need to be checked carefully
 
     float CGLH = 0; // CGLH stands for Radiality original name - Culley-Gustafsson-Laine-Henriques transform
     float distanceWeightSum = 0;
 
     float vx, vy, vz, Gx, Gy, Gz;
-//    float sigma = fwhm / 2.354f; // Sigma = 0.21 * lambda/NA in theory
-//    float fradius = sigma * 2;
+
 //    float radius = ((float) ((int) (GxGyMagnification*fradius)))/GxGyMagnification + 1;    // this reduces the radius for speed, works when using dGauss^4 and 2p+I
 //    int radius = (int) (fradius) + 1;    // this should be used otherwise
 
@@ -328,8 +342,8 @@ __kernel void calculateRadialGradientConvergence(
                 vx = ((float) ((int) (GxGyMagnification*xc)) + i)/(float) GxGyMagnification; // position in continuous space
                 if (vx > 0 && vx < width){
 
-                    for (int k=-(int) radius; k<=((int) radius + 1); k++) {
-                        vz = ((float) ((int) (zc)) + k); // position in continuous space TODO: problems with negative values and (int)?
+                    for (int k=-(int) radius; k<=((int) radius + 1); k++) { // TODO: check best area to scan in z!
+                        vz = ((float) ((int) (zc)) + k); // position in continuous space TODO: check for 3D
                         if (vz > 0 && vz < nPlanes){
 
                             dx = vx - xc;
@@ -341,7 +355,8 @@ __kernel void calculateRadialGradientConvergence(
 
                                 Gx = getVBoundaryCheck(GxArray, wInt, hInt, nPlanes, GxGyMagnification*(vx - vxy_offset) + vxy_ArrayShift, GxGyMagnification*(vy - vxy_offset), vz, nCurrentFrame[1]);
                                 Gy = getVBoundaryCheck(GyArray, wInt, hInt, nPlanes, GxGyMagnification*(vx - vxy_offset), GxGyMagnification*(vy - vxy_offset) + vxy_ArrayShift, vz, nCurrentFrame[1]);
-                                Gz = getVBoundaryCheck(GzArray, wInt, hInt, nPlanes, GxGyMagnification*(vx - vxy_offset), GxGyMagnification*(vy - vxy_offset), vz + vxy_ArrayShift, nCurrentFrame[1]);
+                                // TODO: i don't trust this line below to be right --> needs checking! Yep, looks good with current config
+                                Gz = getVBoundaryCheck(GzArray, wInt, hInt, nPlanes, GxGyMagnification*(vx - vxy_offset), GxGyMagnification*(vy - vxy_offset), vz + vz_ArrayShift, nCurrentFrame[1]);
 
                                 distanceWeight = distance*exp(-(distance*distance)/(float) tSS);  // TODO: dGauss: can use Taylor expansion there
                                 distanceWeight = distanceWeight * distanceWeight * distanceWeight * distanceWeight ;
@@ -412,7 +427,10 @@ __kernel void calculateRadialGradientConvergence(
     if (CGLH >= 0) CGLH = pow(CGLH, sensitivity);
     else CGLH = 0;
 
-    float v = getInterpolatedValue(pixels, ((float) xM)/magnification + driftX - 0.5f, ((float) yM)/magnification + driftY - 0.5f, (int) zc, nCurrentFrame[1]);
+    int z0 = (int) floor(zc);
+    float v0 = getInterpolatedValue(pixels, ((float) xM)/magnification + driftX - 0.5f, ((float) yM)/magnification + driftY - 0.5f, z0, nCurrentFrame[1]);
+    float v1 = getInterpolatedValue(pixels, ((float) xM)/magnification + driftX - 0.5f, ((float) yM)/magnification + driftY - 0.5f, z0+1, nCurrentFrame[1]);
+    float v = (zc - (float) z0)*v1 + (1-(zc - (float) z0))*v0; // linear interpolations
 
     if (intWeighting == 1) {
             if (nCurrentFrame[0] == 0) {

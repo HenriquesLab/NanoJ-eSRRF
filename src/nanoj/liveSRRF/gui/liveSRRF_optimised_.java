@@ -67,7 +67,7 @@ public class liveSRRF_optimised_ implements PlugIn {
             do3DSRRF;
 
     private final boolean enable3DSRRF = true;
-    private final String LiveSRRFVersion = "v1.11";
+    private final String LiveSRRFVersion = "v1.12";
 
     private String pathToDisk = "",
             fileName,
@@ -233,7 +233,7 @@ public class liveSRRF_optimised_ implements PlugIn {
         heightS = liveSRRF.heightS;
         nPlanes = liveSRRF.nPlanes;
         nPlanesM = liveSRRF.nPlanesM;
-        IJ.log("WidthS/HeightS: "+widthS+"/"+heightS);
+//        IJ.log("WidthS/HeightS: "+widthS+"/"+heightS);
         IJ.log("Number of planes: "+nPlanes);
 
         shiftX = new float[nFrameForSRRFtoUse];
@@ -457,7 +457,7 @@ public class liveSRRF_optimised_ implements PlugIn {
                 impSRRFavg = new ImagePlus(imp.getTitle() + " - liveSRRF (AVG)", imsSRRFavg);
                 impSRRFavg.setCalibration(cal);
                 IJ.run(impSRRFavg, "Enhance Contrast", "saturated=0.5");
-                impSRRFavg.show();
+                impSRRFavg.show(); //TODO: add z-step size for 3D
             }
 
             if (calculateSTD) {
