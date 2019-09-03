@@ -12,10 +12,10 @@ public class GetAxialPositionMFM {
 
     private ImageStack imsRef;
     int blockSize, width, height;
-    Plot defocusPlot;
     double[] zPosArray;
     Fit1DGaussian fitting;
     float zStep;
+    Plot defocusPlot;
 
     public GetAxialPositionMFM(ImageStack imsRef, float zStep, int nSlices) {
         this.imsRef = imsRef;
@@ -24,13 +24,13 @@ public class GetAxialPositionMFM {
         IJ.log("Size of total block: "+nSlices);
         this.width = imsRef.getWidth();
         this.height = imsRef.getHeight();
-        this.defocusPlot = new Plot("Defocus plot", "Z (nm)", "Intensity (AU)");
         this.zPosArray = new double[nSlices-blockSize];
         for (int n = 0; n < nSlices-blockSize; n++) zPosArray[n] = n*zStep;
         this.zStep = zStep;
+        this.defocusPlot = new Plot("Defocus plot", "Z (nm)", "Intensity (AU)");
     }
 
-    public float computeZcorrelation(ImageStack ims){
+    public float computeZcorrelation(ImageStack ims, boolean showPlot){
         float zPos = 0;
         double[] zCorrArray = new double[ims.getSize()-blockSize];
         float[] zCorrArrayFloat = new float[ims.getSize()-blockSize];
@@ -49,11 +49,14 @@ public class GetAxialPositionMFM {
         fitting.cropDataArray(cropLevel);
         float[] fitResults = fitting.calculate();
         double[][] modelArray = fitting.fittedCurve();
-        defocusPlot.setColor(Color.black);
-        defocusPlot.add("line", zPosArray, modelArray[0]);
-        defocusPlot.setColor(Color.red);
-        defocusPlot.add("line", zPosArray, modelArray[1]);
-        defocusPlot.show();
+
+        if (showPlot) {
+            defocusPlot.setColor(Color.black);
+            defocusPlot.add("line", zPosArray, modelArray[0]);
+            defocusPlot.setColor(Color.red);
+            defocusPlot.add("line", zPosArray, modelArray[1]);
+            defocusPlot.show();
+        }
 
 //        IJ.log("--- Initial guesses results ---");
 //        IJ.log("Initial x0: "+(fitting.initX0)*zStep+" nm");

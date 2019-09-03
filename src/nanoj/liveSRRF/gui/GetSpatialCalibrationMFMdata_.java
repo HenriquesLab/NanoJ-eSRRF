@@ -65,6 +65,12 @@ public class GetSpatialCalibrationMFMdata_ implements PlugIn {
         gd.addNumericField("Max. angle (in degrees):", prefs.get("maxAngle", 2), 1);
         gd.addMessage("-=-= Intensity rescaling =-=-\n");
         gd.addNumericField("Background level:", prefs.get("bgLevel", 100), 2);
+        gd.addMessage("-=-= Display options =-=-\n");
+        gd.addCheckbox("Show RCCMs", prefs.get("showRCCMs", false));
+        gd.addCheckbox("Show intermediate results", prefs.get("showAllResults", false));
+        gd.addCheckbox("Show plots", prefs.get("showPlots", false));
+
+
         gd.showDialog();
         if (gd.wasCanceled()) return;
 
@@ -95,6 +101,9 @@ public class GetSpatialCalibrationMFMdata_ implements PlugIn {
         int nAngles = (int) gd.getNextNumber();
         float maxAngle = (float) gd.getNextNumber();
         float bgLevel = (float) gd.getNextNumber();
+        boolean showRCCMs = gd.getNextBoolean();
+        boolean showAllResults = gd.getNextBoolean();
+        boolean showPlots = gd.getNextBoolean();
 
         // ---- Saving GUI input for next use ----
         prefs.set("axialSpacing", axialSpacing);
@@ -102,6 +111,9 @@ public class GetSpatialCalibrationMFMdata_ implements PlugIn {
         prefs.set("nAngles", (float) nAngles);
         prefs.set("maxAngle", maxAngle);
         prefs.set("bgLevel", bgLevel);
+        prefs.set("showRCCMs", showRCCMs);
+        prefs.set("showAllResults", showAllResults);
+        prefs.set("showPlots", showPlots);
 
         // ---- Get path for NanoJ table save ----
         String header = "Choose where to save Calibration table...";
@@ -117,14 +129,14 @@ public class GetSpatialCalibrationMFMdata_ implements PlugIn {
         IJ.log("Axial scan step size (in nm): "+zStep);
 
         int width, height, nSlices;
-        ImageStack ims = imp.getImageStack().convertToFloat();
+        ImageStack ims = imp.duplicate().getImageStack().convertToFloat();
         nSlices = ims.getSize();
         width = ims.getWidth();
         height = ims.getHeight();
 
         // ---- Removing background level from image stack ----
         for (int i=0; i<ims.getSize(); i++){
-            ims.getProcessor(i+1).add( -bgLevel);
+            ims.getProcessor(i+1).add( -bgLevel); // TODO: this affect IMP Check!!
         }
 
         // ---- Initialize the variables and the Log ----
@@ -164,9 +176,10 @@ public class GetSpatialCalibrationMFMdata_ implements PlugIn {
         }
 
         // ---- Showing average data stacks prior to registration ----
-        ImagePlus impAvg = new ImagePlus("Avg stack", imsAvg);
-        impAvg.setTitle(imp.getShortTitle()+" - Average");
+        if (showAllResults){
+        ImagePlus impAvg = new ImagePlus(imp.getShortTitle()+" - Average", imsAvg);
         impAvg.show();
+        }
 
         // ---- Calculation xy shift and theta rotation ----
         ImageProcessor ipRef = imsMIP.getProcessor(referenceFrameNumber+1);
@@ -177,15 +190,17 @@ public class GetSpatialCalibrationMFMdata_ implements PlugIn {
 
 
         // ----------- // TODO: add an option in GUI for displaying RCCM?
-//        ImageStack[] imsRCCM = RCCMcalculator.imsRCCMap;
-//        for (int i = 0; i < imsRCCM.length; i++) {
-//            ImagePlus impRCCMTemp = new ImagePlus("RCCM"+i,imsRCCM[i]);
-//            impRCCMTemp.show();
-//        }
+        if (showRCCMs) {
+            ImageStack[] imsRCCM = RCCMcalculator.imsRCCMap;
+            for (int i = 0; i < imsRCCM.length; i++) {
+                ImagePlus impRCCMTemp = new ImagePlus("RCCM" + i, imsRCCM[i]);
+                impRCCMTemp.show();
+            }
+        }
         // -----------
 
         IJ.log("Extracting calibration parameters...");
-        double[][] allShiftAndRot = RCCMcalculator.getShiftAndTiltfromRCCM();
+        double[][] allShiftAndRot = RCCMcalculator.getShiftAndTiltfromRCCM(showPlots);
         double[] shiftX = new double[nROI];
         double[] shiftY = new double[nROI];
         double[] theta = new double[nROI];
@@ -198,20 +213,23 @@ public class GetSpatialCalibrationMFMdata_ implements PlugIn {
         }
 
         // ---- Applying corrections to average data stack ----
-        ImageStack[] imsCorr = RCCMcalculator.applyMFMCorrection(imsAvg, shiftX, shiftY, theta, null);
-        ImagePlus impAvgCorr = new ImagePlus(imp.getShortTitle()+" - Average & Registered", imsCorr[0]);
-        impAvgCorr.show();
+        ImageStack[] imsCorr = RCCMcalculator.applyMFMCorrection(imsAvg, shiftX, shiftY, theta, null, null);
 
-        ImagePlus impAvgCorrCropped = new ImagePlus(imp.getShortTitle()+" - Average & Registered", imsCorr[1]);
-        impAvgCorrCropped.show();
-        double[] intensityScalingCoeffs = getLinearRegressionParameters(impAvgCorrCropped.getStack(), referenceFrameNumber);
+        if (showAllResults) {
+            ImagePlus impAvgCorr = new ImagePlus(imp.getShortTitle() + " - Average & Registered", imsCorr[0]);
+            impAvgCorr.show();
+        }
+        double[] intensityScalingCoeffs = getLinearRegressionParameters(imsCorr[1], referenceFrameNumber);
 
-        ImageStack imsAvgCorrCropRescaled = impAvgCorrCropped.getStack().duplicate();
+        ImageStack imsAvgCorrCropRescaled = imsCorr[1].duplicate();
         for (int i = 0; i < nROI; i++) {
             imsAvgCorrCropRescaled.getProcessor(i+1).multiply(1/intensityScalingCoeffs[i]);
         }
-        ImagePlus impAvgCorrCropRescaled = new ImagePlus(imp.getShortTitle()+" - Average & Registered & Cropped & Rescaled", imsAvgCorrCropRescaled);
-        impAvgCorrCropRescaled.show();
+
+        if (showAllResults) {
+            ImagePlus impAvgCorrCropRescaled = new ImagePlus(imp.getShortTitle() + " - Average & Registered & Cropped & Rescaled", imsAvgCorrCropRescaled);
+            impAvgCorrCropRescaled.show();
+        }
 
         // ---- Applying correction to the whole stack stack ----
         IJ.log("Applying corrections to stack...");
@@ -237,7 +255,7 @@ public class GetSpatialCalibrationMFMdata_ implements PlugIn {
                     x = Math.round((float) width / nImageSplits * i) + borderCrop;
                     y = Math.round((float) height / nImageSplits * j) + borderCrop;
                     ImageStack imsTemp = ims.crop(x, y, 0, cropSizeX, cropSizeY, nSlices);
-                    imsCorrected[sortedIndicesROI[id]] = RCCMcalculator.applyMFMCorrection(imsTemp, shiftXslice, shiftYslice, thetaSlice, coeffSlice)[0];
+                    imsCorrected[sortedIndicesROI[id]] = RCCMcalculator.applyMFMCorrection(imsTemp, shiftXslice, shiftYslice, thetaSlice, coeffSlice, null)[0];
                     id++;
                 }
             }
@@ -250,7 +268,7 @@ public class GetSpatialCalibrationMFMdata_ implements PlugIn {
         GetAxialPositionMFM getAxialPositionMFM = new GetAxialPositionMFM(imsRef, (float) zStep, nSlices);
         double[] axialPositions = new double[nROI];
         for (int i = 0; i < nROI; i++) {
-            axialPositions[i] = getAxialPositionMFM.computeZcorrelation(imsCorrected[i]);
+            axialPositions[i] = getAxialPositionMFM.computeZcorrelation(imsCorrected[i], showPlots);
         }
 
         // ---- Calculating the mean offset ----
@@ -262,7 +280,7 @@ public class GetSpatialCalibrationMFMdata_ implements PlugIn {
 
 
         // ---- Creating the NanoJ table and save it ----
-        int digitsToRound = 2;
+        int digitsToRound = 2; // should be fine
         IJ.log("Creating calibration table...");
         Map<String, double[]> data = new LinkedHashMap<>();
         data.put("X-shift (pixels)", sortArray(roundToNdigits(shiftX, digitsToRound), sortedIndicesROI));
@@ -272,6 +290,11 @@ public class GetSpatialCalibrationMFMdata_ implements PlugIn {
         data.put("Nominal positions", sortArray(roundToNdigits(nominalAxialPositions, digitsToRound), sortedIndicesROI));
         data.put("ROI #", sortArray(roundToNdigits(chosenROIsLocations, digitsToRound), sortedIndicesROI));
         data.put("Intensity scaling", sortArray(roundToNdigits(intensityScalingCoeffs, digitsToRound), sortedIndicesROI));
+        double[] bgArray = new double[nROI];
+        for (int i = 0; i < nROI; i++) {
+            bgArray[i] = bgLevel;
+        }
+        data.put("Background level (ADC)", bgArray);
 
         ResultsTable rt = dataMapToResultsTable(data);
         rt.show("Calibration-Table");

@@ -28,11 +28,10 @@ public class MFMCalibration {
     private static final Log log = new Log();
     //    private int radiusX, radiusY; // TODO: include radius X and Y to speed things up?
     public ImageStack[] imsRCCMap;
-    Plot thetaFitPlot;
 
     // Initialisation
     public MFMCalibration(){
-        this.thetaFitPlot = new Plot("Theta fit plot", "Angle (degrees)", "Intensity (AU)");
+        // Keep calm and carry on
     }
 
     // This method calculates the RCCM ImageStack array ----------------------------------------------------------------
@@ -85,7 +84,7 @@ public class MFMCalibration {
     }
 
     // This method calculates the shift and tilt from the RCCM ImageStack array ----------------------------------------
-    public double[][] getShiftAndTiltfromRCCM(){
+    public double[][] getShiftAndTiltfromRCCM(boolean showPlot){
 
         int nROI = imsRCCMap.length;
         Fit1DGaussian fitting;
@@ -96,6 +95,7 @@ public class MFMCalibration {
         double[] theta = new double[nROI];
 
         int nAngles;
+        Plot thetaFitPlot = new Plot("Theta fit plot", "Angle (degrees)", "Intensity (AU)");
 
         for(int s=0; s<nROI; s++) {
             ImageStack imsRCCMapSlice = imsRCCMap[s];
@@ -130,12 +130,14 @@ public class MFMCalibration {
                 shiftX[s] = (imsRCCMapSlice.getWidth() - 1) / 2 - linearInterpolation(shiftXY[0], fitResults[1]); // This assumes that shiftXY is relatively continuous wrt to theta
                 shiftY[s] = (imsRCCMapSlice.getHeight() - 1) / 2 - linearInterpolation(shiftXY[1], fitResults[1]);
 
-                thetaFitPlot.setColor(Color.black);
-                thetaFitPlot.add("line", angleArray, modelArray[0]);
-                thetaFitPlot.setColor(Color.red);
-                thetaFitPlot.add("line", angleArray, modelArray[1]);
+                if (showPlot) {
+                    thetaFitPlot.setColor(Color.black);
+                    thetaFitPlot.add("line", angleArray, modelArray[0]);
+                    thetaFitPlot.setColor(Color.red);
+                    thetaFitPlot.add("line", angleArray, modelArray[1]);
 //        defocusPlot.add("line", zPosArray, normalizeArray(zCorrArray));
-                thetaFitPlot.show();
+                    thetaFitPlot.show();
+                }
             }
             else {
                 theta[s] = angleArray[0]; // don't fit if there's only one angle in the array
@@ -189,14 +191,19 @@ public class MFMCalibration {
 //    }
 
     // Threaded version which does not use Aparapi
-    public ImageStack[] applyMFMCorrection(ImageStack ims, double[] shiftX, double[] shiftY, double[] theta, double[] intCoeffs){
+    public ImageStack[] applyMFMCorrection(ImageStack ims, double[] shiftX, double[] shiftY, double[] theta, double[] intCoeffs, double[] bgLevels){
 
         ImageStack imsCorr = ims.duplicate();
         int nSlices = ims.getSize();
 
         if (intCoeffs != null){
+//            IJ.log("C");
             for (int i = 0; i < nSlices; i++) {
-                imsCorr.getProcessor(i+1).multiply( 1/intCoeffs[i]);
+                if (bgLevels != null) {
+//                    IJ.log("BG");
+                    imsCorr.getProcessor(i + 1).add(-bgLevels[i]);
+                }
+                imsCorr.getProcessor(i+1).multiply( 1.0d/intCoeffs[i]); // rescaling should only be done on BG-removed dataset!!
             }
         }
 

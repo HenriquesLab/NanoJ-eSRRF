@@ -19,7 +19,7 @@ import static nanoj.liveSRRF.gui.GetSpatialCalibrationMFMdata_.getSortedIndices;
 
 public class ApplyCalibrationMFMdata_ implements PlugIn {
 
-    private double[] shiftX, shiftY, theta, chosenROIsLocations, axialPositions, intCoeffs, nominalPositions;
+    private double[] shiftX, shiftY, theta, chosenROIsLocations, axialPositions, intCoeffs, nominalPositions, bgLevels;
     private final String MFMApplyCalibVersion = "v0.6";
 
     @Override
@@ -55,6 +55,7 @@ public class ApplyCalibrationMFMdata_ implements PlugIn {
             axialPositions = calibTable.get("Axial positions");
             nominalPositions = calibTable.get("Nominal positions");
             intCoeffs = calibTable.get("Intensity scaling");
+            bgLevels = calibTable.get("Background level (ADC)");
             ResultsTable rt = dataMapToResultsTable(calibTable);
             rt.show("Calibration-Table");
         } catch (IOException e) {
@@ -75,6 +76,7 @@ public class ApplyCalibrationMFMdata_ implements PlugIn {
         double[] shiftYslice = new double[nFrames];
         double[] thetaSlice = new double[nFrames];
         double[] coeffSlice = new double[nFrames];
+        double[] bgSlice = new double[nFrames];
 
         int[] sortedIndicesROI;
         if (ArrayMath.sum(axialPositions) == 0) sortedIndicesROI = getSortedIndices(nominalPositions); // case where all axial positions are 0 (simulated data for reg.)
@@ -92,6 +94,7 @@ public class ApplyCalibrationMFMdata_ implements PlugIn {
                 shiftYslice[k] = shiftY[id];
                 thetaSlice[k] = theta[id];
                 coeffSlice[k] = intCoeffs[id];
+                bgSlice[k] = bgLevels[id];
             }
 //                IJ.log("X-shift: "+shiftXslice[0]);
 
@@ -100,7 +103,7 @@ public class ApplyCalibrationMFMdata_ implements PlugIn {
 //            IJ.log("x="+x);
 //            IJ.log("y="+y);
             ImageStack imsTemp = ims.crop(x, y, 0, cropSizeX,cropSizeY, nFrames);
-            imsCorrectedArray[sortedIndicesROI[id]] = RCCMcalculator.applyMFMCorrection(imsTemp, shiftXslice, shiftYslice, thetaSlice, coeffSlice)[0];
+            imsCorrectedArray[sortedIndicesROI[id]] = RCCMcalculator.applyMFMCorrection(imsTemp, shiftXslice, shiftYslice, thetaSlice, coeffSlice, bgSlice)[0];
         }
 
         ImageStack imsCorrectedUberStack = new ImageStack();
