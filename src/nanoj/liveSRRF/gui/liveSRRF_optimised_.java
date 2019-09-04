@@ -16,7 +16,7 @@ import nanoj.core2.NanoJProfiler;
 import nanoj.core2.NanoJUsageTracker;
 import nanoj.liveSRRF.XYShiftCalculator;
 import org.python.modules.math;
-import nanoj.liveSRRF.liveSRRF_CL;
+import nanoj.liveSRRF.LiveSRRF_CL;
 
 import java.awt.*;
 import java.io.IOException;
@@ -89,7 +89,7 @@ public class liveSRRF_optimised_ implements PlugIn {
     // Advanced formats
     private NanoJPrefs prefs = new NanoJPrefs(this.getClass().getName());
     private NanoJProfiler prof = new NanoJProfiler();
-    private liveSRRF_CL liveSRRF;
+    private LiveSRRF_CL liveSRRF;
     private SaveFileInZip saveFileInZip;
     private CLDevice chosenDevice = null;
 
@@ -146,9 +146,9 @@ public class liveSRRF_optimised_ implements PlugIn {
         IJ.log("Pixel size: "+pixelSize+" "+pixelSizeUnit);
 
         // Initialize the liveSRRF class and check the devices
-        liveSRRF = new liveSRRF_CL();
+        liveSRRF = new LiveSRRF_CL();
         liveSRRF.checkDevices();
-        CLDevice[] allDevices = liveSRRF_CL.allCLdevices;
+        CLDevice[] allDevices = LiveSRRF_CL.allCLdevices;
         gradMag = liveSRRF.gradientMag;
         nRecons = liveSRRF.nReconstructions;
 

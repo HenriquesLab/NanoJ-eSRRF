@@ -100,7 +100,7 @@ public class MFMCalibration {
         for(int s=0; s<nROI; s++) {
             ImageStack imsRCCMapSlice = imsRCCMap[s];
 
-            // calculate position and value of maximum pixel TODO: avoid spurious pixels that would skew this?
+            // calculate position and value of maximum pixel
             nAngles = imsRCCMapSlice.getSize();
             float[][] shiftXY = new float[2][nAngles];
             float[] maxValue = new float[nAngles];
@@ -148,47 +148,6 @@ public class MFMCalibration {
 
         return new double[][] {shiftX, shiftY, theta};
     }
-
-    // This uses Aparapi to do the rotation
-//    public ImagePlus[] applyCorrection(ImagePlus imp, double[] shiftX, double[] shiftY, double[] theta, double[] intCoeffs){
-//
-//        int nAngles = theta.length;
-////        float[] floatTheta = new float[theta.length];
-////        for (int i = 0 ; i < theta.length; i++) {
-////            floatTheta[i] = (float) toRadians(theta[i]);
-////        }
-//
-//        ApplyDriftCorrection adc = new ApplyDriftCorrection();
-//        ImageStack ims = imp.getImageStack();
-//
-//        if (intCoeffs != null){
-//            for (int i = 0; i < ims.getSize(); i++) {
-//                ims.getProcessor(i+1).multiply( 1/intCoeffs[i]);
-//            }
-//        }
-//
-//        ImageStack imsRotated = imp.getStack().duplicate();
-//        NanoJThreadExecutor NTE = new NanoJThreadExecutor(false);
-//        for (int n = 1; n <= nAngles; n++) {
-//            ThreadedRotate r = new ThreadedRotate(imsRotated, n, theta[n - 1]);
-//            NTE.execute(r);
-//        }
-//        NTE.finish();
-//
-////        ImageStack imsRotated = translateOrRotateImage.rotate(ims, floatTheta);
-//
-//        ImagePlus impRot = new ImagePlus(imp.getShortTitle(), imsRotated);
-//        ImagePlus impAvgCorrected = adc.applyDriftCorrection(impRot, shiftX, shiftY);
-//
-//        int x0 = (int) Math.max(Math.ceil(getMaxValue(shiftX)[1]), -Math.ceil(getMinValue(shiftX)[1]));
-//        int y0 = (int) Math.max(Math.ceil(getMaxValue(shiftY)[1]), -Math.ceil(getMinValue(shiftY)[1]));
-//        ImageStack imsAvgCorrectedCropped = impAvgCorrected.getStack().crop(x0, y0, 0, imp.getWidth()-2*x0, imp.getHeight()-2*y0, imp.getStackSize());
-//        ImagePlus[] impCombo = new ImagePlus[2];
-//        impCombo[0] = impAvgCorrected;
-//        impCombo[1] = new ImagePlus("Corrected crop", imsAvgCorrectedCropped);
-//
-//        return impCombo;
-//    }
 
     // Threaded version which does not use Aparapi
     public ImageStack[] applyMFMCorrection(ImageStack ims, double[] shiftX, double[] shiftY, double[] theta, double[] intCoeffs, double[] bgLevels){

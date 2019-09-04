@@ -20,8 +20,8 @@ public class GetAxialPositionMFM {
     public GetAxialPositionMFM(ImageStack imsRef, float zStep, int nSlices) {
         this.imsRef = imsRef;
         this.blockSize = imsRef.getSize();
-        IJ.log("Size of reference block: "+imsRef.getSize());
-        IJ.log("Size of total block: "+nSlices);
+//        IJ.log("Size of reference block: "+imsRef.getSize());
+//        IJ.log("Size of total block: "+nSlices);
         this.width = imsRef.getWidth();
         this.height = imsRef.getHeight();
         this.zPosArray = new double[nSlices-blockSize];

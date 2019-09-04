@@ -20,7 +20,7 @@ import static nanoj.liveSRRF.gui.GetSpatialCalibrationMFMdata_.getSortedIndices;
 public class ApplyCalibrationMFMdata_ implements PlugIn {
 
     private double[] shiftX, shiftY, theta, chosenROIsLocations, axialPositions, intCoeffs, nominalPositions, bgLevels;
-    private final String MFMApplyCalibVersion = "v0.6";
+    private final String MFMApplyCalibVersion = "v0.7";
 
     @Override
     public void run(String s) {

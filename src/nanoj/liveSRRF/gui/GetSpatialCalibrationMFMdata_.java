@@ -9,12 +9,15 @@ import ij.io.FileInfo;
 import ij.measure.ResultsTable;
 import ij.plugin.HyperStackConverter;
 import ij.plugin.PlugIn;
+import ij.process.FloatProcessor;
 import ij.process.ImageProcessor;
+import nanoj.core.java.array.ArrayMath;
 import nanoj.core2.NanoJPrefs;
 import nanoj.liveSRRF.GetAxialPositionMFM;
 import nanoj.liveSRRF.MFMCalibration;
 
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -28,7 +31,7 @@ import static nanoj.liveSRRF.StackProjections.calculateMIP;
 public class GetSpatialCalibrationMFMdata_ implements PlugIn {
 
     private NanoJPrefs prefs = new NanoJPrefs(this.getClass().getName());
-    private final String MFMGetCalibVersion = "v0.6";
+    private final String MFMGetCalibVersion = "v0.7";
 
     @Override
     public void run(String s) {
@@ -45,7 +48,7 @@ public class GetSpatialCalibrationMFMdata_ implements PlugIn {
         zStep = (double) Math.round(zStep * 100d) / 100d;
 
         // ---- Building the GUI ----
-        int[] offsetMFMarray = new int[] {2,3,4,-1,0,1,-4,-3,-2}; // TODO: add other cases where it's not 9 positions
+        int[] offsetMFMarray = new int[] {2,3,4,-1,0,1,-4,-3,-2}; // TODO: add other cases where it's not 9 positions? or get the positions automatically?
         int nImageSplits = (int) Math.sqrt(offsetMFMarray.length);
 
         String[] splitLabels = new String[nImageSplits*nImageSplits];
@@ -65,6 +68,7 @@ public class GetSpatialCalibrationMFMdata_ implements PlugIn {
         gd.addNumericField("Max. angle (in degrees):", prefs.get("maxAngle", 2), 1);
         gd.addMessage("-=-= Intensity rescaling =-=-\n");
         gd.addNumericField("Background level:", prefs.get("bgLevel", 100), 2);
+        gd.addNumericField("Percentile", prefs.get("pcTile", 1),2);
         gd.addMessage("-=-= Display options =-=-\n");
         gd.addCheckbox("Show RCCMs", prefs.get("showRCCMs", false));
         gd.addCheckbox("Show intermediate results", prefs.get("showAllResults", false));
@@ -101,6 +105,7 @@ public class GetSpatialCalibrationMFMdata_ implements PlugIn {
         int nAngles = (int) gd.getNextNumber();
         float maxAngle = (float) gd.getNextNumber();
         float bgLevel = (float) gd.getNextNumber();
+        float pcTile = (float) gd.getNextNumber();
         boolean showRCCMs = gd.getNextBoolean();
         boolean showAllResults = gd.getNextBoolean();
         boolean showPlots = gd.getNextBoolean();
@@ -111,6 +116,7 @@ public class GetSpatialCalibrationMFMdata_ implements PlugIn {
         prefs.set("nAngles", (float) nAngles);
         prefs.set("maxAngle", maxAngle);
         prefs.set("bgLevel", bgLevel);
+        prefs.set("pcTile", pcTile);
         prefs.set("showRCCMs", showRCCMs);
         prefs.set("showAllResults", showAllResults);
         prefs.set("showPlots", showPlots);
@@ -128,15 +134,14 @@ public class GetSpatialCalibrationMFMdata_ implements PlugIn {
         IJ.log("-------------------------------------------------------------------------------------");
         IJ.log("Axial scan step size (in nm): "+zStep);
 
-        int width, height, nSlices;
         ImageStack ims = imp.duplicate().getImageStack().convertToFloat();
-        nSlices = ims.getSize();
-        width = ims.getWidth();
-        height = ims.getHeight();
+        int nSlices = ims.getSize();
+        int width = ims.getWidth();
+        int height = ims.getHeight();
 
         // ---- Removing background level from image stack ----
         for (int i=0; i<ims.getSize(); i++){
-            ims.getProcessor(i+1).add( -bgLevel); // TODO: this affect IMP Check!!
+            ims.getProcessor(i+1).add( -bgLevel);
         }
 
         // ---- Initialize the variables and the Log ----
@@ -148,7 +153,7 @@ public class GetSpatialCalibrationMFMdata_ implements PlugIn {
         int nFramesToAverage = z0 - (int) Math.ceil(getMaxfromArray(nominalAxialPositions) * axialSpacing / zStep + 1); //one-sided: so 2x this
         IJ.log("Number of frames averaged: "+2*nFramesToAverage);
         IJ.log("z0: "+z0);
-        int referenceFrameNumber = (int) Math.ceil((double) (nROI)/2)-1;
+        int referenceFrameNumber = (int) Math.ceil((double) (nROI)/2)-1; // this is zero-based
         IJ.log("Reference frame: "+referenceFrameNumber+" (position "+(int) chosenROIsLocations[referenceFrameNumber]+")");
         IJ.log("Number of angles: "+nAngles+" with Max. angle: "+maxAngle+" degrees ("+(2*maxAngle/(nAngles-1))+" degree(s) step)");
 
@@ -177,8 +182,8 @@ public class GetSpatialCalibrationMFMdata_ implements PlugIn {
 
         // ---- Showing average data stacks prior to registration ----
         if (showAllResults){
-        ImagePlus impAvg = new ImagePlus(imp.getShortTitle()+" - Average", imsAvg);
-        impAvg.show();
+            ImagePlus impAvg = new ImagePlus(imp.getShortTitle()+" - Average", imsAvg);
+            impAvg.show();
         }
 
         // ---- Calculation xy shift and theta rotation ----
@@ -189,7 +194,7 @@ public class GetSpatialCalibrationMFMdata_ implements PlugIn {
         RCCMcalculator.computeRCCM(ipRef, imsMIP, nAngles, maxAngle); // angles are fed in degrees
 
 
-        // ----------- // TODO: add an option in GUI for displaying RCCM?
+        // -----------
         if (showRCCMs) {
             ImageStack[] imsRCCM = RCCMcalculator.imsRCCMap;
             for (int i = 0; i < imsRCCM.length; i++) {
@@ -219,14 +224,20 @@ public class GetSpatialCalibrationMFMdata_ implements PlugIn {
             ImagePlus impAvgCorr = new ImagePlus(imp.getShortTitle() + " - Average & Registered", imsCorr[0]);
             impAvgCorr.show();
         }
-        double[] intensityScalingCoeffs = getLinearRegressionParameters(imsCorr[1], referenceFrameNumber);
-
-        ImageStack imsAvgCorrCropRescaled = imsCorr[1].duplicate();
-        for (int i = 0; i < nROI; i++) {
-            imsAvgCorrCropRescaled.getProcessor(i+1).multiply(1/intensityScalingCoeffs[i]);
-        }
 
         if (showAllResults) {
+            ImagePlus impAvgCorrCropped = new ImagePlus(imp.getShortTitle() + " - Average & Registered & Cropped", imsCorr[1]);
+            impAvgCorrCropped.show();
+        }
+
+        // This uses the Cropped and Registered imsAvg
+        double[] intensityScalingCoeffs = getLinearRegressionParameters(imsCorr[1], referenceFrameNumber, (100-pcTile)/100);
+
+        if (showAllResults) {
+            ImageStack imsAvgCorrCropRescaled = imsCorr[1].duplicate();
+            for (int i = 0; i < nROI; i++) {
+                imsAvgCorrCropRescaled.getProcessor(i+1).multiply(1/intensityScalingCoeffs[i]);
+            }
             ImagePlus impAvgCorrCropRescaled = new ImagePlus(imp.getShortTitle() + " - Average & Registered & Cropped & Rescaled", imsAvgCorrCropRescaled);
             impAvgCorrCropRescaled.show();
         }
@@ -263,7 +274,7 @@ public class GetSpatialCalibrationMFMdata_ implements PlugIn {
 
         // ---- Obtaining the relative axial positions ----
         IJ.log("Getting axial positions...");
-        ImageStack imsRef = imsCorrected[referenceFrameNumber]; // TODO: check reference number 0 vs 1-based here
+        ImageStack imsRef = imsCorrected[referenceFrameNumber]; // referenceFrameNumber is zero-based so all good here
         imsRef = imsRef.crop(0, 0, z0 - nFramesToAverage/2, cropSizeX, cropSizeY, nFramesToAverage); // TODO: which chunk is best? currently divided by 2
         GetAxialPositionMFM getAxialPositionMFM = new GetAxialPositionMFM(imsRef, (float) zStep, nSlices);
         double[] axialPositions = new double[nROI];
@@ -304,7 +315,7 @@ public class GetSpatialCalibrationMFMdata_ implements PlugIn {
             e.printStackTrace();
         }
 
-        // ---- Reshape the stack into Hyperstack ---- TODO: fix Stack to Hyperstack
+        // ---- Reshape the stack into Hyperstack ----
         for (int i = 0; i < nROI; i++) {
             for (int k = 0; k < nSlices; k++) {
                 imsCorrectedUberStack.addSlice(imsCorrected[i].getProcessor(k+1));
@@ -357,7 +368,12 @@ public class GetSpatialCalibrationMFMdata_ implements PlugIn {
     }
 
     // Helper function // TODO: could be migrated to core
-    public static double[] getLinearRegressionParameters(ImageStack ims, int refSlice){
+    public static double[] getLinearRegressionParameters(ImageStack ims, int refSlice, float pcTile){
+
+        ImageStack[] imsMasks = getMasksFromIntensityPercentile(ims.duplicate(), pcTile);
+        FloatProcessor fp = imsMasks[1].getProcessor(1).convertToFloatProcessor();
+        float[] pixelMask = (float[]) fp.getPixels(); // Using getVOxels does not work directly on the ims if no imp is connected to it
+//        IJ.log("Sum of pixels: "+ArrayMath.sum(pixelMask));
 
         // This uses a least square-based linear regression assuming intercept of 0
         float[] arrayRef = new float[ims.getWidth()*ims.getHeight()];
@@ -365,20 +381,64 @@ public class GetSpatialCalibrationMFMdata_ implements PlugIn {
         arrayRef = ims.getVoxels(0,0, refSlice, ims.getWidth(), ims.getHeight(), 1, arrayRef);
 
         float XX = 0;
-        for (int j = 0; j < ims.getWidth()*ims.getHeight(); j++) {
-            XX += arrayRef[j]*arrayRef[j];
+        for (int i = 0; i < ims.getWidth()*ims.getHeight(); i++) {
+            XX += arrayRef[i]*arrayRef[i]*pixelMask[i];
+
+
         }
+//        IJ.log("XX="+XX);
 
         double[] coeffs = new double[ims.getSize()];
-        for (int i = 0; i < ims.getSize(); i++) {
-            arrayTemp = ims.getVoxels(0,0, i, ims.getWidth(), ims.getHeight(), 1, arrayTemp);
-            for (int j = 0; j < ims.getWidth()*ims.getHeight(); j++) {
-                coeffs[i] += arrayRef[j]*arrayTemp[j];
+        for (int s = 0; s < ims.getSize(); s++) {
+            arrayTemp = ims.getVoxels(0,0, s, ims.getWidth(), ims.getHeight(), 1, arrayTemp);
+
+            for (int i = 0; i < ims.getWidth()*ims.getHeight(); i++) {
+                coeffs[s] += arrayRef[i]*arrayTemp[i]*pixelMask[i];
             }
-            coeffs[i] /= XX;
+            coeffs[s] /= XX;
 //            IJ.log("Coeffs: "+coeffs[i]);
         }
         return coeffs;
+    }
+
+    // Helper function ---
+    public static ImageStack[] getMasksFromIntensityPercentile(ImageStack ims, float percentTile){
+// This code returns an array of ImageStack, the first element is an image stack which contains all the individual Masks
+// Each mask is calculated based on their individual percentile
+// The second element returned is a stack with the mask representing the overlap of all the masks
+        ImageStack imsMasks = new ImageStack(ims.getWidth(), ims.getHeight(), ims.getSize());
+        float[] sortedArrayTemp;
+        float[] arrayOverlappingMask = new float[ims.getWidth()*ims.getHeight()];
+        float valueAtpcTile;
+        float vTemp;
+
+        if (percentTile < 0) percentTile = 0;
+        if (percentTile > 1) percentTile = 1;
+
+        for (int s = 0; s < ims.getSize(); s++) {
+            float[] arrayTemp = new float[ims.getWidth()*ims.getHeight()];
+            arrayTemp = ims.duplicate().getVoxels(0,0, s, ims.getWidth(), ims.getHeight(), 1, arrayTemp);
+            sortedArrayTemp = arrayTemp.clone();
+            Arrays.sort(sortedArrayTemp);
+            valueAtpcTile = sortedArrayTemp[(int) ((arrayTemp.length-1) * percentTile)];
+//            IJ.log("Value at "+(100*percentTile)+"th percentile: "+valueAtpcTile);
+            for (int y = 0; y < ims.getHeight(); y++) {
+                for (int x = 0; x < ims.getWidth(); x++) {
+                    if (arrayTemp[x + y*ims.getWidth()] > valueAtpcTile) vTemp = 1;
+                    else vTemp = 0;
+//                    imsMasks.setVoxel(x, y, s, vTemp);
+                    arrayTemp[x + y*ims.getWidth()] = vTemp;
+                    if (s == 0) arrayOverlappingMask[x + y*ims.getWidth()] = vTemp;
+                    else arrayOverlappingMask[x + y*ims.getWidth()] *= vTemp;
+                }
+            }
+            imsMasks.setProcessor(new FloatProcessor(ims.getWidth(), ims.getHeight(), arrayTemp), s+1);
+        }
+
+        IJ.log("Number of pixels in mask: "+ ArrayMath.sum(arrayOverlappingMask));
+        ImageStack imsOverlappingMask = new ImageStack(ims.getWidth(), ims.getHeight(), 1);
+        imsOverlappingMask.setProcessor(new FloatProcessor(ims.getWidth(), ims.getHeight(), arrayOverlappingMask), 1);
+        return new ImageStack[]{imsMasks, imsOverlappingMask};
     }
 
     // Helper function --- this rounds an array to "digits" digits
@@ -391,6 +451,7 @@ public class GetSpatialCalibrationMFMdata_ implements PlugIn {
         }
         return roundedArray;
     }
+
 
 }
 

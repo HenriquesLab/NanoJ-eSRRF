@@ -24,7 +24,7 @@ import static nanoj.core2.NanoJCL.getResourceAsString;
 import static nanoj.core2.NanoJCL.replaceFirst;
 import static nanoj.liveSRRF.LinearRegressions.linearRegressionLeastSquareNoOffset;
 
-public class liveSRRF_CL {
+public class LiveSRRF_CL {
 
     // Basic formats
     private int singleFrameSize,
@@ -89,7 +89,7 @@ public class liveSRRF_CL {
             clBufferCurrentFrame;
 
     // ---------------------------------- Constructor ----------------------------------
-    public liveSRRF_CL() {
+    public LiveSRRF_CL() {
         // Nothing to see here. Keep calm and carry on.
     }
 
@@ -263,8 +263,8 @@ public class liveSRRF_CL {
         float radius = ((float) ((int) (gradientMag * 2 * sigma))) / gradientMag + 1;    // this reduces the radius for speed, works when using dGauss^4 and 2p+I
 
         String programString;
-        if (do3DSRRF) programString = getResourceAsString(liveSRRF_CL.class, "live3DSRRF.cl");
-        else programString = getResourceAsString(liveSRRF_CL.class, "liveSRRF.cl");
+        if (do3DSRRF) programString = getResourceAsString(LiveSRRF_CL.class, "live3DSRRF.cl");
+        else programString = getResourceAsString(LiveSRRF_CL.class, "liveSRRF.cl");
 
         programString = replaceFirst(programString, "$MAGNIFICATION$", "" + magnification);
 //        programString = replaceFirst(programString, "$FWHM$", "" + fwhm);
