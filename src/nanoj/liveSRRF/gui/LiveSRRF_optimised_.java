@@ -25,7 +25,7 @@ import java.time.format.DateTimeFormatter;
 
 import static java.lang.Math.min;
 
-public class liveSRRF_optimised_ implements PlugIn {
+public class LiveSRRF_optimised_ implements PlugIn {
 
     // Basic formats
     private int magnification,
@@ -67,7 +67,7 @@ public class liveSRRF_optimised_ implements PlugIn {
             do3DSRRF;
 
     private final boolean enable3DSRRF = true;
-    private final String LiveSRRFVersion = "v1.12";
+    private final String LiveSRRFVersion = "v1.13";
 
     private String pathToDisk = "",
             fileName,
@@ -233,7 +233,7 @@ public class liveSRRF_optimised_ implements PlugIn {
         heightS = liveSRRF.heightS;
         nPlanes = liveSRRF.nPlanes;
         nPlanesM = liveSRRF.nPlanesM;
-//        IJ.log("WidthS/HeightS: "+widthS+"/"+heightS);
+        IJ.log("WidthS/HeightS: "+widthS+"/"+heightS);
         IJ.log("Number of planes: "+nPlanes);
 
         shiftX = new float[nFrameForSRRFtoUse];
@@ -246,10 +246,6 @@ public class liveSRRF_optimised_ implements PlugIn {
         ImageStack imsSRRFavg = new ImageStack(widthS * magnification, heightS * magnification);
         ImageStack imsSRRFstd = new ImageStack(widthS * magnification, heightS * magnification);
         ImageStack imsRawInterpolated = new ImageStack(widthS * magnification, heightS * magnification);
-
-//        ImageStack imsSRRFavg = new ImageStack();
-//        ImageStack imsSRRFstd = new ImageStack();
-//        ImageStack imsRawInterpolated = new ImageStack();
 
         ImagePlus impTemp = new ImagePlus();
         impTemp.copyScale(imp); // make sure we copy the pixel sizes correctly across
@@ -335,11 +331,6 @@ public class liveSRRF_optimised_ implements PlugIn {
             liveSRRF.readSRRFbuffer();
             imsBuffer = liveSRRF.imsSRRF;
 
-//            impMPmap = new ImagePlus("MP map",liveSRRF.getMPmap());
-//            impMPmap.setCalibration(cal);
-//            IJ.run(impMPmap, "Enhance Contrast", "saturated=0.5");
-//            impMPmap.show();
-
             if (writeToDiskToUse) {//  TODO: this will not work in 3D
                 try {
                     if (calculateAVG) {
@@ -390,6 +381,12 @@ public class liveSRRF_optimised_ implements PlugIn {
             ImageStack imsGradientInt = liveSRRF.readGradientBuffers(true);
             ImagePlus impGradientsInt = new ImagePlus("Interpolated gradients", imsGradientInt);
             impGradientsInt.show();
+        }
+
+        if (doMPmapCorrection) {
+            ImageStack imsMPmap = liveSRRF.readMPmaps();
+            ImagePlus impMPmap = new ImagePlus("MP map", imsMPmap);
+            impMPmap.show();
         }
 
         // Release the GPU
@@ -525,7 +522,7 @@ public class liveSRRF_optimised_ implements PlugIn {
         gd.addMessage("-=-= Advanced settings =-=-\n", headerFont);
         gd.addCheckbox("Show advanced settings", false);
         if (enable3DSRRF) {
-            gd.addCheckbox("3D-SRRF from MFM data", false);
+            gd.addCheckbox("3D-SRRF from MFM data", prefs.get("do3DSRRF", false));
             gd.addNumericField("Axial offset (in nm): ",400, 2);
         }
 
@@ -760,8 +757,6 @@ public class liveSRRF_optimised_ implements PlugIn {
         prefs.set("correctVibration", correctVibration);
 
         prefs.set("chosenTemporalAnalysis", chosenTemporalAnalysis);
-//        prefs.set("calculateAVG", calculateAVG);
-//        prefs.set("calculateSTD", calculateSTD);
         prefs.set("getInterpolatedImage", getInterpolatedImage);
 
         prefs.set("doRollingAnalysis", doRollingAnalysis);
@@ -773,6 +768,8 @@ public class liveSRRF_optimised_ implements PlugIn {
 
         prefs.set("showGradient", showGradient);
         prefs.set("showIntGradient", showIntGradient);
+
+        prefs.set("do3DSRRF", do3DSRRF);
 
         prefs.save();
 

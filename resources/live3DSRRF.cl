@@ -1,6 +1,5 @@
 //#pragma OPENCL EXTENSION cl_khr_fp64: enable
 #define magnification $MAGNIFICATION$
-//#define fwhm $FWHM$
 #define sensitivity $SENSITIVITY$
 #define GxGyMagnification $GXGYMAGNIFICATION$
 //#define sigma $SIGMA$
@@ -20,13 +19,7 @@
 #define nFrameForSRRF $NFRAMEFORSRRF$
 #define intWeighting $INTWEIGHTING$
 
-//#define wS $WIDTHTHREED$
-//#define hS $HEIGHTTHREED$
-//#define whS $WHS$
-//#define wSInt $WSINT$
-//#define hSInt $HSINT$
-//#define whSInt $WHSINT$
-#define nPlanes $NPLANES$ // TODO: necessary when doing differnt number of planes! Big bug ahead with different pixels between full frame and sum of crops splits
+#define nPlanes $NPLANES$
 #define dimRatio $DIMRATIO$
 #define whd $WHD$ // w * h * nPlanes
 
@@ -427,7 +420,12 @@ __kernel void calculateRadialGradientConvergence(
     if (CGLH >= 0) CGLH = pow(CGLH, sensitivity);
     else CGLH = 0;
 
-    int z0 = (int) floor(zc);
+    int z0;
+    float zcof = zc - 0.5f;
+    if (zcof < 0) z0 = 0;
+    else if (zcof > (nPlanes-1)) z0 = nPlanes-2;
+    else z0 = (int) floor(zcof);
+
     float v0 = getInterpolatedValue(pixels, ((float) xM)/magnification + driftX - 0.5f, ((float) yM)/magnification + driftY - 0.5f, z0, nCurrentFrame[1]);
     float v1 = getInterpolatedValue(pixels, ((float) xM)/magnification + driftX - 0.5f, ((float) yM)/magnification + driftY - 0.5f, z0+1, nCurrentFrame[1]);
     float v = (zc - (float) z0)*v1 + (1-(zc - (float) z0))*v0; // linear interpolations
@@ -524,45 +522,54 @@ __kernel void kernelResetFramePosition(
 }
 
 // kernel: calculate the Macro-Pixel artefact map -----------------------------------------------------------------
-__kernel void kernelCalculateMPmap( // TODO: this needs fixing for 3D
+__kernel void kernelCalculateMPmap(
     __global float* OutArray,
     __global float* MPmap
     ){
 
     const int offset_MPmap = get_global_id(0);
-    const int frame = offset_MPmap/(magnification*magnification); // 0 or 1 depending on whether we're dealing with AVG or STD
-    const int y_MPmap = (offset_MPmap - frame*(magnification*magnification))/magnification;
-    const int x_MPmap = offset_MPmap - y_MPmap*magnification - frame*(magnification*magnification);
+
+    const int MM = magnification*magnification;
+    const int MMM = MM*magnification;
+
+    const int frame = offset_MPmap/(MMM); // 0 or 1 depending on whether we're dealing with AVG or STD
+    const int z_MPmap = (offset_MPmap - frame*MMM)/MM; //TODO: actually i think OutArrayn is arranged differently from xyzR, maybe it's xyRz. How about T??
+    const int y_MPmap = (offset_MPmap - frame*MMM - z_MPmap*MM)/magnification;
+    const int x_MPmap = offset_MPmap - frame*MMM - z_MPmap*MM - y_MPmap*magnification;
 
     float thisMPmapValue = 0;
-    int x;
-    int y;
-    int offset;
+    int x, y, z, offset;
 
-    for (int i=0; i<wh; i++) {
-        y = i/width;
-        x = i - y*width;
-        offset = x_MPmap + x * magnification + wM * (y_MPmap + y * magnification) + frame * whM;
+    for (int i=0; i<whd; i++) {
+        z = i/whd;
+        y = (i-z*whd)/width;
+        x = i - y*width - z*whd;
+        offset = x_MPmap + x*magnification + wM*(y_MPmap + y*magnification) + whM*(z_MPmap+z*MM) + frame*whdM;
         thisMPmapValue += OutArray[offset];
     }
-    MPmap[offset_MPmap] = thisMPmapValue/wh;
+    MPmap[offset_MPmap] = thisMPmapValue/whd;
 
 }
 
 // kernel: correct for Macro-pixel artefacts
-__kernel void kernelCorrectMPmap(
+__kernel void kernelCorrectMPmap( // TODO: this needs fixing for 3D
      __global float* OutArray,
      __global float* MPmap
 ){
 
     const int offset = get_global_id(0);
-    const int frame = offset/whM; // 0 or 1 depending on whether we're dealing with AVG or STD
-    const int yM = (offset - frame*(whM))/wM;
-    const int xM = offset - yM*wM - frame*whM;
+
+    const int frame = offset/whdM; // 0 or 1 depending on whether we're dealing with AVG or STD
+    const int zM = (offset - frame*whdM)/whM;
+    const int yM = (offset - frame*whdM - zM*whM)/wM;
+    const int xM = offset - frame*whdM - zM*whM - yM*wM;
     const int x = xM/magnification;
     const int y = yM/magnification;
+    const int z = zM/magnification;
 
-    int offset_MPmap = magnification*magnification*frame + magnification*(yM - y*magnification) + xM - x*magnification;
+    const int MM = magnification*magnification;
+
+    int offset_MPmap = MM*magnification*frame + MM*(zM - z*MM) + magnification*(yM - y*magnification) + xM - x*magnification;
     OutArray[offset] = OutArray[offset]/MPmap[offset_MPmap];
 
 }
