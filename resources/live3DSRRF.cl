@@ -207,24 +207,33 @@ __kernel void calculateGradient_2point(
     __global float* GxArray,
     __global float* GyArray,
     __global float* GzArray,
-    __global int* nCurrentFrame
+    __global int* nCurrentFrame,
+    __global float* ShiftXY3D
 
     ) {
     const int offset = get_global_id(0);
 
     const int f = offset/whd;
     const int z1 = (offset - f*whd)/wh;
-    const int y1 = (offset - f*whd - z1*wh)/width;
-    const int x1 =  offset - f*whd - z1*wh - y1*width;
+    const float y1 = (offset - f*whd - z1*wh)/width;
+    const float x1 =  offset - f*whd - z1*wh - y1*width;
 
-    const int x0 = max(x1-1, 0); // this sets the gradient to zero on the edges, assumes same value adjacent
-    const int y0 = max(y1-1, 0);
     const int z0 = max(z1-1, 0);
+//    const float x0 = max(x1-1, 0.0f); // this sets the gradient to zero on the edges, assumes same value adjacent
+//    const float y0 = max(y1-1, 0.0f);
+
+    const float x0 = x1-1;
+    const float y0 = y1-1;
 
     // 2-point gradient
-    GxArray[offset] = pixels[offset] - pixels[x0 + y1*width + z1*wh + whd*f];
-    GyArray[offset] = pixels[offset] - pixels[x1 + y0*width + z1*wh + whd*f];
-    GzArray[offset] = pixels[offset] - pixels[x1 + y1*width + z0*wh + whd*f];
+//    GxArray[offset] = pixels[offset] - pixels[x0 + y1*width + z1*wh + whd*f];
+//    GyArray[offset] = pixels[offset] - pixels[x1 + y0*width + z1*wh + whd*f];
+//    GzArray[offset] = pixels[offset] - pixels[x1 + y1*width + z0*wh + whd*f];
+
+    const float v1 = getInterpolatedValue(pixels, x1 - ShiftXY3D[z1], y1 - ShiftXY3D[z1+nPlanes], z1, f);
+    GxArray[offset] = v1 - getInterpolatedValue(pixels, x0 - ShiftXY3D[z1], y1 - ShiftXY3D[z1+nPlanes], z1, f);
+    GyArray[offset] = v1 - getInterpolatedValue(pixels, x1 - ShiftXY3D[z1], y0 - ShiftXY3D[z1+nPlanes], z1, f);
+    GzArray[offset] = v1 - getInterpolatedValue(pixels, x1 - ShiftXY3D[z0], y1 - ShiftXY3D[z0+nPlanes], z0, f);
 
 // linear interpolation (3-point gradient) to match the grids of XY (because z has no interpolation) -- not true for current z loop
 //    const int z2 = min(z1+1, nPlanes-1);
@@ -247,8 +256,8 @@ __kernel void calculateGradientInterpolation(
     __global float* GzArray,
     __global float* GxIntArray,
     __global float* GyIntArray,
-    __global float* GzIntArray,
-    __global float* ShiftXY3D
+    __global float* GzIntArray
+//    __global float* ShiftXY3D
 
     ){
 
@@ -260,9 +269,11 @@ __kernel void calculateGradientInterpolation(
     const int y = (offset - f*whdInt - z*whInt)/wInt; // integers in the interpolated space
     const int x =  offset - f*whdInt - z*whInt - y*wInt; // integers in the interpolated space
 
-    const float xf = (float) x / 2.0f + ShiftXY3D[z]; // Important: apply the shift in real space
-    const float yf = (float) y / 2.0f + ShiftXY3D[z + nPlanes]; // TODO: check the sign of the correction for the shift, but should be good
-    // The shift correction needs to be done either at pixel level or gradient level so that Gx, Gy and Gz are all on the same voxels
+//    const float xf = (float) x / 2.0f - ShiftXY3D[z]; // Important: apply the shift in real space
+//    const float yf = (float) y / 2.0f - ShiftXY3D[z + nPlanes]; // TODO: check the sign of the correction for the shift, but should be good
+
+    const float xf = (float) x / 2.0f; // Important: apply the shift in real space
+    const float yf = (float) y / 2.0f;
 
 //    const int x = get_global_id(0);
 //    const int y = get_global_id(1);
@@ -289,12 +300,12 @@ __kernel void calculateRadialGradientConvergence(
     __global float* GzArray,
     __global float* OutArray,
     __global float* driftXY,
-//    __global float* shiftXY3D,
-    __global int* nCurrentFrame
+    __global int* nCurrentFrame,
     // Current frame is a 2 element Int buffer:
             // nCurrentFrame[0] is the global current frame in the current SRRF frame (reset every SRRF frame)
             // nCurrentFrame[1] is the local current frame in the current GPU-loaded dataset (reset every turn of the method calculateSRRF (within the gradient calculation))
 
+    __global float* ShiftXY3D
 
     ) {
 
@@ -366,37 +377,6 @@ __kernel void calculateRadialGradientConvergence(
 
                                     // Linear function ----------------------
                                     Dk = 1 - Dk / distance; // Dk is now between 0 to 1, 1 if vector points precisely to (xc, yx), Dk = 1-sin(theta)
-
-                    //Linear truncated ----------------------
-//                  Dk = 1 - Dk / distance; // Dk is now between 0 to 1, 1 if vector points precisely to (xc, yx), Dk = 1-sin(theta)
-//                  Dk = fmax(Dk - 0.5f, 0)*2;
-
-                    // Higher order of Dk (quadratic and power 4) -------------------
-//                  Dk = 1 - Dk / distance; // Dk is now between 0 to 1, 1 if vector points precisely to (xc, yx), Dk = 1-sin(theta)
-//                  Dk = Dk*Dk;   // i think it's better to apply non-linear functions at the CGH level
-
-                    // Hard edge function -----------------------
-//                  Dk = 1 - Dk / distance; // Dk is now between 0 to 1, 1 if vector points precisely to (xc, yx), Dk = 1-sin(theta)
-//                  float edgePos = 0.75;
-//                  if (Dk >= edgePos) Dk = 1;
-//                  else Dk = 0;
-
-                    // Gaussian function --------------------------
-//                  Dk = Dk / distance; // Dk is now between 0 to 1, Dk = sin(theta) ~ theta
-//                  float SigmaTheta = 0.3;
-//                  Dk = exp(-0.5f*pow((float) (Dk/SigmaTheta), 2));
-
-                    // Rational function -------------------------
-//                  float SigmaTheta = 0.3;
-//                  float Power = 4;
-//                  Dk = Dk / distance; // Dk is now between 0 to 1, Dk = sin(theta) ~ theta
-//                  Dk = 1/(1+pow((float) (Dk/SigmaTheta), Power));
-
-                    // Exponential function --------------------------
-//                  Dk = Dk / distance; // Dk is now between 0 to 1, Dk = sin(theta) ~ theta
-//                  float SigmaTheta = 0.25;
-//                  Dk = exp(-1.0f*(float) (Dk/SigmaTheta));
-
                                     CGLH += Dk*distanceWeight;
                                 }
                             }
@@ -404,11 +384,11 @@ __kernel void calculateRadialGradientConvergence(
 
 
 //                Dk *= distanceWeight;
-//
 //                // Accumulate Variables
 //                float GdotR = (Gx * i + Gy * j); // tells you if vector was pointing inward or outward
 //                if (GdotR <= 0) CGLH += Dk; // vector was pointing inwards
 //                //else CGLH -= Dk; // vector was pointing outwards
+
                     }
                 }
             }
@@ -420,15 +400,17 @@ __kernel void calculateRadialGradientConvergence(
     if (CGLH >= 0) CGLH = pow(CGLH, sensitivity);
     else CGLH = 0;
 
+    // figuring out the right planes to calculate the interpolated values on
     int z0;
     float zcof = zc - 0.5f;
+
     if (zcof < 0) z0 = 0;
-    else if (zcof > (nPlanes-1)) z0 = nPlanes-2;
+    else if (zcof >= (nPlanes-1)) z0 = nPlanes-2;
     else z0 = (int) floor(zcof);
 
-    float v0 = getInterpolatedValue(pixels, ((float) xM)/magnification + driftX - 0.5f, ((float) yM)/magnification + driftY - 0.5f, z0, nCurrentFrame[1]);
-    float v1 = getInterpolatedValue(pixels, ((float) xM)/magnification + driftX - 0.5f, ((float) yM)/magnification + driftY - 0.5f, z0+1, nCurrentFrame[1]);
-    float v = (zc - (float) z0)*v1 + (1-(zc - (float) z0))*v0; // linear interpolations
+    float v0 = getInterpolatedValue(pixels, ((float) xM)/magnification + driftX - 0.5f - ShiftXY3D[z0], ((float) yM)/magnification + driftY - 0.5f - ShiftXY3D[z0+nPlanes], z0, nCurrentFrame[1]);
+    float v1 = getInterpolatedValue(pixels, ((float) xM)/magnification + driftX - 0.5f - ShiftXY3D[z0+1], ((float) yM)/magnification + driftY - 0.5f - ShiftXY3D[z0+1+nPlanes], z0+1, nCurrentFrame[1]);
+    float v = (zc - (float) (z0+0.5f))*v1 + (1-(zc - (float) (z0+0.5f)))*v0; // linear interpolations
 
     if (intWeighting == 1) {
             if (nCurrentFrame[0] == 0) {

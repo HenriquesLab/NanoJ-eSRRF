@@ -327,6 +327,7 @@ public class LiveSRRF_CL {
         kernelCalculateGradient.setArg(argn++, clBufferGy); // make sure type is the same !!
         if (do3DSRRF) kernelCalculateGradient.setArg(argn++, clBufferGz); // make sure type is the same !!
         kernelCalculateGradient.setArg(argn++, clBufferCurrentFrame); // make sure type is the same !!
+        if (do3DSRRF) kernelCalculateGradient.setArg(argn++, clBufferShiftXY3D); // make sure type is the same !!
 
         argn = 0;
         kernelInterpolateGradient.setArg(argn++, clBufferGx); // make sure type is the same !!
@@ -336,7 +337,7 @@ public class LiveSRRF_CL {
         kernelInterpolateGradient.setArg(argn++, clBufferGyInt); // make sure type is the same !!
         if (do3DSRRF) {
             kernelInterpolateGradient.setArg(argn++, clBufferGzInt); // make sure type is the same !!
-            kernelInterpolateGradient.setArg(argn++, clBufferShiftXY3D); // make sure type is the same !!
+//            kernelInterpolateGradient.setArg(argn++, clBufferShiftXY3D); // make sure type is the same !!
         }
 
         argn = 0;
@@ -346,8 +347,8 @@ public class LiveSRRF_CL {
         if (do3DSRRF) kernelCalculateSRRF.setArg(argn++, clBufferGzInt); // make sure type is the same !!
         kernelCalculateSRRF.setArg(argn++, clBufferOut); // make sure type is the same !!
         kernelCalculateSRRF.setArg(argn++, clBufferDriftXY); // make sure type is the same !!
-//        if (do3DSRRF) kernelCalculateSRRF.setArg(argn++, clBufferShiftXY3D); // make sure type is the same !!
         kernelCalculateSRRF.setArg(argn++, clBufferCurrentFrame); // make sure type is the same !!
+        if (do3DSRRF) kernelCalculateSRRF.setArg(argn++, clBufferShiftXY3D); // make sure type is the same !!
 
         argn = 0;
         kernelIncrementFramePosition.setArg(argn++, clBufferCurrentFrame); // make sure type is the same !!
@@ -588,8 +589,7 @@ public class LiveSRRF_CL {
         }
 
         ImageStack imsGradient = new ImageStack(imageWidth, imageHeight);
-//        if(do3DSRRF){
-//            // Load data
+        // Load data // TODO: this currently only outputs the first time frame but all the planes
         for (int i = 0; i < nPlanes; i++) {
 
             float[] dataGx = new float[imageWidth * imageHeight];
@@ -730,8 +730,8 @@ public class LiveSRRF_CL {
         }
 
 //         Checking the shape of the data if necessary
-        ImagePlus impReshaped = new ImagePlus("Reshaped data", reshapedIms);
-        impReshaped.show();
+//        ImagePlus impReshaped = new ImagePlus("Reshaped data", reshapedIms);
+//        impReshaped.show();
 
         return reshapedIms;
     }
@@ -739,9 +739,9 @@ public class LiveSRRF_CL {
     public void print3Dglasses(){
         IJ.log("                                                                                      \n" +
                 ",----. ,------.         ,--.   ,--.                 ,---.  ,------. ,------. ,------. \n" +
-                "'.-.  ||  .-.  \\ ,-----.|  |   `--',--.  ,--.,---. '   .-' |  .--. '|  .--. '|  .---' \n" +
-                "  .' < |  |  \\  :'-----'|  |   ,--. \\  `'  /| .-. :`.  `-. |  '--'.'|  '--'.'|  `--,  \n" +
-                "/'-'  ||  '--'  /       |  '--.|  |  \\    / \\   --..-'    ||  |\\  \\ |  |\\  \\ |  |`    \n" +
+                "'.-.     ||   .-.      \\ ,-----.|  |   `--',--.  ,--.,---. '   .-' |  .--. '|  .--. '|  .---' \n" +
+                "  .'  < |    |    \\     :'-----'|  |   ,--.   \\  `'  /| .-. :`.  `-.|  '--'.'|  '--'.'|  `--,  \n" +
+                "/'-'     ||   '--'      /       |  '--.|  |    \\    /   \\ --..-'    ||  |  \\   \\|  |  \\   \\|  |`    \n" +
                 "`----' `-------'        `-----'`--'   `--'   `----'`-----' `--' '--'`--' '--'`--'     \n" +
                 "                                                                                      ");
 

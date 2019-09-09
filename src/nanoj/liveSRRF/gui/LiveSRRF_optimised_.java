@@ -233,7 +233,7 @@ public class LiveSRRF_optimised_ implements PlugIn {
         heightS = liveSRRF.heightS;
         nPlanes = liveSRRF.nPlanes;
         nPlanesM = liveSRRF.nPlanesM;
-        IJ.log("WidthS/HeightS: "+widthS+"/"+heightS);
+//        IJ.log("WidthS/HeightS: "+widthS+"/"+heightS);
         IJ.log("Number of planes: "+nPlanes);
 
         shiftX = new float[nFrameForSRRFtoUse];
