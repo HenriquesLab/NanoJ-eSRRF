@@ -200,6 +200,25 @@ static float getCrossProductMagnitude(float const a1, float const a2, float cons
 //    GyArray[offset] = - pixels[y0 * w + x1] + pixels[y1 * w + x0] + pixels[y1 * w + x1] - pixels[y0 * w + x0];
 //}
 
+// 0th kernel: re-align the raw data --------------------------------------------------
+__kernel void kernelAlignPixels(
+    __global float* pixels,
+    __global float* alignedPixels,
+    __global float* ShiftXY3D
+
+    ) {
+    const int offset = get_global_id(0);
+    const int f = offset/whd;
+    const int z = (offset - f*whd)/wh;
+    const int y = (offset - f*whd - z*wh)/width;
+    const int x =  offset - f*whd - z*wh - y*width;
+
+    alignedPixels[offset] = getInterpolatedValue(pixels, (float) x - ShiftXY3D[z], (float) y - ShiftXY3D[z+nPlanes], z, f);
+//        alignedPixels[offset] = offset;
+
+}
+
+
 
 // First kernel: evaluating gradient from image using 2-point gradient --------------------------------------------------
 __kernel void calculateGradient_2point(
@@ -215,25 +234,31 @@ __kernel void calculateGradient_2point(
 
     const int f = offset/whd;
     const int z1 = (offset - f*whd)/wh;
-    const float y1 = (offset - f*whd - z1*wh)/width;
-    const float x1 =  offset - f*whd - z1*wh - y1*width;
+//    const float y1 = (offset - f*whd - z1*wh)/width;
+//    const float x1 =  offset - f*whd - z1*wh - y1*width;
 
-    const int z0 = max(z1-1, 0);
+    const int y1 = (offset - f*whd - z1*wh)/width;
+    const int x1 =  offset - f*whd - z1*wh - y1*width;
+
+//    const int z0 = max(z1-1, 0);
 //    const float x0 = max(x1-1, 0.0f); // this sets the gradient to zero on the edges, assumes same value adjacent
 //    const float y0 = max(y1-1, 0.0f);
+    const int x0 = max(x1-1, 0);
+    const int y0 = max(y1-1, 0);
+    const int z0 = max(z1-1, 0);
 
-    const float x0 = x1-1;
-    const float y0 = y1-1;
+//    const float x0 = x1-1;
+//    const float y0 = y1-1;
 
     // 2-point gradient
-//    GxArray[offset] = pixels[offset] - pixels[x0 + y1*width + z1*wh + whd*f];
-//    GyArray[offset] = pixels[offset] - pixels[x1 + y0*width + z1*wh + whd*f];
-//    GzArray[offset] = pixels[offset] - pixels[x1 + y1*width + z0*wh + whd*f];
+    GxArray[offset] = pixels[offset] - pixels[x0 + y1*width + z1*wh + whd*f];
+    GyArray[offset] = pixels[offset] - pixels[x1 + y0*width + z1*wh + whd*f];
+    GzArray[offset] = pixels[offset] - pixels[x1 + y1*width + z0*wh + whd*f];
 
-    const float v1 = getInterpolatedValue(pixels, x1 - ShiftXY3D[z1], y1 - ShiftXY3D[z1+nPlanes], z1, f);
-    GxArray[offset] = v1 - getInterpolatedValue(pixels, x0 - ShiftXY3D[z1], y1 - ShiftXY3D[z1+nPlanes], z1, f);
-    GyArray[offset] = v1 - getInterpolatedValue(pixels, x1 - ShiftXY3D[z1], y0 - ShiftXY3D[z1+nPlanes], z1, f);
-    GzArray[offset] = v1 - getInterpolatedValue(pixels, x1 - ShiftXY3D[z0], y1 - ShiftXY3D[z0+nPlanes], z0, f);
+//    const float v1 = getInterpolatedValue(pixels, x1 - ShiftXY3D[z1], y1 - ShiftXY3D[z1+nPlanes], z1, f);
+//    GxArray[offset] = v1 - getInterpolatedValue(pixels, x0 - ShiftXY3D[z1], y1 - ShiftXY3D[z1+nPlanes], z1, f);
+//    GyArray[offset] = v1 - getInterpolatedValue(pixels, x1 - ShiftXY3D[z1], y0 - ShiftXY3D[z1+nPlanes], z1, f);
+//    GzArray[offset] = v1 - getInterpolatedValue(pixels, x1 - ShiftXY3D[z0], y1 - ShiftXY3D[z0+nPlanes], z0, f);
 
 // linear interpolation (3-point gradient) to match the grids of XY (because z has no interpolation) -- not true for current z loop
 //    const int z2 = min(z1+1, nPlanes-1);
@@ -241,7 +266,6 @@ __kernel void calculateGradient_2point(
 
     // Reset the local current frame
     nCurrentFrame[1] = 0;
-//    if (nCurrentFrame[0] == nFrameForSRRF) nCurrentFrame[0] = 0; // reset the frame number if it's reached the end
 
         // Current frame is a 2 element Int buffer:
                 // nCurrentFrame[0] is the global current frame in the current SRRF frame (reset every SRRF frame)
@@ -408,8 +432,11 @@ __kernel void calculateRadialGradientConvergence(
     else if (zcof >= (nPlanes-1)) z0 = nPlanes-2;
     else z0 = (int) floor(zcof);
 
-    float v0 = getInterpolatedValue(pixels, ((float) xM)/magnification + driftX - 0.5f - ShiftXY3D[z0], ((float) yM)/magnification + driftY - 0.5f - ShiftXY3D[z0+nPlanes], z0, nCurrentFrame[1]);
-    float v1 = getInterpolatedValue(pixels, ((float) xM)/magnification + driftX - 0.5f - ShiftXY3D[z0+1], ((float) yM)/magnification + driftY - 0.5f - ShiftXY3D[z0+1+nPlanes], z0+1, nCurrentFrame[1]);
+//    float v0 = getInterpolatedValue(pixels, ((float) xM)/magnification + driftX - 0.5f - ShiftXY3D[z0], ((float) yM)/magnification + driftY - 0.5f - ShiftXY3D[z0+nPlanes], z0, nCurrentFrame[1]);
+//    float v1 = getInterpolatedValue(pixels, ((float) xM)/magnification + driftX - 0.5f - ShiftXY3D[z0+1], ((float) yM)/magnification + driftY - 0.5f - ShiftXY3D[z0+1+nPlanes], z0+1, nCurrentFrame[1]);
+    float v0 = getInterpolatedValue(pixels, ((float) xM)/magnification + driftX - 0.5f, ((float) yM)/magnification + driftY - 0.5f, z0, nCurrentFrame[1]);
+    float v1 = getInterpolatedValue(pixels, ((float) xM)/magnification + driftX - 0.5f, ((float) yM)/magnification + driftY - 0.5f, z0+1, nCurrentFrame[1]);
+
     float v = (zc - (float) (z0+0.5f))*v1 + (1-(zc - (float) (z0+0.5f)))*v0; // linear interpolations
 
     if (intWeighting == 1) {

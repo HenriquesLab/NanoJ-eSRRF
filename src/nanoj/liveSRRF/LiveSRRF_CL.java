@@ -63,7 +63,8 @@ public class LiveSRRF_CL {
     // OpenCL formats
     static private CLContext context;
     static private CLProgram programLiveSRRF;
-    static private CLKernel kernelCalculateGradient,
+    static private CLKernel kernelAlignPixels,
+            kernelCalculateGradient,
             kernelInterpolateGradient,
             kernelIncrementFramePosition,
             kernelResetFramePosition,
@@ -79,7 +80,7 @@ public class LiveSRRF_CL {
     static private CLCommandQueue queue;
 
     private CLBuffer<FloatBuffer>
-            clBufferPx,
+            clBufferPx, clBufferAlignedPx,
             clBufferGx, clBufferGy, clBufferGz,
             clBufferGxInt, clBufferGyInt, clBufferGzInt,
             clBufferDriftXY,
@@ -236,7 +237,10 @@ public class LiveSRRF_CL {
         // initialise buffers
         clBufferPx = context.createFloatBuffer(nFramesOnGPU * singleFrameSize, READ_ONLY);
         clBufferDriftXY = context.createFloatBuffer(2 * nFrameForSRRF, READ_ONLY);
-        if (do3DSRRF) clBufferShiftXY3D = context.createFloatBuffer(2 * nPlanes, READ_ONLY);
+        if (do3DSRRF) {
+            clBufferAlignedPx = context.createFloatBuffer(nFramesOnGPU * singleFrameSize, READ_WRITE);
+            clBufferShiftXY3D = context.createFloatBuffer(2 * nPlanes, READ_ONLY);
+        }
         clBufferGx = context.createFloatBuffer(nFramesOnGPU * singleFrameSize, READ_WRITE); // all frames Gx
         clBufferGy = context.createFloatBuffer(nFramesOnGPU * singleFrameSize, READ_WRITE); // all frames Gy
         clBufferGxInt = context.createFloatBuffer(nFramesOnGPU * gradientMag * gradientMag * singleFrameSize, READ_WRITE); // single frame Gx
@@ -310,7 +314,7 @@ public class LiveSRRF_CL {
         IJ.log(programLiveSRRF.getBuildLog());
         IJ.log("------------------------------------");
 
-
+        if (do3DSRRF) kernelAlignPixels = programLiveSRRF.createCLKernel("kernelAlignPixels");
         kernelCalculateGradient = programLiveSRRF.createCLKernel("calculateGradient_2point");
         kernelInterpolateGradient = programLiveSRRF.createCLKernel("calculateGradientInterpolation");
         kernelCalculateSRRF = programLiveSRRF.createCLKernel("calculateRadialGradientConvergence");
@@ -321,8 +325,16 @@ public class LiveSRRF_CL {
         kernelCorrectMPmap = programLiveSRRF.createCLKernel("kernelCorrectMPmap");
 
         int argn;
+        if (do3DSRRF) {
+            argn = 0;
+            kernelAlignPixels.setArg(argn++, clBufferPx);
+            kernelAlignPixels.setArg(argn++, clBufferAlignedPx);
+            kernelAlignPixels.setArg(argn++, clBufferShiftXY3D);
+        }
+
         argn = 0;
-        kernelCalculateGradient.setArg(argn++, clBufferPx); // make sure type is the same !!
+        if (do3DSRRF) kernelCalculateGradient.setArg(argn++, clBufferAlignedPx); // make sure type is the same !!
+        else kernelCalculateGradient.setArg(argn++, clBufferPx); // make sure type is the same !!
         kernelCalculateGradient.setArg(argn++, clBufferGx); // make sure type is the same !!
         kernelCalculateGradient.setArg(argn++, clBufferGy); // make sure type is the same !!
         if (do3DSRRF) kernelCalculateGradient.setArg(argn++, clBufferGz); // make sure type is the same !!
@@ -341,7 +353,8 @@ public class LiveSRRF_CL {
         }
 
         argn = 0;
-        kernelCalculateSRRF.setArg(argn++, clBufferPx); // make sure type is the same !!
+        if (do3DSRRF) kernelCalculateSRRF.setArg(argn++, clBufferAlignedPx); // make sure type is the same !!
+        else kernelCalculateSRRF.setArg(argn++, clBufferPx); // make sure type is the same !!
         kernelCalculateSRRF.setArg(argn++, clBufferGxInt); // make sure type is the same !!
         kernelCalculateSRRF.setArg(argn++, clBufferGyInt); // make sure type is the same !!
         if (do3DSRRF) kernelCalculateSRRF.setArg(argn++, clBufferGzInt); // make sure type is the same !!
@@ -428,13 +441,19 @@ public class LiveSRRF_CL {
         queue.putWriteBuffer(clBufferPx, false);
         prof.recordTime("Uploading data to GPU", prof.endTimer(id));
 
+        if (do3DSRRF){
+            id = prof.startTimer();
+            queue.finish(); // Make sure everything is done
+            queue.put1DRangeKernel(kernelAlignPixels, 0,  singleFrameSize * nFrameToLoad, 0);
+            prof.recordTime("kernelAlignPixels", prof.endTimer(id));
+        }
+
         // Make kernelCalculateGradient assignment (this kernel also resets the local GPU load frame counter)
 //        IJ.log("Calculating gradient...");
         id = prof.startTimer();
         queue.finish(); // Make sure everything is done
         if(do3DSRRF) queue.put1DRangeKernel(kernelCalculateGradient, 0,  singleFrameSize * nFrameToLoad, 0);
         else         queue.put3DRangeKernel(kernelCalculateGradient, 0, 0, 0, widthS, heightS, nFrameToLoad, 0, 0, 0);
-
         prof.recordTime("kernelCalculateGradient", prof.endTimer(id));
 
 //        IJ.log("Interpolating gradient...");
@@ -442,7 +461,6 @@ public class LiveSRRF_CL {
         queue.finish(); // Make sure everything is done
         if(do3DSRRF) queue.put1DRangeKernel(kernelInterpolateGradient, 0,  gradientMag * gradientMag * singleFrameSize * nFrameToLoad, 0);
         else         queue.put3DRangeKernel(kernelInterpolateGradient, 0, 0, 0, gradientMag * widthS, gradientMag * heightS, nFrameToLoad, 0, 0, 0);
-
         prof.recordTime("kernelInterpolateGradient", prof.endTimer(id));
 
         // Make kernelCalculateSRRF assignment, in blocks as defined by user (blocksize from GUI)
@@ -454,6 +472,7 @@ public class LiveSRRF_CL {
         int nBlocks;
         if (do3DSRRF) nBlocks = nPlanes * magnification * widthM * heightM / blockLength + ((nPlanes * magnification * widthM * heightM % blockLength == 0) ? 0 : 1);
         else nBlocks = widthM * heightM / blockLength + ((widthM * heightM % blockLength == 0) ? 0 : 1);
+        queue.finish(); // Make sure everything is done
 
         for (int f = 0; f < nFrameToLoad; f++) {
             for (int nB = 0; nB < nBlocks; nB++) {
@@ -612,25 +631,11 @@ public class LiveSRRF_CL {
             if (do3DSRRF) imsGradient.addSlice(new FloatProcessor(imageWidth, imageHeight, dataGz));
         }
 
-//        }
-//        else { // while doing 2D
-//            // Load data
-//            float[] dataGx = new float[imageWidth * imageHeight];
-//            float[] dataGy = new float[imageWidth * imageHeight];
-//
-//            for (int n = 0; n < imageWidth * imageHeight; n++) {
-//                dataGx[n] = bufferGx.get(n);
-//                if (Float.isNaN(dataGx[n])) dataGx[n] = 0; // make sure we dont get any weirdness
-//                dataGy[n] = bufferGy.get(n);
-//                if (Float.isNaN(dataGy[n])) dataGy[n] = 0; // make sure we dont get any weirdness
-//            }
-//
-//            imsGradient.addSlice(new FloatProcessor(imageWidth, imageHeight, dataGx));
-//            imsGradient.addSlice(new FloatProcessor(imageWidth, imageHeight, dataGy));
-//        }
-
         return imsGradient;
     }
+
+
+
 
     // --- Read the gradient buffers --- only used for testing!
     public ImageStack readMPmaps() {
