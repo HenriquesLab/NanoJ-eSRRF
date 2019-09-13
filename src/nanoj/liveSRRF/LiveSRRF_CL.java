@@ -2,7 +2,6 @@ package nanoj.liveSRRF;
 
 import com.jogamp.opencl.*;
 import ij.IJ;
-import ij.ImagePlus;
 import ij.ImageStack;
 import ij.measure.ResultsTable;
 import ij.process.FloatProcessor;
@@ -18,6 +17,7 @@ import java.util.Map;
 import static com.jogamp.opencl.CLMemory.Mem.READ_ONLY;
 import static com.jogamp.opencl.CLMemory.Mem.READ_WRITE;
 import static com.jogamp.opencl.CLMemory.Mem.WRITE_ONLY;
+import static java.lang.Math.PI;
 import static java.lang.Math.min;
 import static nanoj.core.java.imagej.ResultsTableTools.dataMapToResultsTable;
 import static nanoj.core2.NanoJCL.fillBuffer;
@@ -84,7 +84,7 @@ public class LiveSRRF_CL {
             clBufferGx, clBufferGy, clBufferGz,
             clBufferGxInt, clBufferGyInt, clBufferGzInt,
             clBufferDriftXY,
-            clBufferShiftXY3D, // TODO: add the shift for 3D-SRRF!
+            clBufferShiftXYTheta3D, // TODO: add the shift for 3D-SRRF!
             clBufferOut,
             clBufferMPmap;
 
@@ -182,7 +182,7 @@ public class LiveSRRF_CL {
 
         double[] shiftX3D = null;
         double[] shiftY3D = null;
-//        double[] theta3D = null; // TODO: add the theta correction to the recon
+        double[] theta3D = null; // TODO: add the theta correction to the recon
 
         if (do3DSRRF) {
             double[] axialPositions3D = null;
@@ -193,7 +193,7 @@ public class LiveSRRF_CL {
                 calibTable = new LoadNanoJTable(calibTablePath3DSRRF).getData();
                 shiftX3D = calibTable.get("X-shift (pixels)");
                 shiftY3D = calibTable.get("Y-shift (pixels)");
-//                theta3D = calibTable.get("Theta (degrees)");
+                theta3D = calibTable.get("Theta (degrees)");
                 axialPositions3D = calibTable.get("Axial positions");
 //                nominalPositions3D = calibTable.get("Nominal positions");
                 chosenROIsLocations3D = calibTable.get("ROI #");
@@ -237,10 +237,6 @@ public class LiveSRRF_CL {
         // initialise buffers
         clBufferPx = context.createFloatBuffer(nFramesOnGPU * singleFrameSize, READ_ONLY);
         clBufferDriftXY = context.createFloatBuffer(2 * nFrameForSRRF, READ_ONLY);
-        if (do3DSRRF) {
-            clBufferAlignedPx = context.createFloatBuffer(nFramesOnGPU * singleFrameSize, READ_WRITE);
-            clBufferShiftXY3D = context.createFloatBuffer(2 * nPlanes, READ_ONLY);
-        }
         clBufferGx = context.createFloatBuffer(nFramesOnGPU * singleFrameSize, READ_WRITE); // all frames Gx
         clBufferGy = context.createFloatBuffer(nFramesOnGPU * singleFrameSize, READ_WRITE); // all frames Gy
         clBufferGxInt = context.createFloatBuffer(nFramesOnGPU * gradientMag * gradientMag * singleFrameSize, READ_WRITE); // single frame Gx
@@ -248,7 +244,8 @@ public class LiveSRRF_CL {
 
         // initialise buffers for 3D-SRRF
         if (do3DSRRF) {
-            clBufferShiftXY3D = context.createFloatBuffer(2 * nPlanes, READ_ONLY);
+            clBufferAlignedPx = context.createFloatBuffer(nFramesOnGPU * singleFrameSize, READ_WRITE);
+            clBufferShiftXYTheta3D = context.createFloatBuffer(3 * nPlanes, READ_ONLY);
             // TODO: add some buffers for the rotation
             clBufferGz = context.createFloatBuffer(nFramesOnGPU * singleFrameSize, READ_WRITE);
             clBufferGzInt = context.createFloatBuffer(nFramesOnGPU * gradientMag * gradientMag * singleFrameSize, READ_WRITE);
@@ -329,7 +326,7 @@ public class LiveSRRF_CL {
             argn = 0;
             kernelAlignPixels.setArg(argn++, clBufferPx);
             kernelAlignPixels.setArg(argn++, clBufferAlignedPx);
-            kernelAlignPixels.setArg(argn++, clBufferShiftXY3D);
+            kernelAlignPixels.setArg(argn++, clBufferShiftXYTheta3D);
         }
 
         argn = 0;
@@ -339,7 +336,7 @@ public class LiveSRRF_CL {
         kernelCalculateGradient.setArg(argn++, clBufferGy); // make sure type is the same !!
         if (do3DSRRF) kernelCalculateGradient.setArg(argn++, clBufferGz); // make sure type is the same !!
         kernelCalculateGradient.setArg(argn++, clBufferCurrentFrame); // make sure type is the same !!
-        if (do3DSRRF) kernelCalculateGradient.setArg(argn++, clBufferShiftXY3D); // make sure type is the same !!
+//        if (do3DSRRF) kernelCalculateGradient.setArg(argn++, clBufferShiftXYTheta3D); // make sure type is the same !!
 
         argn = 0;
         kernelInterpolateGradient.setArg(argn++, clBufferGx); // make sure type is the same !!
@@ -361,7 +358,7 @@ public class LiveSRRF_CL {
         kernelCalculateSRRF.setArg(argn++, clBufferOut); // make sure type is the same !!
         kernelCalculateSRRF.setArg(argn++, clBufferDriftXY); // make sure type is the same !!
         kernelCalculateSRRF.setArg(argn++, clBufferCurrentFrame); // make sure type is the same !!
-        if (do3DSRRF) kernelCalculateSRRF.setArg(argn++, clBufferShiftXY3D); // make sure type is the same !!
+//        if (do3DSRRF) kernelCalculateSRRF.setArg(argn++, clBufferShiftXYTheta3D); // make sure type is the same !!
 
         argn = 0;
         kernelIncrementFramePosition.setArg(argn++, clBufferCurrentFrame); // make sure type is the same !!
@@ -395,15 +392,16 @@ public class LiveSRRF_CL {
 
         if (do3DSRRF) {
             // Load the buffer for the XY shift for 3D
-            float[] shiftXY3D = new float[2 * nPlanes];
-            for (int i = 0; i < 2 * nPlanes; i++) {
-                if (i < nPlanes) shiftXY3D[i] = (float) shiftX3D[i];
-                if (i >= nPlanes) shiftXY3D[i] = (float) shiftY3D[i-nPlanes];
+            float[] shiftXYtheta3D = new float[3 * nPlanes];
+            for (int i = 0; i < 3 * nPlanes; i++) {
+                if (i/nPlanes == 0) shiftXYtheta3D[i] = (float) (theta3D[i]*PI/180.0d); // now in radians
+                if (i/nPlanes == 1) shiftXYtheta3D[i] = (float) shiftX3D[i - nPlanes];
+                if (i/nPlanes == 2) shiftXYtheta3D[i] = (float) shiftY3D[i - 2*nPlanes];
             }
 
             int id = prof.startTimer();
-            fillBuffer(clBufferShiftXY3D, shiftXY3D);
-            queue.putWriteBuffer(clBufferShiftXY3D, false);
+            fillBuffer(clBufferShiftXYTheta3D, shiftXYtheta3D);
+            queue.putWriteBuffer(clBufferShiftXYTheta3D, false);
             prof.recordTime("Uploading ShiftXY3D array to GPU", prof.endTimer(id));
         }
 

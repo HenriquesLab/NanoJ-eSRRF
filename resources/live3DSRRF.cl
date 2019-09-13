@@ -204,7 +204,7 @@ static float getCrossProductMagnitude(float const a1, float const a2, float cons
 __kernel void kernelAlignPixels(
     __global float* pixels,
     __global float* alignedPixels,
-    __global float* ShiftXY3D
+    __global float* ShiftXYTheta3D
 
     ) {
     const int offset = get_global_id(0);
@@ -213,8 +213,10 @@ __kernel void kernelAlignPixels(
     const int y = (offset - f*whd - z*wh)/width;
     const int x =  offset - f*whd - z*wh - y*width;
 
-    alignedPixels[offset] = getInterpolatedValue(pixels, (float) x - ShiftXY3D[z], (float) y - ShiftXY3D[z+nPlanes], z, f);
-//        alignedPixels[offset] = offset;
+    const float x_aligned = (x - (float) width/2.0f)*cos(ShiftXYTheta3D[z]) - (y - (float) height/2.0f)*sin(ShiftXYTheta3D[z]) + (float) width/2.0f  - ShiftXYTheta3D[z+nPlanes];
+    const float y_aligned = (x - (float) width/2.0f)*sin(ShiftXYTheta3D[z]) + (y - (float) height/2.0f)*cos(ShiftXYTheta3D[z]) + (float) height/2.0f  - ShiftXYTheta3D[z+2*nPlanes];
+
+    alignedPixels[offset] = getInterpolatedValue(pixels, x_aligned, y_aligned, z, f);
 
 }
 
@@ -226,8 +228,8 @@ __kernel void calculateGradient_2point(
     __global float* GxArray,
     __global float* GyArray,
     __global float* GzArray,
-    __global int* nCurrentFrame,
-    __global float* ShiftXY3D
+    __global int* nCurrentFrame
+//    __global float* ShiftXY3D
 
     ) {
     const int offset = get_global_id(0);
@@ -324,12 +326,12 @@ __kernel void calculateRadialGradientConvergence(
     __global float* GzArray,
     __global float* OutArray,
     __global float* driftXY,
-    __global int* nCurrentFrame,
+    __global int* nCurrentFrame
     // Current frame is a 2 element Int buffer:
             // nCurrentFrame[0] is the global current frame in the current SRRF frame (reset every SRRF frame)
             // nCurrentFrame[1] is the local current frame in the current GPU-loaded dataset (reset every turn of the method calculateSRRF (within the gradient calculation))
 
-    __global float* ShiftXY3D
+//    __global float* ShiftXY3D
 
     ) {
 
