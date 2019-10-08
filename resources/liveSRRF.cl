@@ -157,56 +157,60 @@ static float getVBoundaryCheck(__global float* array, int const width, int const
 //}
 
 
-//// First kernel: evaluating gradient from image using Robert's cross ------------------------------------------
-//__kernel void calculateGradientRobX(
-//    __global float* pixels,
-//    __global float* GxArray,
-//    __global float* GyArray
-//    ) {
-//    int x1 = get_global_id(0);
-//    int y1 = get_global_id(1);
-//    int w = get_global_size(0);
-//    int h = get_global_size(1);
-//    int offset = y1 * w + x1;
-//
-//    int x0 = max(x1-1, 0);
-//    int y0 = max(y1-1, 0);
-//
-//    // This calculates Robert's cross gradient and apply the rotation matrix 45 degrees to realign Gx and Gy to the image grid
-//    GxArray[offset] = pixels[y0 * w + x1] - pixels[y1 * w + x0] + pixels[y1 * w + x1] - pixels[y0 * w + x0];
-//    GyArray[offset] = - pixels[y0 * w + x1] + pixels[y1 * w + x0] + pixels[y1 * w + x1] - pixels[y0 * w + x0];
-//}
-
-
-// First kernel: evaluating gradient from image using 2-point gradient --------------------------------------------------
-__kernel void calculateGradient_2point(
+// First kernel: evaluating gradient from image using Robert's cross ------------------------------------------
+__kernel void calculateGradientRobX(
     __global float* pixels,
     __global float* GxArray,
     __global float* GyArray,
     __global int* nCurrentFrame
-
     ) {
     const int x1 = get_global_id(0);
     const int y1 = get_global_id(1);
     const int f = get_global_id(2);
 
-    const int offset = y1 * w + x1 + w * h * f;
+    const int frameOffset = wh*f;
+    const int offset = y1 * w + x1 + frameOffset;
     const int x0 = max(x1-1, 0);
     const int y0 = max(y1-1, 0);
 
-    // 2-point gradient
-    GxArray[offset] = pixels[y1 * w + x1 + w * h * f] - pixels[y1 * w + x0 + w * h * f];
-    GyArray[offset] = pixels[y1 * w + x1 + w * h * f] - pixels[y0 * w + x1 + w * h * f];
+    // This calculates Robert's cross gradient and apply the rotation matrix 45 degrees to realign Gx and Gy to the image grid
+    GxArray[offset] = pixels[y0 * w + x1 + frameOffset] - pixels[y1 * w + x0 + frameOffset] + pixels[y1 * w + x1 + frameOffset] - pixels[y0 * w + x0 + frameOffset];
+    GyArray[offset] = - pixels[y0 * w + x1 + frameOffset] + pixels[y1 * w + x0 + frameOffset] + pixels[y1 * w + x1 + frameOffset] - pixels[y0 * w + x0 + frameOffset];
 
     // Reset the local current frame
     nCurrentFrame[1] = 0;
-//    if (nCurrentFrame[0] == nFrameForSRRF) nCurrentFrame[0] = 0; // reset the frame number if it's reached the end
-
-        // Current frame is a 2 element Int buffer:
-                // nCurrentFrame[0] is the global current frame in the current SRRF frame (reset every SRRF frame)
-                // nCurrentFrame[1] is the local current frame in the current GPU-loaded dataset (reset every turn of the method calculateSRRF (within the gradient calculation))
-
 }
+
+
+//// First kernel: evaluating gradient from image using 2-point gradient --------------------------------------------------
+//__kernel void calculateGradient_2point(
+//    __global float* pixels,
+//    __global float* GxArray,
+//    __global float* GyArray,
+//    __global int* nCurrentFrame
+//
+//    ) {
+//    const int x1 = get_global_id(0);
+//    const int y1 = get_global_id(1);
+//    const int f = get_global_id(2);
+//
+//    const int offset = y1 * w + x1 + w * h * f;
+//    const int x0 = max(x1-1, 0);
+//    const int y0 = max(y1-1, 0);
+//
+//    // 2-point gradient
+//    GxArray[offset] = pixels[y1 * w + x1 + w * h * f] - pixels[y1 * w + x0 + w * h * f];
+//    GyArray[offset] = pixels[y1 * w + x1 + w * h * f] - pixels[y0 * w + x1 + w * h * f];
+//
+//    // Reset the local current frame
+//    nCurrentFrame[1] = 0;
+////    if (nCurrentFrame[0] == nFrameForSRRF) nCurrentFrame[0] = 0; // reset the frame number if it's reached the end
+//
+//        // Current frame is a 2 element Int buffer:
+//                // nCurrentFrame[0] is the global current frame in the current SRRF frame (reset every SRRF frame)
+//                // nCurrentFrame[1] is the local current frame in the current GPU-loaded dataset (reset every turn of the method calculateSRRF (within the gradient calculation))
+//
+//}
 
 // First kernel follow up: interpolating gradient from 2-point gradient image -------------------------------------------
 __kernel void calculateGradientInterpolation(
@@ -288,6 +292,7 @@ __kernel void calculateRadialGradientConvergence(
                         float distanceWeight = distance*exp(-(distance*distance)/sigma22);  // TODO: dGauss: can use Taylor expansion there
                         distanceWeight = distanceWeight * distanceWeight * distanceWeight * distanceWeight ;
                         distanceWeightSum += distanceWeight;
+//distanceWeightSum ++;
                         float GdotR = (Gx * (vx - xc) + Gy * (vy - yc)); // tells you if vector was pointing inward or outward
 
                         if (GdotR < 0) {
@@ -347,6 +352,7 @@ __kernel void calculateRadialGradientConvergence(
     }
 
 
+//    CGLH = distanceWeightSum;
     CGLH /= distanceWeightSum;
     if (CGLH >= 0) CGLH = pow(CGLH, sensitivity);
     else CGLH = 0;

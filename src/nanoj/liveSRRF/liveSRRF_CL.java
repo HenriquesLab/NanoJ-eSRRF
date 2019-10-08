@@ -28,9 +28,11 @@ public class liveSRRF_CL {
             blockLength,
             magnification;
 
-    private final int GxGyMagnification = 2;
-    private final float vxy_offset = 0.5f;
-    private final int vxy_ArrayShift = 1;
+    private final int GxGyMagnification = 1;
+//    private final float vxy_offset = 0.5f;
+//    private final int vxy_ArrayShift = 1;
+    private final float vxy_offset = 0.0f;
+    private final int vxy_ArrayShift = 0;
 
     private final int nReconstructions = 2; // Currently only STD and AVG
 
@@ -167,8 +169,8 @@ public class liveSRRF_CL {
         clBufferShiftXY = context.createFloatBuffer(2 * nFrameForSRRF, READ_ONLY);
         clBufferGx = context.createFloatBuffer(nFramesOnGPU * width * height, READ_WRITE); // single frame Gx
         clBufferGy = context.createFloatBuffer(nFramesOnGPU * width * height, READ_WRITE); // single frame Gy
-        clBufferGxInt = context.createFloatBuffer(nFramesOnGPU * 4 * width * height, READ_WRITE); // single frame Gx
-        clBufferGyInt = context.createFloatBuffer(nFramesOnGPU * 4 * width * height, READ_WRITE); // single frame Gy
+//        clBufferGxInt = context.createFloatBuffer(nFramesOnGPU * 4 * width * height, READ_WRITE); // single frame Gx
+//        clBufferGyInt = context.createFloatBuffer(nFramesOnGPU * 4 * width * height, READ_WRITE); // single frame Gy
         clBufferOut = context.createFloatBuffer((nReconstructions + 1) * widthM * heightM, WRITE_ONLY); // single frame cumulative AVG projection of RGC
         clBufferCurrentFrame = context.createIntBuffer(2, READ_WRITE);
         clBufferMPmap = context.createFloatBuffer(2 * magnification * magnification, READ_WRITE);
@@ -207,8 +209,9 @@ public class liveSRRF_CL {
 
         programLiveSRRF = context.createProgram(programString).build();
 
-        kernelCalculateGradient = programLiveSRRF.createCLKernel("calculateGradient_2point");
-        kernelInterpolateGradient = programLiveSRRF.createCLKernel("calculateGradientInterpolation");
+//        kernelCalculateGradient = programLiveSRRF.createCLKernel("calculateGradient_2point");
+        kernelCalculateGradient = programLiveSRRF.createCLKernel("calculateGradientRobX");
+//        kernelInterpolateGradient = programLiveSRRF.createCLKernel("calculateGradientInterpolation");
         kernelCalculateSRRF = programLiveSRRF.createCLKernel("calculateRadialGradientConvergence");
         kernelIncrementFramePosition = programLiveSRRF.createCLKernel("kernelIncrementFramePosition");
         kernelResetFramePosition = programLiveSRRF.createCLKernel("kernelResetFramePosition");
@@ -225,16 +228,18 @@ public class liveSRRF_CL {
         kernelCalculateGradient.setArg(argn++, clBufferGy); // make sure type is the same !!
         kernelCalculateGradient.setArg(argn++, clBufferCurrentFrame); // make sure type is the same !!
 
-        argn = 0;
-        kernelInterpolateGradient.setArg(argn++, clBufferGx); // make sure type is the same !!
-        kernelInterpolateGradient.setArg(argn++, clBufferGy); // make sure type is the same !!
-        kernelInterpolateGradient.setArg(argn++, clBufferGxInt); // make sure type is the same !!
-        kernelInterpolateGradient.setArg(argn++, clBufferGyInt); // make sure type is the same !!
+//        argn = 0;
+//        kernelInterpolateGradient.setArg(argn++, clBufferGx); // make sure type is the same !!
+//        kernelInterpolateGradient.setArg(argn++, clBufferGy); // make sure type is the same !!
+//        kernelInterpolateGradient.setArg(argn++, clBufferGxInt); // make sure type is the same !!
+//        kernelInterpolateGradient.setArg(argn++, clBufferGyInt); // make sure type is the same !!
 
         argn = 0;
         kernelCalculateSRRF.setArg(argn++, clBufferPx); // make sure type is the same !!
-        kernelCalculateSRRF.setArg(argn++, clBufferGxInt); // make sure type is the same !!
-        kernelCalculateSRRF.setArg(argn++, clBufferGyInt); // make sure type is the same !!
+        kernelCalculateSRRF.setArg(argn++, clBufferGx); // make sure type is the same !!
+        kernelCalculateSRRF.setArg(argn++, clBufferGy); // make sure type is the same !!
+//        kernelCalculateSRRF.setArg(argn++, clBufferGxInt); // make sure type is the same !!
+//        kernelCalculateSRRF.setArg(argn++, clBufferGyInt); // make sure type is the same !!
         kernelCalculateSRRF.setArg(argn++, clBufferOut); // make sure type is the same !!
         kernelCalculateSRRF.setArg(argn++, clBufferShiftXY); // make sure type is the same !!
         kernelCalculateSRRF.setArg(argn++, clBufferCurrentFrame); // make sure type is the same !!
@@ -261,8 +266,8 @@ public class liveSRRF_CL {
                         clBufferShiftXY.getCLSize() +
                         clBufferGx.getCLSize() +
                         clBufferGy.getCLSize() +
-                        clBufferGxInt.getCLSize() +
-                        clBufferGyInt.getCLSize() +
+//                        clBufferGxInt.getCLSize() +
+//                        clBufferGyInt.getCLSize() +
                         clBufferOut.getCLSize() +
                         clBufferCurrentFrame.getCLSize() +
                         clBufferMPmap.getCLSize()
@@ -305,11 +310,11 @@ public class liveSRRF_CL {
         queue.put3DRangeKernel(kernelCalculateGradient, 0, 0, 0, width, height, nFrameToLoad, 0, 0, 0);
         prof.recordTime("kernelCalculateGradient", prof.endTimer(id));
 
-//        IJ.log("Interpolating gradient...");
-        id = prof.startTimer();
-        queue.finish(); // Make sure everything is done
-        queue.put3DRangeKernel(kernelInterpolateGradient, 0, 0, 0, GxGyMagnification * width, GxGyMagnification * height, nFrameToLoad, 0, 0, 0);
-        prof.recordTime("kernelInterpolateGradient", prof.endTimer(id));
+////        IJ.log("Interpolating gradient...");
+//        id = prof.startTimer();
+//        queue.finish(); // Make sure everything is done
+//        queue.put3DRangeKernel(kernelInterpolateGradient, 0, 0, 0, GxGyMagnification * width, GxGyMagnification * height, nFrameToLoad, 0, 0, 0);
+//        prof.recordTime("kernelInterpolateGradient", prof.endTimer(id));
 
         // Make kernelCalculateSRRF assignment
 //        IJ.log("Calculating SRRF...");
