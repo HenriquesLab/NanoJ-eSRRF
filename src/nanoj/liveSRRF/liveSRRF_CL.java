@@ -29,16 +29,20 @@ public class liveSRRF_CL {
             magnification;
 
     private final int GxGyMagnification = 1;
-//    private final float vxy_offset = 0.5f;
+//    private final float vxy_offset = 0.5f; // These are for the 2pI method
 //    private final int vxy_ArrayShift = 1;
-    private final float vxy_offset = 0.0f;
-    private final int vxy_ArrayShift = 0;
+//    private final float vxy_offset = 0.0f; //These are for the RobX method
+//    private final int vxy_ArrayShift = 0;
+    private float vxy_offset; //These are for the RobX method
+    private int vxy_ArrayShift;
 
     private final int nReconstructions = 2; // Currently only STD and AVG
 
     private boolean doMPmapCorrection;
 
     public ImageStack imsSRRF;
+
+    private String thisGradientChoice;
 
     // Advanced formats
     private final NanoJProfiler prof = new NanoJProfiler();
@@ -47,7 +51,7 @@ public class liveSRRF_CL {
     static private CLContext context;
     static private CLProgram programLiveSRRF;
     static private CLKernel kernelCalculateGradient,
-                            kernelInterpolateGradient,
+//                            kernelInterpolateGradient,
                             kernelIncrementFramePosition,
                             kernelResetFramePosition,
                             kernelCalculateSRRF,
@@ -64,7 +68,7 @@ public class liveSRRF_CL {
     private CLBuffer<FloatBuffer>
             clBufferPx,
             clBufferGx, clBufferGy,
-            clBufferGxInt, clBufferGyInt,
+//            clBufferGxInt, clBufferGyInt,
             clBufferShiftXY,
             clBufferOut,
             clBufferMPmap;
@@ -131,7 +135,7 @@ public class liveSRRF_CL {
 
 
     // --- Initialization method ---
-    public void initialise(int width, int height, int magnification, float fwhm, int sensitivity, int nFramesOnGPU, int nFrameForSRRF, int blockLength, CLDevice chosenDevice, boolean intWeighting, boolean doMPmapCorrection) {
+    public void initialise(int width, int height, int magnification, float fwhm, int sensitivity, int nFramesOnGPU, int nFrameForSRRF, int blockLength, CLDevice chosenDevice, boolean intWeighting, boolean doMPmapCorrection, String thisGradientChoice) {
 
         this.width = width;
         this.height = height;
@@ -141,6 +145,7 @@ public class liveSRRF_CL {
         this.blockLength = blockLength;
         this.magnification = magnification;
         this.doMPmapCorrection = doMPmapCorrection;
+        this.thisGradientChoice = thisGradientChoice;
 
         if (chosenDevice == null) {
 //            IJ.log("Looking for the fastest device...");
@@ -179,10 +184,27 @@ public class liveSRRF_CL {
         // nCurrentFrame[0] is the global current frame in the current SRRF frame (reset every SRRF frame)
         // nCurrentFrame[1] is the local current frame in the current GPU-loaded dataset (reset every tun of the method calculateSRRF (within the gradient calculation))
 
+        if (thisGradientChoice.equals("RobX")) {
+            vxy_offset = 0.0f;
+            vxy_ArrayShift = 0;
+            IJ.log("Using RobX");
+        }
+        else if (thisGradientChoice.equals("3pPlus")) {
+            vxy_offset = 0.5f;
+            vxy_ArrayShift = 0;
+            IJ.log("Using 3pPlus");
+        }
+        else if (thisGradientChoice.equals("3pX")) {
+            vxy_offset = 0.5f;
+            vxy_ArrayShift = 0;
+            IJ.log("Using 3pX");
+        }
 
         // Create the program
         float sigma = fwhm / 2.354f;
         float radius = ((float) ((int) (GxGyMagnification * 2 * sigma))) / GxGyMagnification + 1;    // this reduces the radius for speed, works when using dGauss^4 and 2p+I
+//        float radius = 2*((float) ((int) (GxGyMagnification * 2 * sigma))) / GxGyMagnification + 1;    // TODO: for testing
+
 
         String programString = getResourceAsString(liveSRRF_CL.class, "liveSRRF.cl");
         programString = replaceFirst(programString, "$MAGNIFICATION$", "" + magnification);
@@ -210,7 +232,11 @@ public class liveSRRF_CL {
         programLiveSRRF = context.createProgram(programString).build();
 
 //        kernelCalculateGradient = programLiveSRRF.createCLKernel("calculateGradient_2point");
-        kernelCalculateGradient = programLiveSRRF.createCLKernel("calculateGradientRobX");
+
+        if (thisGradientChoice.equals("RobX")) kernelCalculateGradient = programLiveSRRF.createCLKernel("calculateGradientRobX");
+        else if (thisGradientChoice.equals("3pPlus")) kernelCalculateGradient = programLiveSRRF.createCLKernel("calculateGradient3pPlus");
+        else if (thisGradientChoice.equals("3pX")) kernelCalculateGradient = programLiveSRRF.createCLKernel("calculateGradient3pX");
+
 //        kernelInterpolateGradient = programLiveSRRF.createCLKernel("calculateGradientInterpolation");
         kernelCalculateSRRF = programLiveSRRF.createCLKernel("calculateRadialGradientConvergence");
         kernelIncrementFramePosition = programLiveSRRF.createCLKernel("kernelIncrementFramePosition");

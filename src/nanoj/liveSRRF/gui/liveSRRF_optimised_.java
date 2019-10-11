@@ -63,10 +63,12 @@ public class liveSRRF_optimised_ implements PlugIn {
     private String pathToDisk = "",
             fileName,
             chosenDeviceName,
-            chosenTemporalAnalysis;
+            chosenTemporalAnalysis,
+            thisGradientChoice;
 
     private String[] deviceNames,
-            temporalAnalysis = {"AVG","STD","Both AVG and STD"};
+            temporalAnalysis = {"AVG","STD","Both AVG and STD"},
+            gradientChoice = {"RobX", "3pPlus", "3pX"};
 
     private float[] shiftX, shiftY;
 
@@ -204,7 +206,7 @@ public class liveSRRF_optimised_ implements PlugIn {
 
         ImageStack imsAllRawData = imp.getImageStack();
 
-        liveSRRF.initialise(width, height, magnification, fwhm, sensitivity, nFrameOnGPU, nFrameForSRRFtoUse, blockSize, chosenDevice, intWeighting, doMPmapCorrection);
+        liveSRRF.initialise(width, height, magnification, fwhm, sensitivity, nFrameOnGPU, nFrameForSRRFtoUse, blockSize, chosenDevice, intWeighting, doMPmapCorrection, thisGradientChoice);
 
         shiftX = new float[nFrameForSRRFtoUse];
         shiftY = new float[nFrameForSRRFtoUse];
@@ -451,6 +453,7 @@ public class liveSRRF_optimised_ implements PlugIn {
     // -- Main GUI --
     private boolean mainGUI() {
         // Build GUI
+
         Font headerFont = new Font("Arial", Font.BOLD, 16);
         NonBlockingGenericDialog gd = new NonBlockingGenericDialog("liveSRRF " + LiveSRRFVersion);
         gd.addMessage("-=-= SRRF parameters =-=-\n", headerFont);
@@ -472,6 +475,8 @@ public class liveSRRF_optimised_ implements PlugIn {
 
         gd.addMessage("-=-= Advanced settings =-=-\n", headerFont);
         gd.addCheckbox("Show advanced settings", false);
+        gd.addChoice("Gradient type", gradientChoice, gradientChoice[0]);
+//        gd.addChoice("Gradient mag.", new int[] {1,2}, 1);
 
         gd.addHelp("https://www.youtube.com/watch?v=PJQVlVHsFF8"); // If you're hooked on a feeling
 
@@ -539,6 +544,8 @@ public class liveSRRF_optimised_ implements PlugIn {
         boolean showAdvancedSettings = gd.getNextBoolean();
         if (showAdvancedSettings && !previousAdvSettings) advancedSettingsGUI();
         previousAdvSettings = showAdvancedSettings;
+
+        thisGradientChoice = gd.getNextChoice();
 
         nGPUloadPerSRRFframe = (int) math.ceil((float) nFrameForSRRFtoUse / (float) nFrameOnGPU);
 

@@ -135,26 +135,55 @@ static float getVBoundaryCheck(__global float* array, int const width, int const
 }
 
 
-//// First kernel: evaluating gradient from image: 3-point gradient --------------------------------------------------------------
-//__kernel void calculateGradient(
-//    __global float* pixels,
-//    __global float* GxArray,
-//    __global float* GyArray
-//    ) {
-//    int x = get_global_id(0);
-//    int y = get_global_id(1);
-//    int w = get_global_size(0);
-//    int h = get_global_size(1);
-//    int offset = y * w + x;
-//
-//    int x0 = max(x-1, 0);
-//    int x1 = min(x+1, w-1);
-//    int y0 = max(y-1, 0);
-//    int y1 = min(y+1, h-1);
-//
-//    GxArray[offset] = - pixels[y * w + x0] + pixels[y * w + x1];
-//    GyArray[offset] = - pixels[y0 * w + x] + pixels[y1 * w + x];
-//}
+// First kernel: evaluating gradient from image: 3-point gradient + --------------------------------------------------------------
+__kernel void calculateGradient3pPlus(
+    __global float* pixels,
+    __global float* GxArray,
+    __global float* GyArray,
+    __global int* nCurrentFrame
+    ) {
+    const int x = get_global_id(0);
+    const int y = get_global_id(1);
+    const int f = get_global_id(2);
+
+    const int frameOffset = wh*f;
+    const int x0 = max(x-1, 0);
+    const int x1 = min(x+1, w-1);
+    const int y0 = max(y-1, 0);
+    const int y1 = min(y+1, h-1);
+    const int offset = y * w + x + frameOffset;
+
+    GxArray[offset] = - pixels[y * w + x0 + frameOffset] + pixels[y * w + x1 + frameOffset];
+    GyArray[offset] = - pixels[y0 * w + x + frameOffset] + pixels[y1 * w + x + frameOffset];
+
+    // Reset the local current frame
+    nCurrentFrame[1] = 0;
+}
+
+// First kernel: evaluating gradient from image: 3-point gradient x --------------------------------------------------------------
+__kernel void calculateGradient3pX(
+    __global float* pixels,
+    __global float* GxArray,
+    __global float* GyArray,
+    __global int* nCurrentFrame
+    ) {
+    const int x = get_global_id(0);
+    const int y = get_global_id(1);
+    const int f = get_global_id(2);
+
+    const int frameOffset = wh*f;
+    const int x0 = max(x-1, 0);
+    const int x1 = min(x+1, w-1);
+    const int y0 = max(y-1, 0);
+    const int y1 = min(y+1, h-1);
+    const int offset = y * w + x + frameOffset;
+
+    GxArray[offset] = - pixels[y0 * w + x0 + frameOffset] - pixels[y1 * w + x0 + frameOffset] + pixels[y0 * w + x1 + frameOffset] + pixels[y1 * w + x1 + frameOffset];
+    GyArray[offset] = - pixels[y0 * w + x0 + frameOffset] - pixels[y0 * w + x1 + frameOffset] + pixels[y1 * w + x0 + frameOffset] + pixels[y1 * w + x1 + frameOffset];
+
+    // Reset the local current frame
+    nCurrentFrame[1] = 0;
+}
 
 
 // First kernel: evaluating gradient from image using Robert's cross ------------------------------------------
@@ -169,9 +198,9 @@ __kernel void calculateGradientRobX(
     const int f = get_global_id(2);
 
     const int frameOffset = wh*f;
-    const int offset = y1 * w + x1 + frameOffset;
     const int x0 = max(x1-1, 0);
     const int y0 = max(y1-1, 0);
+    const int offset = y1 * w + x1 + frameOffset;
 
     // This calculates Robert's cross gradient and apply the rotation matrix 45 degrees to realign Gx and Gy to the image grid
     GxArray[offset] = pixels[y0 * w + x1 + frameOffset] - pixels[y1 * w + x0 + frameOffset] + pixels[y1 * w + x1 + frameOffset] - pixels[y0 * w + x0 + frameOffset];
@@ -274,36 +303,67 @@ __kernel void calculateRadialGradientConvergence(
 //    int radius = (int) (fradius) + 1;    // this should be used otherwise
 
 
-    for (int j=-GxGyMagnification*radius; j<=(GxGyMagnification*radius+1); j++) {
-        vy = ((float) ((int) (GxGyMagnification*yc)) + j)/GxGyMagnification; // position in continuous space TODO: problems with negative values and (int)?
+// Estimate the mean gradient
+    float GxMean = 0;
+    float GyMean = 0;
+    int nGradient = 0;
+    for (int j=-GxGyMagnification*radius; j<=(GxGyMagnification*radius+1); j++) { // stepping in pixels space of the Gradient matrix
+        vy = ((float) ((int) (GxGyMagnification*(yc-vxy_offset))) + j)/(float) GxGyMagnification + vxy_offset; // position in continuous space TODO: problems with negative values and (int)?
 
         if (vy > 0 && vy < h){
             for (int i=-GxGyMagnification*radius; i<=(GxGyMagnification*radius+1); i++) {
-                vx = ((float) ((int) (GxGyMagnification*xc)) + i)/GxGyMagnification; // position in continuous space TODO: problems with negative values and (int)?
+                vx = ((float) ((int) (GxGyMagnification*(xc-vxy_offset))) + i)/(float) GxGyMagnification + vxy_offset; // position in continuous space TODO: problems with negative values and (int)?
+                if (vx > 0 && vx < w){
+
+                    float distance = sqrt((vx - xc)*(vx - xc) + (vy - yc)*(vy - yc));    // Distance D
+
+                    if (distance != 0 && distance <= (2*sigma+1)) {
+                        nGradient ++;
+                        GxMean += getVBoundaryCheck(GxArray, wInt, hInt, GxGyMagnification*(vx - vxy_offset) + vxy_ArrayShift, GxGyMagnification*(vy - vxy_offset), nCurrentFrame[1]);
+                        GyMean += getVBoundaryCheck(GyArray, wInt, hInt, GxGyMagnification*(vx - vxy_offset), GxGyMagnification*(vy - vxy_offset) + vxy_ArrayShift, nCurrentFrame[1]);
+
+                    }
+                }
+            }
+        }
+    }
+    GxMean /= nGradient;
+    GyMean /= nGradient;
+
+
+    for (int j=-GxGyMagnification*radius; j<=(GxGyMagnification*radius+1); j++) { // stepping in pixels space of the Gradient matrix
+        vy = ((float) ((int) (GxGyMagnification*(yc-vxy_offset))) + j)/(float) GxGyMagnification + vxy_offset; // position in continuous space TODO: problems with negative values and (int)?
+
+        if (vy > 0 && vy < h){
+            for (int i=-GxGyMagnification*radius; i<=(GxGyMagnification*radius+1); i++) {
+                vx = ((float) ((int) (GxGyMagnification*(xc-vxy_offset))) + i)/(float) GxGyMagnification + vxy_offset; // position in continuous space TODO: problems with negative values and (int)?
                 if (vx > 0 && vx < w){
 
                     float distance = sqrt((vx - xc)*(vx - xc) + (vy - yc)*(vy - yc));    // Distance D
 
                     if (distance != 0 && distance <= (2*sigma+1)) {
 
-                        Gx = getVBoundaryCheck(GxArray, wInt, hInt, GxGyMagnification*(vx - vxy_offset) + vxy_ArrayShift, GxGyMagnification*(vy - vxy_offset), nCurrentFrame[1]);
-                        Gy = getVBoundaryCheck(GyArray, wInt, hInt, GxGyMagnification*(vx - vxy_offset), GxGyMagnification*(vy - vxy_offset) + vxy_ArrayShift, nCurrentFrame[1]);
+                        Gx = getVBoundaryCheck(GxArray, wInt, hInt, GxGyMagnification*(vx - vxy_offset) + vxy_ArrayShift, GxGyMagnification*(vy - vxy_offset), nCurrentFrame[1]) - GxMean;
+                        Gy = getVBoundaryCheck(GyArray, wInt, hInt, GxGyMagnification*(vx - vxy_offset), GxGyMagnification*(vy - vxy_offset) + vxy_ArrayShift, nCurrentFrame[1]) - GyMean;
 
                         float distanceWeight = distance*exp(-(distance*distance)/sigma22);  // TODO: dGauss: can use Taylor expansion there
-                        distanceWeight = distanceWeight * distanceWeight * distanceWeight * distanceWeight ;
+                        distanceWeight = distanceWeight * distanceWeight * distanceWeight * distanceWeight;
+//distanceWeight = distanceWeight * distanceWeight;
                         distanceWeightSum += distanceWeight;
 //distanceWeightSum ++;
                         float GdotR = (Gx * (vx - xc) + Gy * (vy - yc)); // tells you if vector was pointing inward or outward
 
-                        if (GdotR < 0) {
+//                        if (GdotR < 0) {
                             // Calculate perpendicular distance from (xc,yc) to gradient line through (vx,vy)
                             float GMag = sqrt(Gx * Gx + Gy * Gy);
                             float Dk = fabs(Gy * (xc - vx) - Gx * (yc - vy)) / GMag;    // Dk = D*sin(theta) obtained from cross-product
                             if (isnan(Dk)) Dk = distance; // this makes Dk = 0 in the next line
 
-
                             // Linear function ----------------------
                             Dk = 1 - Dk / distance; // Dk is now between 0 to 1, 1 if vector points precisely to (xc, yx), Dk = 1-sin(theta)
+
+//                            Dk = GMag*(1 - Dk / distance); // TODO: for testing
+
 
                     //Linear truncated ----------------------
 //                  Dk = 1 - Dk / distance; // Dk is now between 0 to 1, 1 if vector points precisely to (xc, yx), Dk = 1-sin(theta)
@@ -335,7 +395,13 @@ __kernel void calculateRadialGradientConvergence(
 //                  float SigmaTheta = 0.25;
 //                  Dk = exp(-1.0f*(float) (Dk/SigmaTheta));
 
-                            CGLH += Dk*distanceWeight;
+                        if (GdotR < 0) {
+                            CGLH += Dk*distanceWeight; // ----------------WEIGHTING----------------
+//                            CGLH += Dk;
+                        }
+                        else {
+                            CGLH -= Dk*distanceWeight;
+
                         }
 
 
@@ -353,7 +419,7 @@ __kernel void calculateRadialGradientConvergence(
 
 
 //    CGLH = distanceWeightSum;
-    CGLH /= distanceWeightSum;
+    CGLH /= distanceWeightSum; // ----------------WEIGHTING NORMALIZATION----------------
     if (CGLH >= 0) CGLH = pow(CGLH, sensitivity);
     else CGLH = 0;
 

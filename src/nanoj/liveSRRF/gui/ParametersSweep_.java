@@ -362,7 +362,7 @@ public class ParametersSweep_ implements PlugIn {
                     if (calculateFRC) {
 
                         // Calculate and get the reconstruction from the odd frames // TODO: add options to do intensity weighting or MPcorrection
-                        liveSRRF.initialise(width, height, magnification, fwhmArray[fi], sensitivityArray[si], 1, nframeArray[nfi], blockSize, null, true, true);
+                        liveSRRF.initialise(width, height, magnification, fwhmArray[fi], sensitivityArray[si], 1, nframeArray[nfi], blockSize, null, true, true, "RobX");
                         liveSRRF.resetFramePosition();
                         liveSRRF.loadShiftXYGPUbuffer(shiftXtempOdd, shiftYtempOdd);
 
@@ -380,7 +380,7 @@ public class ParametersSweep_ implements PlugIn {
                         fpOddSTD = imsBuffer.getProcessor(2).convertToFloatProcessor();
 
                         // Calculate and get the reconstruction from the even frames // TODO: add options to do intensity weighting or MPcorrection
-                        liveSRRF.initialise(width, height, magnification, fwhmArray[fi], sensitivityArray[si], 1, nframeArray[nfi], blockSize, null, true, true);
+                        liveSRRF.initialise(width, height, magnification, fwhmArray[fi], sensitivityArray[si], 1, nframeArray[nfi], blockSize, null, true, true, "RobX");
                         liveSRRF.resetFramePosition();
                         liveSRRF.loadShiftXYGPUbuffer(shiftXtempEven, shiftYtempEven);
 
@@ -399,7 +399,7 @@ public class ParametersSweep_ implements PlugIn {
 
                     } else {
                         // TODO: add options to do intensity weighting or MPcorrection
-                        liveSRRF.initialise(width, height, magnification, fwhmArray[fi], sensitivityArray[si], 1, nframeArray[nfi], blockSize, null, true, true);
+                        liveSRRF.initialise(width, height, magnification, fwhmArray[fi], sensitivityArray[si], 1, nframeArray[nfi], blockSize, null, true, true, "RobX");
                         liveSRRF.resetFramePosition();
                         liveSRRF.loadShiftXYGPUbuffer(shiftXtemp, shiftYtemp);
 
