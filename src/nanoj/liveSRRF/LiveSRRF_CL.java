@@ -394,9 +394,13 @@ public class LiveSRRF_CL {
             // Load the buffer for the XY shift for 3D
             float[] shiftXYtheta3D = new float[3 * nPlanes];
             for (int i = 0; i < 3 * nPlanes; i++) {
-                if (i/nPlanes == 0) shiftXYtheta3D[i] = (float) (theta3D[i]*PI/180.0d); // now in radians
+                if (i/nPlanes == 0) shiftXYtheta3D[i] = (float) (-theta3D[i]*PI/180.0d); // now in radians // TODO: check signs but i reckon it should be (-)
                 if (i/nPlanes == 1) shiftXYtheta3D[i] = (float) shiftX3D[i - nPlanes];
                 if (i/nPlanes == 2) shiftXYtheta3D[i] = (float) shiftY3D[i - 2*nPlanes];
+            }
+
+            for (int i = 0; i < nPlanes; i++) {
+                IJ.log("Reg. params (X/Y/Theta): "+shiftXYtheta3D[i+nPlanes]+"/"+shiftXYtheta3D[i+2*nPlanes]+"/"+shiftXYtheta3D[i]);
             }
 
             int id = prof.startTimer();
@@ -570,9 +574,8 @@ public class LiveSRRF_CL {
 
     }
 
-    // --- Read the gradient buffers --- only used for testing!
+    // --- Read the gradient buffers ---
     public ImageStack readGradientBuffers(boolean interpolated) {
-        // order defines whether the output is the gradient or the interpolated gradients
 
         queue.finish(); // Make sure everything is done
 
@@ -632,7 +635,32 @@ public class LiveSRRF_CL {
         return imsGradient;
     }
 
+    // --- Read the gradient buffers ---
+    public ImageStack readAlignedPixels() {
 
+        queue.finish(); // Make sure everything is done
+
+        int imageWidth = widthS;
+        int imageHeight = heightS;
+
+        queue.putReadBuffer(clBufferAlignedPx, true);
+        FloatBuffer bufferGx = clBufferAlignedPx.getBuffer();
+
+
+        ImageStack imsAlignedPixel = new ImageStack(imageWidth, imageHeight);
+
+        for (int i = 0; i < nPlanes; i++) {
+
+            float[] dataPx = new float[imageWidth * imageHeight];
+            for (int n = 0; n < imageWidth * imageHeight; n++) {
+                dataPx[n] = bufferGx.get(n + i*imageWidth*imageHeight);
+                if (Float.isNaN(dataPx[n])) dataPx[n] = 0; // make sure we dont get any weirdness
+            }
+            imsAlignedPixel.addSlice(new FloatProcessor(imageWidth, imageHeight, dataPx));
+        }
+
+        return imsAlignedPixel;
+    }
 
 
     // --- Read the gradient buffers --- only used for testing!
@@ -717,6 +745,8 @@ public class LiveSRRF_CL {
                 // in coordinates of the raw data
                 xG = xL + xSplit*widthS;
                 yG = yL + ySplit*heightS;
+//                IJ.log("xG: "+xG);
+//                IJ.log("yG: "+yG);
 
 //                offset = (int) chosenROIsLocations3D[z]*widthS*heightS + yL*widthS + xL;
 //                offset = sortedZindices[z]*widthS*heightS + yL*widthS + xL;

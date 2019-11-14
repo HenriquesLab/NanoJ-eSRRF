@@ -100,8 +100,8 @@ public class ApplyCalibrationMFMdata_ implements PlugIn {
 
             x = Math.round((float) width/nImageSplits * i);
             y = Math.round((float) height/nImageSplits * j);
-//            IJ.log("x="+x);
-//            IJ.log("y="+y);
+            IJ.log("x="+x);
+            IJ.log("y="+y);
             ImageStack imsTemp = ims.crop(x, y, 0, cropSizeX,cropSizeY, nFrames);
             imsCorrectedArray[sortedIndicesROI[id]] = RCCMcalculator.applyMFMCorrection(imsTemp, shiftXslice, shiftYslice, thetaSlice, coeffSlice, bgSlice)[0];
         }

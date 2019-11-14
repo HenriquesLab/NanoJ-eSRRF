@@ -389,6 +389,12 @@ public class LiveSRRF_optimised_ implements PlugIn {
             impMPmap.show();
         }
 
+        if (do3DSRRF){
+            ImageStack imsAlignedPixels = liveSRRF.readAlignedPixels();
+            ImagePlus impAlignedPixels = new ImagePlus("Aligned pixels", imsAlignedPixels);
+            impAlignedPixels.show();
+        }
+
         // Release the GPU
         liveSRRF.release();
 

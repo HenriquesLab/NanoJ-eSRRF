@@ -213,8 +213,11 @@ __kernel void kernelAlignPixels(
     const int y = (offset - f*whd - z*wh)/width;
     const int x =  offset - f*whd - z*wh - y*width;
 
-    const float x_aligned = (x - (float) width/2.0f)*cos(ShiftXYTheta3D[z]) - (y - (float) height/2.0f)*sin(ShiftXYTheta3D[z]) + (float) width/2.0f  - ShiftXYTheta3D[z+nPlanes];
-    const float y_aligned = (x - (float) width/2.0f)*sin(ShiftXYTheta3D[z]) + (y - (float) height/2.0f)*cos(ShiftXYTheta3D[z]) + (float) height/2.0f  - ShiftXYTheta3D[z+2*nPlanes];
+    float x_aligned = ((float) x - (float) (width-1)/2.0f)*cos(ShiftXYTheta3D[z]) - ((float) y - (float) (height-1)/2.0f)*sin(ShiftXYTheta3D[z]) + (float) (width-1)/2.0f  - ShiftXYTheta3D[z+nPlanes];
+    float y_aligned = ((float) x - (float) (width-1)/2.0f)*sin(ShiftXYTheta3D[z]) + ((float) y - (float) (height-1)/2.0f)*cos(ShiftXYTheta3D[z]) + (float) (height-1)/2.0f - ShiftXYTheta3D[z+2*nPlanes];
+
+//    const float x_aligned = (float) x - ShiftXYTheta3D[z+nPlanes];
+//    const float y_aligned = (float) y - ShiftXYTheta3D[z+2*nPlanes];
 
     alignedPixels[offset] = getInterpolatedValue(pixels, x_aligned, y_aligned, z, f);
 
@@ -436,10 +439,21 @@ __kernel void calculateRadialGradientConvergence(
 
 //    float v0 = getInterpolatedValue(pixels, ((float) xM)/magnification + driftX - 0.5f - ShiftXY3D[z0], ((float) yM)/magnification + driftY - 0.5f - ShiftXY3D[z0+nPlanes], z0, nCurrentFrame[1]);
 //    float v1 = getInterpolatedValue(pixels, ((float) xM)/magnification + driftX - 0.5f - ShiftXY3D[z0+1], ((float) yM)/magnification + driftY - 0.5f - ShiftXY3D[z0+1+nPlanes], z0+1, nCurrentFrame[1]);
+// TODO: more computationally efficient if in-plane interpolation is done prior to radiality
+    float v_1 = getInterpolatedValue(pixels, ((float) xM)/magnification + driftX - 0.5f, ((float) yM)/magnification + driftY - 0.5f, max(z0-1,0), nCurrentFrame[1]);
     float v0 = getInterpolatedValue(pixels, ((float) xM)/magnification + driftX - 0.5f, ((float) yM)/magnification + driftY - 0.5f, z0, nCurrentFrame[1]);
     float v1 = getInterpolatedValue(pixels, ((float) xM)/magnification + driftX - 0.5f, ((float) yM)/magnification + driftY - 0.5f, z0+1, nCurrentFrame[1]);
+    float v2 = getInterpolatedValue(pixels, ((float) xM)/magnification + driftX - 0.5f, ((float) yM)/magnification + driftY - 0.5f, min(z0+1,nPlanes-1), nCurrentFrame[1]); // TODO: adapt what's going on the edges
 
-    float v = (zc - (float) (z0+0.5f))*v1 + (1-(zc - (float) (z0+0.5f)))*v0; // linear interpolations
+    float z01 = (zc - (float) (z0+0.5f));
+//    float v = z01*v1 + (1-z01)*v0; // linear interpolations
+
+    float a = -0.5f*v_1 + 1.5f*v0 - 1.5f*v1 + 0.5f*v2;
+    float b = v_1 - 2.5f*v0 + 2.0f*v1 - 0.5f*v2;
+    float c = -0.5f*v_1 + 0.5f*v1;
+
+    float v = a*z01*z01*z01 + b*z01*z01 + c*z01 + v_1; // cubic interpolation
+
 
     if (intWeighting == 1) {
             if (nCurrentFrame[0] == 0) {
