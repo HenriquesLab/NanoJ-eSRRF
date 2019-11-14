@@ -67,7 +67,7 @@ public class LiveSRRF_optimised_ implements PlugIn {
             do3DSRRF;
 
     private final boolean enable3DSRRF = true;
-    private final String LiveSRRFVersion = "v1.14";
+    private final String LiveSRRFVersion = "v1.15";
 
     private String pathToDisk = "",
             fileName,

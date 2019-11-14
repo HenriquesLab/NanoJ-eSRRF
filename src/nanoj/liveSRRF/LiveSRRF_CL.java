@@ -394,14 +394,14 @@ public class LiveSRRF_CL {
             // Load the buffer for the XY shift for 3D
             float[] shiftXYtheta3D = new float[3 * nPlanes];
             for (int i = 0; i < 3 * nPlanes; i++) {
-                if (i/nPlanes == 0) shiftXYtheta3D[i] = (float) (-theta3D[i]*PI/180.0d); // now in radians // TODO: check signs but i reckon it should be (-)
+                if (i/nPlanes == 0) shiftXYtheta3D[i] = (float) (-theta3D[i]*PI/180.0d); // now in radians
                 if (i/nPlanes == 1) shiftXYtheta3D[i] = (float) shiftX3D[i - nPlanes];
                 if (i/nPlanes == 2) shiftXYtheta3D[i] = (float) shiftY3D[i - 2*nPlanes];
             }
 
-            for (int i = 0; i < nPlanes; i++) {
-                IJ.log("Reg. params (X/Y/Theta): "+shiftXYtheta3D[i+nPlanes]+"/"+shiftXYtheta3D[i+2*nPlanes]+"/"+shiftXYtheta3D[i]);
-            }
+//            for (int i = 0; i < nPlanes; i++) {
+//                IJ.log("Reg. params (X/Y/Theta): "+shiftXYtheta3D[i+nPlanes]+"/"+shiftXYtheta3D[i+2*nPlanes]+"/"+shiftXYtheta3D[i]);
+//            }
 
             int id = prof.startTimer();
             fillBuffer(clBufferShiftXYTheta3D, shiftXYtheta3D);
@@ -715,56 +715,36 @@ public class LiveSRRF_CL {
     // --- Reshape the raw input data for 3D-SRRF ---
     public ImageStack reshapeImageStack3D(ImageStack ims) {
 
-//        int nPixels = ims.getWidth()*ims.getHeight()*ims.getSize();
 //        assert (widthS*heightS* nPlanes *ims.getSize() == nPixels); // TODO: this won't happen when the image cannot be divided exactly, needs enabling assertions
         ImageStack reshapedIms = new ImageStack(widthS*heightS, nPlanes, ims.getSize());
-//        int[] sortedZindices = getSortedIndices(chosenROIsLocations3D);
 
-//        for (int i = 0; i < sortedZindices.length; i++) {
-//            IJ.log("Mammamia: "+sortedZindices[i]+" chosen: "+chosenROIsLocations3D[i]);
-//        }
-
-        int z, xL, yL, xG, yG, offset, xSplit, ySplit;
         for (int f = 0; f < ims.getSize(); f++) {
 
             FloatProcessor fp = ims.duplicate().getProcessor(f+1).convertToFloatProcessor();
-            float[] pixels = (float[]) fp.getPixels();
             float[] pixelsReshaped = new float[widthS*heightS*nPlanes];
 
-            for (int i = 0; i < widthS*heightS*nPlanes; i++) {
+            int i,j,x,y;
+            for (int idz = 0; idz < nPlanes; idz++) {
+                i = (int) chosenROIsLocations3D[idz]%3;
+                j = (int) (chosenROIsLocations3D[idz] - i)/3;
 
-                z = i/(widthS*heightS); // reorder the ROI to be in the right order
-//                IJ.log("Reshape z: "+z);
-                yL = (i - z*widthS*heightS)/widthS; // local coordinates
-                xL = i - z*widthS*heightS - yL*widthS;
-//                xG = xL + (z - 3*(z/3))*widthS; // global coordinate
-//                yG = yL + (z/3)*heightS;
-                ySplit = (int) (chosenROIsLocations3D[z]/nSplits);
-                xSplit = (int) chosenROIsLocations3D[z] - ySplit*nSplits;
+                x = Math.round((float) ims.getWidth()/nSplits * i);
+                y = Math.round((float) ims.getHeight()/nSplits * j);
+//                IJ.log("x="+x);
+//                IJ.log("y="+y);
 
-                // in coordinates of the raw data
-                xG = xL + xSplit*widthS;
-                yG = yL + ySplit*heightS;
-//                IJ.log("xG: "+xG);
-//                IJ.log("yG: "+yG);
+                fp.setRoi(x,y,widthS, heightS);
+                FloatProcessor fpROI = fp.crop().convertToFloatProcessor();
+                float[] pixels = (float[]) fpROI.getPixels();
 
-//                offset = (int) chosenROIsLocations3D[z]*widthS*heightS + yL*widthS + xL;
-//                offset = sortedZindices[z]*widthS*heightS + yL*widthS + xL;
-                offset = z*widthS*heightS + yL*widthS + xL;
-
-//                IJ.log("Reshape offset: "+offset);
-//                pixelsReshaped[offset] = fp.getf(xG, yG) / (float) intCoeffs3D[z]; // rescale the data according to the intensity factors
-//                pixelsReshaped[offset] = (pixels[xG + yG*widthS*nSplits] - backgroundLevel)/ (float) intCoeffs3D[z];
-                pixelsReshaped[offset] = (pixels[xG + yG*ims.getWidth()] - backgroundLevel)/ (float) intCoeffs3D[z];
+                for (int offset = 0; offset < widthS*heightS; offset++) {
+                    pixelsReshaped[offset + widthS*heightS*idz] = (pixels[offset] - backgroundLevel) / (float) intCoeffs3D[idz];
+                }
 
             }
             FloatProcessor fpOut = new FloatProcessor(widthS*heightS, nPlanes, pixelsReshaped);
             reshapedIms.setProcessor(fpOut, f+1);
         }
-
-//         Checking the shape of the data if necessary
-//        ImagePlus impReshaped = new ImagePlus("Reshaped data", reshapedIms);
-//        impReshaped.show();
 
         return reshapedIms;
     }

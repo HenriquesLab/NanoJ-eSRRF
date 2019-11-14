@@ -452,7 +452,7 @@ __kernel void calculateRadialGradientConvergence(
     float b = v_1 - 2.5f*v0 + 2.0f*v1 - 0.5f*v2;
     float c = -0.5f*v_1 + 0.5f*v1;
 
-    float v = a*z01*z01*z01 + b*z01*z01 + c*z01 + v_1; // cubic interpolation
+    float v = a*z01*z01*z01 + b*z01*z01 + c*z01 + v0; // cubic interpolation
 
 
     if (intWeighting == 1) {
