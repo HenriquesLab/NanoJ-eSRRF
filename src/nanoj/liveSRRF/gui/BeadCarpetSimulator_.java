@@ -9,6 +9,7 @@ import ij.plugin.PlugIn;
 import ij.plugin.filter.Convolver;
 import ij.process.FloatProcessor;
 import nanoj.core.java.io.LoadNanoJTable;
+import nanoj.core2.NanoJPrefs;
 
 import static nanoj.core.java.imagej.ResultsTableTools.dataMapToResultsTable;
 import static nanoj.core2.NanoJFHT.*;
@@ -27,18 +28,18 @@ public class BeadCarpetSimulator_ implements PlugIn {
 //        convMethods[n++] = "ImageJ Convolver class";
 //        convMethods[n++] = "NanoJ FHT";
 
+        NanoJPrefs prefs = new NanoJPrefs(this.getClass().getName());
         String[] simulationPattern = new String[]{"random pattern", "grid pattern"};
 
         GenericDialog gd = new GenericDialog("Bead carpet simulator");
-        gd.addChoice("Simulated pattern: ", simulationPattern, simulationPattern[0]);
-        gd.addNumericField("Image size (in nm)", 5000, 1);
-        gd.addNumericField("Bead diameter (in nm)", 40, 1);
-        gd.addNumericField("Bead density (in #/um^2)", 1.2, 2);
-        gd.addNumericField("Pixel size (in nm)", 4, 1);
-        gd.addCheckbox("Simulate displacement", false);
-        gd.addNumericField("Pixel size in displacement map: ", 50,2);
+        gd.addChoice("Simulated pattern: ", simulationPattern, prefs.get("simPattern", simulationPattern[0]));
+        gd.addNumericField("Image size (in nm)", prefs.get("imageSize", 5000), 1);
+        gd.addNumericField("Bead diameter (in nm)", prefs.get("beadDiameter", 40), 1);
+        gd.addNumericField("Bead density (in #/um^2)", prefs.get("beadDensity", 1.2f), 2);
+        gd.addNumericField("Pixel size (in nm)", prefs.get("simPixelSize", 4), 1);
+        gd.addCheckbox("Simulate displacement", prefs.get("doDisplacement", false));
+        gd.addNumericField("Pixel size in displacement map: ", prefs.get("pixelSizeDisplacement", 50),2);
 //        gd.addChoice("Convolution method", convMethods, convMethods[0]); // TODO: implement FHT convolution
-
         gd.showDialog();
 
         if (gd.wasCanceled()) {
@@ -53,6 +54,14 @@ public class BeadCarpetSimulator_ implements PlugIn {
         boolean doDisplacement = gd.getNextBoolean();
         float pixelSizeDisplacement = (float) gd.getNextNumber();
 //        String convMethodChosen = gd.getNextChoice();
+
+        prefs.set("simPattern", simPattern);
+        prefs.set("imageSize", imageSize);
+        prefs.set("beadDiameter", beadDiameter);
+        prefs.set("beadDensity", beadDensity);
+        prefs.set("simPixelSize", simPixelSize);
+        prefs.set("doDisplacement", doDisplacement);
+        prefs.set("pixelSizeDisplacement", pixelSizeDisplacement);
 
         int nBeads = (int) (imageSize/1000 * imageSize/1000 * beadDensity);
         if (simPattern.equals("grid pattern")){
@@ -87,7 +96,6 @@ public class BeadCarpetSimulator_ implements PlugIn {
 
         float[][] pixels = new float[w][w];
         float[][] pixelsDisplaced = new float[w][w];
-
 
         IJ.log("Generating coordinates...");
         int x,y;
@@ -214,7 +222,7 @@ public class BeadCarpetSimulator_ implements PlugIn {
     final static ImageStack getDisplacementMapFromNanoJtable(){
 
         // ---- Getting calibration data from the NanoJ table ----
-        IJ.log("Getting calibration file...");
+        IJ.log("Getting displacement map...");
         String displacementTablePath = IJ.getFilePath("Choose displacement table to load...");
         if (displacementTablePath == null) return null;
 
@@ -224,7 +232,7 @@ public class BeadCarpetSimulator_ implements PlugIn {
 
         Map<String, double[]> displacementTable;
         try {
-            displacementTable = new LoadNanoJTable(displacementTablePath).getData();
+            displacementTable = new LoadNanoJTable(displacementTablePath).getData(); // TODO: accept other data format??
             uxDis = displacementTable.get("ux1");
             uyDis = displacementTable.get("uy1");
             ResultsTable rt = dataMapToResultsTable(displacementTable);

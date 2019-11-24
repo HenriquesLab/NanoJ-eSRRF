@@ -25,7 +25,7 @@ import java.time.format.DateTimeFormatter;
 import static ij.IJ.selectWindow;
 import static java.lang.Math.min;
 
-public class liveSRRF_optimised_ implements PlugIn {
+public class LiveSRRF_optimised_ implements PlugIn {
 
     // Basic formats
     private int magnification,
