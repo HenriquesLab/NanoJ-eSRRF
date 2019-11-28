@@ -159,7 +159,7 @@ public class BeadCarpetSimulator_ implements PlugIn {
 
         // Convolving
         FloatProcessor fpConv = fp.duplicate().convertToFloatProcessor();
-        IJ.log("Convolving...");
+        IJ.log("Convolving raw data...");
         Convolver cv = new Convolver();
         cv.setNormalize(false);
         cv.convolve(fpConv, beadKernel, kernelSize, kernelSize);
@@ -172,6 +172,7 @@ public class BeadCarpetSimulator_ implements PlugIn {
         IJ.run(impConv, "Enhance Contrast", "saturated=0.35");
 
         if (doDisplacement){
+            IJ.log("Convolving data with displacement...");
             FloatProcessor fpConvDisplaced = fpDisplaced.duplicate().convertToFloatProcessor();
             cv.convolve(fpConvDisplaced, beadKernel, kernelSize, kernelSize);
             ImageStack imsConvDisplaced = new ImageStack(w,w);

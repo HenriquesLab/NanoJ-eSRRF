@@ -77,10 +77,11 @@ public class FluorescenceSimulator_ implements PlugIn {
         gd.addNumericField("Photon flux (s^-1):", prefs.get("photonFlux", 1000), 1);
 
         gd.addMessage("Simulation parameters");
-        gd.addNumericField("Time division: ", prefs.get("timeDivision",20), 0);
+        gd.addNumericField("Time division (max. 100): ", prefs.get("timeDivision",20), 0);
         gd.addCheckbox("Show background stack", prefs.get("showBgStack",false));
         gd.addCheckbox("Show simulated stack", prefs.get("showSimStack",false));
         gd.addCheckbox("Disable Poisson noise", prefs.get("disablePoissonNoise",false));
+        gd.addCheckbox("Show individual traces (!)", prefs.get("showTraces", false));
 
 
         gd.showDialog();
@@ -103,6 +104,7 @@ public class FluorescenceSimulator_ implements PlugIn {
         boolean showBgStack = gd.getNextBoolean();
         boolean showSimStack = gd.getNextBoolean();
         boolean disablePoissonNoise = gd.getNextBoolean();
+        boolean showTraces = gd.getNextBoolean();
 
         prefs.set("lambda", (float) lambda);
         prefs.set("NA", (float) NA);
@@ -119,72 +121,93 @@ public class FluorescenceSimulator_ implements PlugIn {
         prefs.set("showBgStack", showBgStack);
         prefs.set("showSimStack", showSimStack);
         prefs.set("disablePoissonNoise", disablePoissonNoise);
+        prefs.set("showTraces", showTraces);
 
-
+        int wSim = imp.getWidth();
+        int hSim = imp.getHeight();
         int nMolecules = xy.length;
         float simTime = exposure/timeDivision;
         float simDuration = nFrames*exposure; // in seconds
-        int traceLength = (int) (simDuration/simTime);
         double sigmaPSF = 0.21*lambda/(NA*simPixelSize); // in simulated pixelsize
-        float photonsPerFrame = photonFlux*exposure;
+        float photonsPerTimeDivision = photonFlux*exposure/timeDivision;
+        int shrinkFactor = (int) (pixelSize/simPixelSize);
+
+        // Check if there's enough memory
+        float maxMemoryRAMij = (float) IJ.maxMemory()/1e6f;  // in MB
+        float neededRAM = 0;
+        neededRAM += nMolecules*nFrames /1e6f; // in MB: intensityTraces
+        neededRAM += wSim*hSim*4 /1e6f; // in MB: Raw ground truth data
+        neededRAM += wSim*hSim*4 /1e6f; // in MB: Simulated single frame at ground truth scale
+        neededRAM += wSim*hSim*4 /1e6f; // in MB: Duplicated simulated single frame at ground truth scale (prior to binning) ?? not sure whether this is actually taking space
+        neededRAM += nFrames * wSim/shrinkFactor * hSim/shrinkFactor /1e6f; // in MB: xy coordinates from Ground truth
+        neededRAM += nMolecules*2 /1e6f; // in MB: xy coordinates from Ground truth
+
+        IJ.log("-------------------");
+        IJ.log("RAM required: "+neededRAM+" MB");
+        if (neededRAM > 0.9*maxMemoryRAMij) {
+            IJ.log("ABORTED: not enough RAM to compute.");
+            return;
+        }
+        IJ.log("-------------------");
+
 
         IJ.log("kON: "+kON+" s^-1 (Tau_OFF: "+1000*(1/kON)+"ms)");
         IJ.log("kOFF: "+kOFF+" s^-1 (Tau_ON: "+1000*(1/kOFF)+"ms)");
         IJ.log("Photon flux: "+photonFlux+" photons/s");
         IJ.log("Acquisition time: "+simDuration+"s ("+nFrames+" frames at "+exposure*1000+"ms exposure)");
-
         IJ.log("PSF sigma: "+(sigmaPSF*simPixelSize)+" nm");
 
-        boolean[][] moleculeTimeTraces = new boolean[nMolecules][traceLength];
+        IJ.log("Creating variable for single molecule traces...");
+        byte[] thisTrace;
+        byte[][] intensityTraces = new byte[nMolecules][nFrames]; // minimising memory consumption here: this is the big boy
+        IJ.log("RAM: " + IJ.freeMemory());
 
-        IJ.log("Simulating time trace from single molecule...");
+        IJ.log("Simulating time traces...");
         for (int i = 0; i < nMolecules; i++) {
             IJ.showProgress(i, nMolecules);
-            boolean[] thisTrace = getTimeTraceSingleMolecule(kON, kOFF, simTime, simDuration);
-            for (int j = 0; j < traceLength; j++) {
-                moleculeTimeTraces[i][j] = thisTrace[j];
+            thisTrace = getTimeTraceSingleMolecule(kON, kOFF, timeDivision, exposure, nFrames, showTraces);
+            for (int j = 0; j < nFrames; j++) {
+                intensityTraces[i][j] = thisTrace[j];
             }
         }
 
-        int wSim = imp.getWidth();
-        int hSim = imp.getHeight();
-        int shrinkFactor = (int) (pixelSize/simPixelSize);
+        System.gc(); // collect garbage, memory can be an issue here
 
-        ImageStack imsSim = new ImageStack(wSim, hSim);
+        ImageStack imsSim = new ImageStack();
         ImageStack imsFullSim = new ImageStack();
         ImageStack imsBg = new ImageStack();
-        ImageStack imsSimNoBg = new ImageStack();
-        float[] intensities;
+
         FloatProcessor fpSim;
         FloatProcessor fpSimBinned, fpBg;
-        ImageProcessor ipBinned;
+//        ImageProcessor ipBinned;
         float[] pixels;
+        Binner binner = new Binner();
 
         IJ.log("Generating fluorescence images...");
 
         for (int f = 0; f < nFrames; f++) {
+
             IJ.showProgress(f, nFrames);
+            System.gc(); // collect garbage, memory can be an issue here
+            System.gc(); // collect garbage, memory can be an issue here
+
             pixels = new float[wSim*hSim];
 
-            intensities = new float[nMolecules];
             for (int m = 0; m < nMolecules; m++) {
-                for (int t = 0; t < timeDivision; t++) {
-                    if (moleculeTimeTraces[m][t + f*timeDivision]) intensities[m] += 1.0f/timeDivision;
-                }
-                pixels[xy[m][0]*wSim + xy[m][1]] += intensities[m]*photonsPerFrame; // ADC
+                pixels[xy[m][0]*wSim + xy[m][1]] += (float) intensityTraces[m][f] * photonsPerTimeDivision; // in photons
             }
 
             fpSim = new FloatProcessor(wSim, hSim, pixels);
             fpSim.blurGaussian(sigmaPSF);
             if (showSimStack) imsSim.addSlice(fpSim);
 
-            ipBinned = fpSim.duplicate();
-            Binner binner = new Binner();
-            ipBinned = binner.shrink(ipBinned, shrinkFactor, shrinkFactor, Binner.SUM);
+//            ipBinned = fpSim.duplicate(); // this also converts back to ImageProcessor, necessary for the Binner to work
+//            ipBinned = binner.shrink(ipBinned, shrinkFactor, shrinkFactor, Binner.SUM);
+//            fpSimBinned = ipBinned.duplicate().convertToFloatProcessor();
 
-            fpSimBinned = ipBinned.duplicate().convertToFloatProcessor();
+            fpSimBinned = binner.shrink(fpSim, shrinkFactor, shrinkFactor, Binner.SUM).convertToFloatProcessor();
 //            fpSimBinned = fpSim.resize(w, h).convertToFloatProcessor();  // this doesn't do what we want. Doesn't add but decimates
-            if (!disablePoissonNoise) fpSimBinned = addPoissonNoise(fpSimBinned).convertToFloatProcessor();
+            if (!disablePoissonNoise) fpSimBinned = addPoissonNoise(fpSimBinned.convertToFloatProcessor()).convertToFloatProcessor();
             fpSimBinned.multiply(cameraGain);
 
             fpBg = generateBackgroundGaussianNoise(fpSimBinned.getWidth(), fpSimBinned.getHeight(), cameraBaseline, stdBgNoise*cameraGain);
@@ -210,7 +233,7 @@ public class FluorescenceSimulator_ implements PlugIn {
             impBg.show();
         }
 
-        ImagePlus impSimBinned = new ImagePlus("Simulated stack with binning", imsFullSim);
+        ImagePlus impSimBinned = new ImagePlus(imp.getShortTitle()+" - Fluorescence stack", imsFullSim);
         Calibration calStack = impSimBinned.getCalibration();
         calStack.setUnit("um");
         calStack.pixelHeight = pixelSize/1000;
@@ -270,31 +293,35 @@ public class FluorescenceSimulator_ implements PlugIn {
     }
 
 
-    public static boolean[] getTimeTraceSingleMolecule(float kON, float kOFF, float simTime, float duration){
+    public static byte[] getTimeTraceSingleMolecule(float kON, float kOFF, int timeDivision, float exposure, int nFrames, boolean showTraces){
 
-        boolean showPlot = false;
+//        // ---- user set -----
+//        boolean showTraces = true;
+//        // -------------------
+
+        float simTime = exposure/timeDivision;
+        float duration = nFrames*exposure;
+
         Random rnd = new Random();
         boolean ON;
         double p = rnd.nextDouble();
-//        if (kON/kOFF > 1) ON = (p > (kOFF/kON)); // TODO: check that this is true
-//        else ON = (p < (kON/kOFF));
+
+        // Set initial probability of being ON at the start
         ON = (p < kON/(kON + kOFF));
-
-//        IJ.log("START: Molecule is "+ON);
-
         int traceLength = (int) (duration/simTime);
-        boolean[] switchingTrace = new boolean[traceLength];
+        byte[] switchingTrace = new byte[traceLength];
         double[] switchingTraceDouble = null;
-        if (showPlot) {
+        double[] intensityTraceDouble = null;
+        if (showTraces) {
             switchingTraceDouble = new double[traceLength];
+            intensityTraceDouble = new double[nFrames];
         }
-
-//        IJ.log("Trace length: "+traceLength);
 
         int nextTimeChange;
         int traceID = 0;
         int nSwitches = 0;
 
+        // Generate the temporally fine trace of switching
         while ((traceID < traceLength)) {
 //            IJ.log("Current trace ID: "+traceID);
 //            IJ.log("Molecule is "+ON);
@@ -305,10 +332,9 @@ public class FluorescenceSimulator_ implements PlugIn {
 
             int i = 0;
             while ((i < nextTimeChange) && (traceID < traceLength)) {
-                switchingTrace[traceID] = ON;
-                if (showPlot) {
-                    if (ON) switchingTraceDouble[traceID] = 1;
-                    else switchingTraceDouble[traceID] = 0;
+                if (ON) {
+                    switchingTrace[traceID] = 1;
+                    if (showTraces) switchingTraceDouble[traceID] = 1;
                 }
                 i++;
                 traceID++;
@@ -317,32 +343,34 @@ public class FluorescenceSimulator_ implements PlugIn {
             nSwitches ++;
         }
 
+        // Bin the time trace to the frame size already (huge saving in memory, a factor of timeDivision)
+        byte[] intensityTrace = new byte[nFrames];
+        for (int f = 0; f < nFrames; f++) {
+            for (int i = 0; i < timeDivision; i++) {
+                intensityTrace[f] += switchingTrace[f*timeDivision + i]; // byte should not exceed 127!!! TODO: adjust to use full 8-bits by starting at -128?
+                if (showTraces) intensityTraceDouble[f] += switchingTrace[f*timeDivision + i];
+            }
+        }
 
-        if (showPlot) {
-            Plot tracePlot = new Plot("Trace plot", "Time", "Switching state");
-            tracePlot.add("line", switchingTraceDouble);
-            tracePlot.show();
+        // Plot the switching trace if necessary
+        if (showTraces) {
+            Plot blinkingTracePlot = new Plot("Blink trace plot", "Time (time division)", "Switching state");
+            blinkingTracePlot.add("line", switchingTraceDouble);
+            blinkingTracePlot.show();
 
-            // Calculating the ON and OFF times from the trace
+            Plot IntensityTracePlot = new Plot("Intensity trace plot", "Time (frames)", "Intensity state");
+            IntensityTracePlot.add("line", intensityTraceDouble);
+            IntensityTracePlot.show();
+
+            // Calculating the ON and OFF times from the trace and print it
             float avONtime = (float) sum(switchingTraceDouble)*simTime*1000/(nSwitches/2); // in ms
             float avOFFtime = 1000*(duration - (float) sum(switchingTraceDouble)*simTime)/(nSwitches/2);  // in ms
             IJ.log("Number of blinks: "+(nSwitches/2));
             IJ.log("Average ON time: "+avONtime+" ms");
             IJ.log("Average OFF time: "+avOFFtime+" ms");
-
         }
 
-        //        IJ.log("Looping test");
-//        Random rnd = new Random();
-//        double p;
-//        for (int i = 0; i < 10; i++) {
-//            p = rnd.nextDouble();
-//            double nextTimeChange = (-Math.log(p) / kOFF); // in unit of simTime
-//            IJ.log("p="+p);
-//            IJ.log("Next time: "+1000*nextTimeChange+" ms");
-//        }
-
-        return switchingTrace;
+        return intensityTrace;
     }
 
 
