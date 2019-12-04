@@ -10,7 +10,6 @@ import ij.measure.ResultsTable;
 import ij.plugin.Binner;
 import ij.plugin.PlugIn;
 import ij.process.FloatProcessor;
-import ij.process.ImageProcessor;
 import nanoj.core2.NanoJPrefs;
 
 import java.util.LinkedHashMap;
@@ -63,7 +62,7 @@ public class FluorescenceSimulator_ implements PlugIn {
         gd.addNumericField("Emission wavelength (nm):", prefs.get("lambda", 700), 2); // TODO: save prefs
         gd.addNumericField("NA:", prefs.get("NA", 1.15f), 2);
         gd.addNumericField("Number of frames: ", prefs.get("nFrames", 100), 0);
-        gd.addNumericField("Exposure time (ms): ", prefs.get("exposure",10), 1);
+        gd.addNumericField("Exposure time (ms): ", prefs.get("exposure",10.0f), 1);
         gd.addNumericField("Pixel size (nm): ", prefs.get("pixelSize",100), 1);
 
         gd.addMessage("Camera parameters");
@@ -83,13 +82,12 @@ public class FluorescenceSimulator_ implements PlugIn {
         gd.addCheckbox("Disable Poisson noise", prefs.get("disablePoissonNoise",false));
         gd.addCheckbox("Show individual traces (!)", prefs.get("showTraces", false));
 
-
         gd.showDialog();
 
         float lambda = (float) gd.getNextNumber();
         float NA = (float) gd.getNextNumber();
         int nFrames = (int) gd.getNextNumber();
-        float exposure = ((float) gd.getNextNumber())/1000; // convert to seconds
+        double exposure = gd.getNextNumber(); // exposure needs to be double as it's divided by 1000 and gets messed up as float
         float pixelSize = (float) gd.getNextNumber();
 
         float cameraGain = (float) gd.getNextNumber();
@@ -108,8 +106,8 @@ public class FluorescenceSimulator_ implements PlugIn {
 
         prefs.set("lambda", (float) lambda);
         prefs.set("NA", (float) NA);
-        prefs.set("nFrames", nFrames);
-        prefs.set("exposure", (float) (1000*exposure));
+        prefs.set("nFrames", (int) nFrames);
+        prefs.set("exposure", (float) (exposure));
         prefs.set("pixelSize", (float) pixelSize);
         prefs.set("cameraGain", (float) cameraGain);
         prefs.set("stdBgNoise", (float) stdBgNoise);
@@ -126,24 +124,26 @@ public class FluorescenceSimulator_ implements PlugIn {
         int wSim = imp.getWidth();
         int hSim = imp.getHeight();
         int nMolecules = xy.length;
-        float simTime = exposure/timeDivision;
-        float simDuration = nFrames*exposure; // in seconds
+        exposure /= 1000.0f; // convert to seconds
+
+        double simDuration = (double) nFrames * exposure; // in seconds
         double sigmaPSF = 0.21*lambda/(NA*simPixelSize); // in simulated pixelsize
-        float photonsPerTimeDivision = photonFlux*exposure/timeDivision;
+        double photonsPerTimeDivision = photonFlux*exposure/timeDivision;
         int shrinkFactor = (int) (pixelSize/simPixelSize);
 
         // Check if there's enough memory
         float maxMemoryRAMij = (float) IJ.maxMemory()/1e6f;  // in MB
-        float neededRAM = 0;
-        neededRAM += nMolecules*nFrames /1e6f; // in MB: intensityTraces
-        neededRAM += wSim*hSim*4 /1e6f; // in MB: Raw ground truth data
-        neededRAM += wSim*hSim*4 /1e6f; // in MB: Simulated single frame at ground truth scale
-        neededRAM += wSim*hSim*4 /1e6f; // in MB: Duplicated simulated single frame at ground truth scale (prior to binning) ?? not sure whether this is actually taking space
-        neededRAM += nFrames * wSim/shrinkFactor * hSim/shrinkFactor /1e6f; // in MB: xy coordinates from Ground truth
-        neededRAM += nMolecules*2 /1e6f; // in MB: xy coordinates from Ground truth
+        float neededRAM = (float) nMolecules*nFrames /1e6f; // in MB: intensityTraces
+        neededRAM += (float) wSim*hSim*4 /1e6f; // in MB: Raw ground truth data
+        neededRAM += (float) wSim*hSim*4 /1e6f; // in MB: Simulated single frame at ground truth scale
+        neededRAM += (float) wSim*hSim*4 /1e6f; // in MB: Duplicated simulated single frame at ground truth scale (prior to binning) ?? not sure whether this is actually taking space
+        neededRAM += (float) nFrames * (float) wSim/shrinkFactor * (float) hSim/shrinkFactor /1e6f; // in MB: xy coordinates from Ground truth
+        neededRAM += (float) nMolecules*2 /1e6f; // in MB: xy coordinates from Ground truth
 
         IJ.log("-------------------");
-        IJ.log("RAM required: "+neededRAM+" MB");
+        if (neededRAM < 1000) IJ.log("RAM required: "+neededRAM+" MB");
+        else IJ.log("RAM required: "+(neededRAM/1000)+" GB");
+
         if (neededRAM > 0.9*maxMemoryRAMij) {
             IJ.log("ABORTED: not enough RAM to compute.");
             return;
@@ -171,26 +171,24 @@ public class FluorescenceSimulator_ implements PlugIn {
             }
         }
 
-        System.gc(); // collect garbage, memory can be an issue here
-
         ImageStack imsSim = new ImageStack();
         ImageStack imsFullSim = new ImageStack();
         ImageStack imsBg = new ImageStack();
 
         FloatProcessor fpSim;
         FloatProcessor fpSimBinned, fpBg;
-//        ImageProcessor ipBinned;
         float[] pixels;
         Binner binner = new Binner();
+        // Run garbage collector
+        System.gc();
 
         IJ.log("Generating fluorescence images...");
 
         for (int f = 0; f < nFrames; f++) {
 
+            // Run garbage collector
+            System.gc();
             IJ.showProgress(f, nFrames);
-            System.gc(); // collect garbage, memory can be an issue here
-            System.gc(); // collect garbage, memory can be an issue here
-
             pixels = new float[wSim*hSim];
 
             for (int m = 0; m < nMolecules; m++) {
@@ -293,14 +291,14 @@ public class FluorescenceSimulator_ implements PlugIn {
     }
 
 
-    public static byte[] getTimeTraceSingleMolecule(float kON, float kOFF, int timeDivision, float exposure, int nFrames, boolean showTraces){
+    public static byte[] getTimeTraceSingleMolecule(float kON, float kOFF, int timeDivision, double exposure, int nFrames, boolean showTraces){
 
 //        // ---- user set -----
 //        boolean showTraces = true;
 //        // -------------------
 
-        float simTime = exposure/timeDivision;
-        float duration = nFrames*exposure;
+        double simTime = exposure/timeDivision;
+        double duration = nFrames*exposure;
 
         Random rnd = new Random();
         boolean ON;
@@ -309,6 +307,8 @@ public class FluorescenceSimulator_ implements PlugIn {
         // Set initial probability of being ON at the start
         ON = (p < kON/(kON + kOFF));
         int traceLength = (int) (duration/simTime);
+//        IJ.log("Tracelength: "+traceLength);
+
         byte[] switchingTrace = new byte[traceLength];
         double[] switchingTraceDouble = null;
         double[] intensityTraceDouble = null;
@@ -348,7 +348,7 @@ public class FluorescenceSimulator_ implements PlugIn {
         for (int f = 0; f < nFrames; f++) {
             for (int i = 0; i < timeDivision; i++) {
                 intensityTrace[f] += switchingTrace[f*timeDivision + i]; // byte should not exceed 127!!! TODO: adjust to use full 8-bits by starting at -128?
-                if (showTraces) intensityTraceDouble[f] += switchingTrace[f*timeDivision + i];
+                if (showTraces) intensityTraceDouble[f] += (double) switchingTrace[f*timeDivision + i];
             }
         }
 
@@ -363,8 +363,8 @@ public class FluorescenceSimulator_ implements PlugIn {
             IntensityTracePlot.show();
 
             // Calculating the ON and OFF times from the trace and print it
-            float avONtime = (float) sum(switchingTraceDouble)*simTime*1000/(nSwitches/2); // in ms
-            float avOFFtime = 1000*(duration - (float) sum(switchingTraceDouble)*simTime)/(nSwitches/2);  // in ms
+            double avONtime = (float) sum(switchingTraceDouble)*simTime*1000/(nSwitches/2); // in ms
+            double avOFFtime = 1000*(duration - (float) sum(switchingTraceDouble)*simTime)/(nSwitches/2);  // in ms
             IJ.log("Number of blinks: "+(nSwitches/2));
             IJ.log("Average ON time: "+avONtime+" ms");
             IJ.log("Average OFF time: "+avOFFtime+" ms");
