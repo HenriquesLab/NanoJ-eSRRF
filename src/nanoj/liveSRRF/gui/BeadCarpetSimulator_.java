@@ -118,8 +118,8 @@ public class BeadCarpetSimulator_ implements PlugIn {
 
             pixels[x][y] = 1;
             if (doDisplacement) {
-                xyCoordDisplaced[i][0] = xyCoord[i][0] + pixelSizeDisplacement * (float) fpUX.getInterpolatedPixel(fpUX.getWidth()*x/w, fpUX.getHeight()*y/w);
-                xyCoordDisplaced[i][1] = xyCoord[i][1] + pixelSizeDisplacement * (float) fpUY.getInterpolatedPixel(fpUX.getWidth()*x/w, fpUX.getHeight()*y/w); // TODO: check distances between beads?
+                xyCoordDisplaced[i][0] = xyCoord[i][0] + pixelSizeDisplacement * (float) fpUX.getInterpolatedPixel(fpUX.getWidth()*(float) x/w, fpUX.getHeight()*(float) y/w);
+                xyCoordDisplaced[i][1] = xyCoord[i][1] + pixelSizeDisplacement * (float) fpUY.getInterpolatedPixel(fpUX.getWidth()*(float) x/w, fpUX.getHeight()*(float) y/w); // TODO: check distances between beads?
                 x = Math.round(Math.max(Math.min(w*xyCoordDisplaced[i][0]/imageSize, w-1),0));
                 y = Math.round(Math.max(Math.min(w*xyCoordDisplaced[i][1]/imageSize, w-1),0));
                 pixelsDisplaced[x][y] = 1;

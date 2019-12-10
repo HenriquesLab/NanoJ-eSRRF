@@ -162,7 +162,7 @@ public class FluorescenceSimulator_ implements PlugIn {
         byte[][] intensityTraces = new byte[nMolecules][nFrames]; // minimising memory consumption here: this is the big boy
         IJ.log("RAM: " + IJ.freeMemory());
 
-        IJ.log("Simulating time traces...");
+        IJ.log("Simulating time traces..."); // TODO: add a timer here to display how long it took to do this loop --> multi-thread?
         for (int i = 0; i < nMolecules; i++) {
             IJ.showProgress(i, nMolecules);
             thisTrace = getTimeTraceSingleMolecule(kON, kOFF, timeDivision, exposure, nFrames, showTraces);
@@ -279,7 +279,7 @@ public class FluorescenceSimulator_ implements PlugIn {
         data.put("Y-position (pixels)", yArray);
 
         ResultsTable rt = dataMapToResultsTable(data);
-        rt.show("Calibration-Table");
+        rt.show("Molecule coordinates-Table");
 
 //        try {
 //            saveNanoJTable(filePath+" - MFM_CalibrationTable.njt", rt);
