@@ -57,7 +57,7 @@ public class FluorescenceSimulator_ implements PlugIn {
         ImageStack imsGT = imp.getStack();
         int[][] xy = getMoleculePositionsFromGroundTruth(imsGT);
 
-        NonBlockingGenericDialog gd = new NonBlockingGenericDialog("Fluorescence simulator");
+        NonBlockingGenericDialog gd = new NonBlockingGenericDialog("Fluorescence simulator - v1.0");
         gd.addMessage("Microscope parameters");
         gd.addNumericField("Emission wavelength (nm):", prefs.get("lambda", 700), 2); // TODO: save prefs
         gd.addNumericField("NA:", prefs.get("NA", 1.15f), 2);
@@ -165,7 +165,7 @@ public class FluorescenceSimulator_ implements PlugIn {
         IJ.log("Simulating time traces..."); // TODO: add a timer here to display how long it took to do this loop --> multi-thread?
         for (int i = 0; i < nMolecules; i++) {
             IJ.showProgress(i, nMolecules);
-            thisTrace = getTimeTraceSingleMolecule(kON, kOFF, timeDivision, exposure, nFrames, showTraces);
+            thisTrace = getTimeTraceSingleMolecule(kON, kOFF, timeDivision, exposure, nFrames, showTraces); // TODO: how about generating the traces necessary just for a single frame, one frame at a time --> alleviates requirement for large amount of RAM
             for (int j = 0; j < nFrames; j++) {
                 intensityTraces[i][j] = thisTrace[j];
             }
@@ -196,7 +196,7 @@ public class FluorescenceSimulator_ implements PlugIn {
             }
 
             fpSim = new FloatProcessor(wSim, hSim, pixels);
-            fpSim.blurGaussian(sigmaPSF);
+            fpSim.blurGaussian(sigmaPSF); // TODO: this could be replaced by an erf-erf model instead of convolution --> probably faster
             if (showSimStack) imsSim.addSlice(fpSim);
 
 //            ipBinned = fpSim.duplicate(); // this also converts back to ImageProcessor, necessary for the Binner to work

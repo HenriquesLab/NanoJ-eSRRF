@@ -22,7 +22,6 @@ import java.io.IOException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
-import static ij.IJ.selectWindow;
 import static java.lang.Math.min;
 
 public class LiveSRRF_optimised_ implements PlugIn {

@@ -39,6 +39,7 @@ public class Extract3D_PSF_ extends _BaseDialog_ {
     private int radius, nROIs;
     private boolean showPeaks, crop, get3Dpsf;
     private float[][] peaks;
+    private String fittingMethod;
 
     @Override
     public boolean beforeSetupDialog(String arg) {
@@ -55,6 +56,7 @@ public class Extract3D_PSF_ extends _BaseDialog_ {
 
         gd.addNumericField("Max FWHM (pixels)", getPrefs("radius", 5), 0);
         gd.addNumericField("Number of ROIs to use", getPrefs("nROIs", 100), 0);
+        gd.addChoice("Fitting method: ", new String[]{"Gaussian", "Integrated gaussian"}, "Integrated gaussian");
 
         gd.addCheckbox("Crop PSF size to meaningful data", getPrefs("crop", true));
         gd.addCheckbox("Show detected peaks", getPrefs("showPeaks", false));
@@ -71,6 +73,7 @@ public class Extract3D_PSF_ extends _BaseDialog_ {
         crop = gd.getNextBoolean();
         showPeaks = gd.getNextBoolean();
         get3Dpsf = gd.getNextBoolean();
+        fittingMethod = gd.getNextChoice();
 
         setPrefs("radius", radius);
         setPrefs("nROIs", nROIs);
@@ -240,10 +243,7 @@ public class Extract3D_PSF_ extends _BaseDialog_ {
 
             ImagePlus imp3DPSF = new ImagePlus("3D PSF stack", imsPSF3D);
             imp3DPSF.show();
-
         }
-
-
 
     }
 
@@ -263,7 +263,12 @@ public class Extract3D_PSF_ extends _BaseDialog_ {
             this.y = y;
             this.amplitudes = amplitudes;
             this.ip = imsIn.getProcessor(n+1).convertToFloatProcessor();
-            this.fitter = new GaussianFitMinimizer(ip, 1.5, ip.getWidth()/2d, ip.getHeight()/2d);
+
+            int model = 0; // default: Gaussian
+            if (fittingMethod.equals("Gaussian")) model = GaussianFitMinimizer.GAUSSIAN;
+            if (fittingMethod.equals("Integrated gaussian")) model = GaussianFitMinimizer.INTEGRATED_GAUSSIAN;
+
+            this.fitter = new GaussianFitMinimizer(ip, 1.5, ip.getWidth()/2d, ip.getHeight()/2d, model);
             this.w = ip.getWidth();
             this.h = ip.getHeight();
         }
