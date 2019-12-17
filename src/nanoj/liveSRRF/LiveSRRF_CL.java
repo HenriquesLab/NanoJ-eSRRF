@@ -44,7 +44,7 @@ public class LiveSRRF_CL {
             chosenROIsLocations3D;
 
     public final int gradientMag = 2;
-    public final int nReconstructions = 2; // Currently only STD and AVG
+    public final int nReconstructions = 2; // Currently only VAR and AVG
 
     private final float vxy_offset = 0.5f;
     private final int vxy_ArrayShift = 1;
@@ -70,7 +70,7 @@ public class LiveSRRF_CL {
             kernelResetFramePosition,
             kernelCalculateSRRF,
             kernelCalculateMPmap,
-            kernelCalculateStd,
+            kernelCalculateVar,
             kernelCorrectMPmap;
 
     static private CLPlatform clPlatformMaxFlop;
@@ -318,7 +318,7 @@ public class LiveSRRF_CL {
         kernelIncrementFramePosition = programLiveSRRF.createCLKernel("kernelIncrementFramePosition");
         kernelResetFramePosition = programLiveSRRF.createCLKernel("kernelResetFramePosition");
         kernelCalculateMPmap = programLiveSRRF.createCLKernel("kernelCalculateMPmap");
-        kernelCalculateStd = programLiveSRRF.createCLKernel("kernelCalculateStd");
+        kernelCalculateVar = programLiveSRRF.createCLKernel("kernelCalculateVar");
         kernelCorrectMPmap = programLiveSRRF.createCLKernel("kernelCorrectMPmap");
 
         int argn;
@@ -368,7 +368,7 @@ public class LiveSRRF_CL {
         kernelCalculateMPmap.setArg(argn++, clBufferMPmap); // make sure type is the same !!
 
         argn = 0;
-        kernelCalculateStd.setArg(argn++, clBufferOut);
+        kernelCalculateVar.setArg(argn++, clBufferOut);
 
         argn = 0;
         kernelCorrectMPmap.setArg(argn++, clBufferOut); // make sure type is the same !!
@@ -508,14 +508,14 @@ public class LiveSRRF_CL {
     // --- Read the output buffer ---
     public void readSRRFbuffer() {
 
-        // Calculate the STD on the OutputArray on the GPU
+        // Calculate the VAR on the OutputArray on the GPU
         int id = prof.startTimer();
         queue.finish(); // Make sure everything is done
         int nDimMag;
         if (do3DSRRF) nDimMag = magnification * magnification * magnification;
         else nDimMag = magnification * magnification;
-        queue.put1DRangeKernel(kernelCalculateStd, 0, nDimMag*singleFrameSize,0);
-        prof.recordTime("Calculate STD image", prof.endTimer(id));
+        queue.put1DRangeKernel(kernelCalculateVar, 0, nDimMag*singleFrameSize,0);
+        prof.recordTime("Calculate VAR image", prof.endTimer(id));
 
         // weirdness..... in 3D.............................
         if (doMPmapCorrection) { // TODO: is this going to be a problem for 3D? probably yes
@@ -541,36 +541,12 @@ public class LiveSRRF_CL {
 //            IJ.log("Reading frame " + p);
                 float[] dataSRRF = new float[widthM * heightM];
                 for (int i = 0; i < widthM * heightM; i++) {
-                    dataSRRF[i] = bufferSRRF.get(i + p * widthM * widthM + nR*nDimMag*singleFrameSize);
+                    dataSRRF[i] = bufferSRRF.get(i + p * widthM * heightM + nR*nDimMag*singleFrameSize);
                     if (Float.isNaN(dataSRRF[i])) dataSRRF[i] = 0; // make sure we dont get any weirdness
                 }
                 imsSRRF.addSlice(new FloatProcessor(widthM, heightM, dataSRRF));
             }
         }
-
-//        for (int p = 0; p < nPlanesM; p++) {
-////            IJ.log("Reading frame " + p);
-//
-//            // Load std
-//            float[] dataSRRF = new float[widthM * heightM];
-//            for (int n = 0; n < widthM * heightM; n++) {
-//                dataSRRF[n] = bufferSRRF.get(n + p * widthM * widthM + nDimMag*singleFrameSize);
-//                if (Float.isNaN(dataSRRF[n])) dataSRRF[n] = 0; // make sure we dont get any weirdness
-//            }
-//            imsSRRF.addSlice(new FloatProcessor(widthM, heightM, dataSRRF));
-//        }
-//
-//        for (int p = 0; p < nPlanesM; p++) {
-////            IJ.log("Reading frame " + p);
-//
-//            // Load interplated
-//            float[] dataSRRF = new float[widthM * heightM];
-//            for (int n = 0; n < widthM * heightM; n++) {
-//                dataSRRF[n] = bufferSRRF.get(n + p * widthM * widthM + 2*nDimMag*singleFrameSize);
-//                if (Float.isNaN(dataSRRF[n])) dataSRRF[n] = 0; // make sure we dont get any weirdness
-//            }
-//            imsSRRF.addSlice(new FloatProcessor(widthM, heightM, dataSRRF));
-//        }
 
     }
 

@@ -415,13 +415,13 @@ __kernel void calculateRadialGradientConvergence(
 //}
 
 
-// Kernel: calculate STD image from the OutputArray
-__kernel void kernelCalculateStd(
+// Kernel: calculate VAR image from the OutputArray
+__kernel void kernelCalculateVar(
     __global float* OutArray
     ){
 
     const int offset = get_global_id(0);
-    OutArray[offset + whM] = sqrt(OutArray[offset + whM] - OutArray[offset]*OutArray[offset]);
+    OutArray[offset + whM] = OutArray[offset + whM] - OutArray[offset]*OutArray[offset];
 
 }
 
@@ -458,7 +458,7 @@ __kernel void kernelCalculateMPmap(
     ){
 
     const int offset_MPmap = get_global_id(0);
-    const int frame = offset_MPmap/(magnification*magnification); // 0 or 1 depending on whether we're dealing with AVG or STD
+    const int frame = offset_MPmap/(magnification*magnification); // 0 or 1 depending on whether we're dealing with AVG or VAR
     const int y_MPmap = (offset_MPmap - frame*(magnification*magnification))/magnification;
     const int x_MPmap = offset_MPmap - y_MPmap*magnification - frame*(magnification*magnification);
 
@@ -484,7 +484,7 @@ __kernel void kernelCorrectMPmap(
 ){
 
     const int offset = get_global_id(0);
-    const int frame = offset/whM; // 0 or 1 depending on whether we're dealing with AVG or STD
+    const int frame = offset/whM; // 0 or 1 depending on whether we're dealing with AVG or VAR
     const int yM = (offset - frame*(whM))/wM;
     const int xM = offset - yM*wM - frame*whM;
     const int x = xM/magnification;

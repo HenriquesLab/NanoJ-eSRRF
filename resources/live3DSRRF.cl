@@ -512,12 +512,12 @@ __kernel void calculateRadialGradientConvergence(
 
 
 // Kernel: calculate STD image from the OutputArray
-__kernel void kernelCalculateStd(
+__kernel void kernelCalculateVar(
     __global float* OutArray
     ){
 
     const int offset = get_global_id(0);
-    OutArray[offset + whdM] = sqrt(OutArray[offset + whdM] - OutArray[offset]*OutArray[offset]);
+    OutArray[offset + whdM] = OutArray[offset + whdM] - OutArray[offset]*OutArray[offset];
 
 }
 
