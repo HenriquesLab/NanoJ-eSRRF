@@ -137,7 +137,7 @@ public class LiveSRRF_optimised_ implements PlugIn {
         IJ.log("\\Clear");  // Clear the log window
         IJ.log("-------------------------------------");
         IJ.log("-------------------------------------");
-        IJ.log("liveSRRF " + LiveSRRFVersion); //TODO: what's taking so long on Wolverine?
+        IJ.log("liveSRRF " + LiveSRRFVersion);
         IJ.log("Max RAM available: "+ (float) Math.round(maxMemoryRAMij*100)/100 + " MB");
 
         LocalDateTime now = LocalDateTime.now();
@@ -389,11 +389,11 @@ public class LiveSRRF_optimised_ implements PlugIn {
             impMPmap.show();
         }
 
-        if (do3DSRRF){
-            ImageStack imsAlignedPixels = liveSRRF.readAlignedPixels();
-            ImagePlus impAlignedPixels = new ImagePlus("Aligned pixels", imsAlignedPixels);
-            impAlignedPixels.show();
-        }
+//        if (do3DSRRF){
+//            ImageStack imsAlignedPixels = liveSRRF.readAlignedPixels();
+//            ImagePlus impAlignedPixels = new ImagePlus("Aligned pixels", imsAlignedPixels);
+//            impAlignedPixels.show();
+//        }
 
         // Release the GPU
         liveSRRF.release();
@@ -538,6 +538,7 @@ public class LiveSRRF_optimised_ implements PlugIn {
         gd.addDialogListener(dl);
 
         gd.showDialog();
+//        grabSettingsMainGUI(gd); // TODO: check that this does the right thing: namely picking up the values even if nothing was changed in the GUI (re. listener) --> NOPE
 
         // If the GUI was cancelled
         return gd.wasCanceled();
@@ -758,8 +759,8 @@ public class LiveSRRF_optimised_ implements PlugIn {
 
         prefs.set("magnification", (float) magnification);
         prefs.set("fwhm", fwhm);
-        prefs.set("nFrameForSRRFfromUser", nFrameForSRRFfromUser);
         prefs.set("sensitivity", sensitivity);
+        prefs.set("nFrameForSRRFfromUser", nFrameForSRRFfromUser);
         prefs.set("correctVibration", correctVibration);
 
         prefs.set("chosenTemporalAnalysis", chosenTemporalAnalysis);
