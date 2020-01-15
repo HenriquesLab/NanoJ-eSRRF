@@ -192,6 +192,7 @@ public class BeadCarpetSimulator_ implements PlugIn {
 
     final static float[] getBeadKernel(float beadDiameter, float pixelSize){
 
+        // This kernel simulates the beads as spheres full of dye so returns the integral (1D) under the curve of a circle
         int kernelSize = (int) (beadDiameter/pixelSize) + 2;
 //        IJ.log("Kernel size (in function): "+kernelSize);
 //        IJ.log("Kernel size modulus: "+(kernelSize % 2));
