@@ -388,11 +388,13 @@ public class LiveSRRF_CL {
 
     // --- Release GPU context ---
     public void release() {
-        //context.release();
-        while (!context.isReleased()){
-            IJ.log("-------------");
-            IJ.log("Releasing context...");
-            context.release();
+
+        if (context != null) {
+            while (!context.isReleased()) {
+                IJ.log("-------------");
+                IJ.log("Releasing context...");
+                context.release();
+            }
         }
     }
 
