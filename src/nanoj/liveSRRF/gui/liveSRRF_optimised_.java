@@ -11,7 +11,6 @@ import ij.plugin.PlugIn;
 import nanoj.core.java.io.zip.SaveFileInZip;
 import nanoj.core.java.io.zip.virtualStacks.FullFramesVirtualStack;
 import nanoj.core2.NanoJPrefs;
-import nanoj.core2.NanoJProfiler;
 import nanoj.core2.NanoJUsageTracker;
 import nanoj.liveSRRF.XYShiftCalculator;
 import org.python.modules.math;
@@ -22,7 +21,6 @@ import java.io.IOException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
-import static ij.IJ.selectWindow;
 import static java.lang.Math.min;
 
 public class liveSRRF_optimised_ implements PlugIn {
@@ -57,7 +55,8 @@ public class liveSRRF_optimised_ implements PlugIn {
             writeSuggestOKeyed = false,
             doMPmapCorrection,
             showImStabPlot,
-            intWeighting;
+            intWeighting,
+            showGradients;
 
     private final String LiveSRRFVersion = "v1.10";
     private String pathToDisk = "",
@@ -82,7 +81,6 @@ public class liveSRRF_optimised_ implements PlugIn {
 
     // Advanced formats
     private NanoJPrefs prefs = new NanoJPrefs(this.getClass().getName());
-    private NanoJProfiler prof = new NanoJProfiler();
     private liveSRRF_CL liveSRRF;
     private SaveFileInZip saveFileInZip;
     private CLDevice chosenDevice = null;
@@ -115,6 +113,8 @@ public class liveSRRF_optimised_ implements PlugIn {
         writeToDiskToUse = false;
         intWeighting = prefs.get("intWeighting", true);
         doMPmapCorrection = prefs.get("doMPmapCorrection", true);
+        showGradients = prefs.get("showGradients", false);
+
 
 //        // Close the log: //TODO: this seems to sometimes make a different whether OpenCL runs or not (observation from Nvidia 1050, not repeatable)
         // TODO: but this causes the GUI to pop up when using liveSRRF in a macro
@@ -124,6 +124,15 @@ public class liveSRRF_optimised_ implements PlugIn {
 //        }
 
         IJ.log("\\Clear");  // Clear the log window
+
+        // Check saved preferences
+//        IJ.log("---- Check preferences saved ----");
+//        IJ.log("Magnification: "+prefs.get("magnification", 100));
+//        IJ.log("FWHM: "+prefs.get("fwhm", 100));
+//        IJ.log("Sensitivity: "+prefs.get("sensitivity", 100));
+//        IJ.log("nFrameForSRRFfromUser: "+prefs.get("nFrameForSRRFfromUser", 100));
+
+
         IJ.log("-------------------------------------");
         IJ.log("-------------------------------------");
         IJ.log("liveSRRF " + LiveSRRFVersion); //TODO: what's taking so long on Wolverine?
@@ -211,7 +220,7 @@ public class liveSRRF_optimised_ implements PlugIn {
         shiftX = new float[nFrameForSRRFtoUse];
         shiftY = new float[nFrameForSRRFtoUse];
 
-        XYShiftCalculator shiftCalculator = new XYShiftCalculator(imp, prof);
+        XYShiftCalculator shiftCalculator = new XYShiftCalculator(imp);
         ImageStack imsBuffer;
 
         ImageStack imsRawData;
@@ -341,9 +350,18 @@ public class liveSRRF_optimised_ implements PlugIn {
         }
         // End looping trough SRRF frames --------------------------------------------
 
+        if (showGradients) { // TODO: small bug leading to not remembering choices of showGradient
+            // Read off the gradient (single frame, which one needs to be checked)
+            IJ.log("Reading off and displaying gradients...");
+            System.out.println("Reading off and displaying gradients...");
+            ImageStack imsGradient = liveSRRF.readGradientBuffers();
+            ImagePlus impGradients = new ImagePlus("Gradients", imsGradient);
+            impGradients.show();
+        }
 
         // Release the GPU
         liveSRRF.release();
+        liveSRRF.checkProfiler();
 
         IJ.log("-------------------------------------");
         // Close the ZipSaver & display stack as virtual stacks
@@ -426,6 +444,8 @@ public class liveSRRF_optimised_ implements PlugIn {
         }
 
 
+
+
         // Bye-bye and report
         IJ.log("Memory usage: " + IJ.freeMemory());  // this also runs the garbage collector
         IJ.log("Thank you for your custom on this beautiful day !");
@@ -439,9 +459,15 @@ public class liveSRRF_optimised_ implements PlugIn {
         // Run garbage collector
         System.gc();
 
+        // Check saved preferences
+//        IJ.log("---- Check preferences saved ----");
+//        IJ.log("Magnification: "+prefs.get("magnification", 100));
+//        IJ.log("FWHM: "+prefs.get("fwhm", 100));
+//        IJ.log("Sensitivity: "+prefs.get("sensitivity", 100));
+//        IJ.log("nFrameForSRRFfromUser: "+prefs.get("nFrameForSRRFfromUser", 100));
 
-//        IJ.log("-------------------------------------");
-//        IJ.log(prof.report());
+
+
     }
 
 
@@ -482,12 +508,12 @@ public class liveSRRF_optimised_ implements PlugIn {
 
         MyDialogListenerMainGUI dl = new MyDialogListenerMainGUI(); // this serves to estimate a few indicators such as RAM usage
         gd.addDialogListener(dl);
+        grabSettingsMainGUI(gd); // grab and assign the default values to the global variables (in case the dialog listener is not activated, pressed OK directly)
 
         gd.showDialog();
 
         // If the GUI was cancelled
         return gd.wasCanceled();
-
 
     }
 
@@ -581,6 +607,8 @@ public class liveSRRF_optimised_ implements PlugIn {
         gd.addCheckbox("Intensity weighting", prefs.get("intWeighting", true));
         gd.addCheckbox("Macro-pixel patterning correction", prefs.get("doMPmapCorrection", true));
         gd.addCheckbox("Show image stabilisation scatter plot", prefs.get("showImStabPlot", false));
+        gd.addCheckbox("Show gradients", prefs.get("showGradients", false));
+
 
         gd.addHelp("https://www.youtube.com/watch?v=otCpCn0l4Wo"); // it's Hammer time
 
@@ -596,6 +624,7 @@ public class liveSRRF_optimised_ implements PlugIn {
             intWeighting = prefs.get("intWeighting", true);
             doMPmapCorrection = prefs.get("doMPmapCorrection", true);
             showImStabPlot = prefs.get("showImStabPlot", false);
+            showGradients = prefs.get("showGradients", false);
 
             // re-initialises to how it was before entering advanced GUI
             writeToDiskToUse = writeToDiskTemp;
@@ -608,6 +637,7 @@ public class liveSRRF_optimised_ implements PlugIn {
             prefs.set("intWeighting", intWeighting);
             prefs.set("doMPmapCorrection", doMPmapCorrection);
             prefs.set("showImStabPlot", showImStabPlot);
+            prefs.set("showGradients", showGradients);
             prefs.save();
         }
 
@@ -635,6 +665,7 @@ public class liveSRRF_optimised_ implements PlugIn {
         intWeighting = gd.getNextBoolean();
         doMPmapCorrection = gd.getNextBoolean();
         showImStabPlot = gd.getNextBoolean();
+        showGradients = gd.getNextBoolean();
 
         if (writeToDiskTemp && !previousWriteToDisk) {
             pathToDisk = IJ.getDirectory("");

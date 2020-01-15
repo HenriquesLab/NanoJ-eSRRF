@@ -58,7 +58,6 @@ public class ParametersSweep_ implements PlugIn {
 
     // Advanced formats
     private final NanoJPrefs prefs = new NanoJPrefs(this.getClass().getName());
-    private final NanoJProfiler prof = new NanoJProfiler();
 //    private liveSRRF_CL liveSRRF;
 
     public void run(String arg) {
@@ -249,7 +248,7 @@ public class ParametersSweep_ implements PlugIn {
 
         shiftX = new float[maxnFrame];
         shiftY = new float[maxnFrame];
-        XYShiftCalculator shiftCalculator = new XYShiftCalculator(imp, prof);
+        XYShiftCalculator shiftCalculator = new XYShiftCalculator(imp);
 
         if (correctVibration) {
             shiftCalculator.calculateShiftArray(1, maxnFrame);
