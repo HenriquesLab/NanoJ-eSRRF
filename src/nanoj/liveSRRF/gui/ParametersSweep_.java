@@ -11,10 +11,9 @@ import ij.plugin.PlugIn;
 import ij.process.FloatProcessor;
 import nanoj.core.java.image.analysis.FRC;
 import nanoj.core2.NanoJPrefs;
-import nanoj.core2.NanoJProfiler;
 import nanoj.liveSRRF.ErrorMapLiveSRRF;
 import nanoj.liveSRRF.XYShiftCalculator;
-import nanoj.liveSRRF.liveSRRF_CL;
+import nanoj.liveSRRF.LiveSRRF_CL;
 
 import java.awt.*;
 import java.time.LocalDateTime;
@@ -83,7 +82,7 @@ public class ParametersSweep_ implements PlugIn {
         IJ.log(now.format(formatter));
 
         // Initialise the liveSRRF engine (creates a context really)
-        liveSRRF_CL liveSRRF = new liveSRRF_CL();
+        LiveSRRF_CL liveSRRF = new LiveSRRF_CL();
 
         // Build GUI
         Font headerFont = new Font("Arial", Font.BOLD, 16);
@@ -760,7 +759,7 @@ public class ParametersSweep_ implements PlugIn {
     }
 
 
-    private boolean calculateLiveSRRFsingleframeLoad(ImageStack imsAllRawData, int nf, int mode, liveSRRF_CL liveSRRF) {
+    private boolean calculateLiveSRRFsingleframeLoad(ImageStack imsAllRawData, int nf, int mode, LiveSRRF_CL liveSRRF) {
 
         ImageStack imsThisRawData;
         boolean userPressedEscape = false;

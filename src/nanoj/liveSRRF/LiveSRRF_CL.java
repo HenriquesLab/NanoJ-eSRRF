@@ -18,7 +18,7 @@ import static nanoj.core2.NanoJCL.getResourceAsString;
 import static nanoj.core2.NanoJCL.replaceFirst;
 import static nanoj.liveSRRF.FourierInterpolation.fhtSpaceInterpolation;
 
-public class liveSRRF_CL {
+public class LiveSRRF_CL {
 
     // Basic formats
     private int width,
@@ -80,7 +80,7 @@ public class liveSRRF_CL {
 
 
     // --- Constructor ---
-    public liveSRRF_CL() {
+    public LiveSRRF_CL() {
         // Nothing to see here. Keep calm and carry on.
     }
 
@@ -215,7 +215,7 @@ public class liveSRRF_CL {
 //        float radius = 2*((float) ((int) (GxGyMagnification * 2 * sigma))) / GxGyMagnification + 1;    // TODO: for testing
 
 
-        String programString = getResourceAsString(liveSRRF_CL.class, "liveSRRF.cl");
+        String programString = getResourceAsString(LiveSRRF_CL.class, "liveSRRF.cl");
 //        programString = replaceFirst(programString, "$MAGNIFICATION$", "" + magnification);
 //        programString = replaceFirst(programString, "$FWHM$", "" + fwhm);
 //        programString = replaceFirst(programString, "$SENSITIVITY$", "" + sensitivity);

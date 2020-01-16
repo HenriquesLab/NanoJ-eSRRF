@@ -114,7 +114,7 @@ public class NNDistance_CL {
         )
                 / 1000000d + "MB");
 
-        String programString = getResourceAsString(liveSRRF_CL.class, "NNDistance.cl");
+        String programString = getResourceAsString(LiveSRRF_CL.class, "NNDistance.cl");
         programString = replaceFirst(programString, "$NLOCS$", "" + nLocs);
         programString = replaceFirst(programString, "$DENSITYRADIUS2$", "" + densityRadius*densityRadius);
 
