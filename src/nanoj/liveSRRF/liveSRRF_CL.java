@@ -237,12 +237,12 @@ public class liveSRRF_CL {
 
         // This lot of definition works for no interpolation on GPU only (GxGyMagnification = 1 and width/height widthM/heightM are the same from the GPU's point of view)
         programString = replaceFirst(programString, "$MAGNIFICATION$", "" + 1);
-        programString = replaceFirst(programString, "$FWHM$", "" + fwhm);
+        programString = replaceFirst(programString, "$FWHM$", "" + magnification*fwhm);
         programString = replaceFirst(programString, "$SENSITIVITY$", "" + sensitivity);
         programString = replaceFirst(programString, "$GXGYMAGNIFICATION$", "" + 1);
 
-        programString = replaceFirst(programString, "$SIGMA$", "" + sigma);
-        programString = replaceFirst(programString, "$RADIUS$", "" + radius);
+        programString = replaceFirst(programString, "$SIGMA$", "" + magnification*sigma);
+        programString = replaceFirst(programString, "$RADIUS$", "" + magnification*radius);
         programString = replaceFirst(programString, "$WIDTH$", "" + widthM);
         programString = replaceFirst(programString, "$HEIGHT$", "" + heightM);
         programString = replaceFirst(programString, "$WH$", "" + (widthM * heightM));
