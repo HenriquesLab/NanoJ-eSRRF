@@ -44,7 +44,7 @@ public class LiveSRRF_CL {
             chosenROIsLocations3D;
 
     public final int gradientMag = 2;
-    public final int nReconstructions = 2; // Currently only VAR and AVG
+    public final int nReconstructions = 3; // Currently AVG, VAR (2nd order SOFI Tau=0) and 2nd order cumulants Tau=1
 
     private final float vxy_offset = 0.5f;
     private final int vxy_ArrayShift = 1;
@@ -85,6 +85,7 @@ public class LiveSRRF_CL {
             clBufferGxInt, clBufferGyInt, clBufferGzInt,
             clBufferDriftXY,
             clBufferShiftXYTheta3D, // TODO: add the shift for 3D-SRRF!
+            clBufferPreviousFrame,
             clBufferOut,
             clBufferMPmap;
 
@@ -252,10 +253,14 @@ public class LiveSRRF_CL {
             // TODO: this assumes only interpolation in XY, not in Z yet
         }
 
-        if (do3DSRRF)
+        if (do3DSRRF) {
+            clBufferPreviousFrame = context.createFloatBuffer(widthM * heightM, READ_WRITE);
             clBufferOut = context.createFloatBuffer((nReconstructions + 1) * singleFrameSize * magnification * magnification * magnification, WRITE_ONLY); // single frame cumulative AVG projection of RGC
-        else
+        }
+        else {
+            clBufferPreviousFrame = context.createFloatBuffer(widthM * heightM, READ_WRITE);
             clBufferOut = context.createFloatBuffer((nReconstructions + 1) * singleFrameSize * magnification * magnification, WRITE_ONLY); // single frame cumulative AVG projection of RGC
+        }
 
         clBufferCurrentFrame = context.createIntBuffer(2, READ_WRITE);
         // Current frame is a 2 element Int buffer:
@@ -355,6 +360,7 @@ public class LiveSRRF_CL {
         kernelCalculateSRRF.setArg(argn++, clBufferGxInt); // make sure type is the same !!
         kernelCalculateSRRF.setArg(argn++, clBufferGyInt); // make sure type is the same !!
         if (do3DSRRF) kernelCalculateSRRF.setArg(argn++, clBufferGzInt); // make sure type is the same !!
+        kernelCalculateSRRF.setArg(argn++, clBufferPreviousFrame);
         kernelCalculateSRRF.setArg(argn++, clBufferOut); // make sure type is the same !!
         kernelCalculateSRRF.setArg(argn++, clBufferDriftXY); // make sure type is the same !!
         kernelCalculateSRRF.setArg(argn++, clBufferCurrentFrame); // make sure type is the same !!
@@ -383,6 +389,7 @@ public class LiveSRRF_CL {
                         clBufferGy.getCLSize() +
                         clBufferGxInt.getCLSize() +
                         clBufferGyInt.getCLSize() +
+                        clBufferPreviousFrame.getCLSize() +
                         clBufferOut.getCLSize() +
                         clBufferCurrentFrame.getCLSize() +
                         clBufferMPmap.getCLSize() // TODO: add the stuff from 3D
