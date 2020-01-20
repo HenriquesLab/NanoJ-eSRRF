@@ -374,7 +374,7 @@ __kernel void calculateRadialGradientConvergence(
                 OutArray[offset + 2 * whM] = OutArray[offset + 2 * whM] + v * CGLH * PreviousFrameArray[offset] / (nFrameForSRRF-1);
                 OutArray[offset + 3 * whM] = OutArray[offset + 3 * whM] + v / nFrameForSRRF;
             }
-        PreviousFrameArray[offset] = v * CGLH / (nFrameForSRRF-1); // update the value of the
+        PreviousFrameArray[offset] = v * CGLH / (nFrameForSRRF-1); // update the value of the previous frame
     }
     else{
             if (nCurrentFrame[0] == 0) {
@@ -429,10 +429,9 @@ __kernel void kernelCalculateVar(
     ){
 
     const int offset = get_global_id(0);
-
-    const float av2 = OutArray[offset]*OutArray[offset];
+    const float av2 = OutArray[offset] * OutArray[offset];
     OutArray[offset + whM] = OutArray[offset + whM] - av2;     // Var[X] = E[X^2] - (E[X])^2
-    OutArray[offset + 2*whM] = OutArray[offset + 2*whM] - av2; // TAC2[X] = E[Xt*Xt+1] - (E[X])^2
+    OutArray[offset + 2*whM] = OutArray[offset + 2*whM] - av2; // TAC2[X] = E[X(t)*X(t+1)] - (E[X])^2, TODO: this is only correct to a first approximation, could explain the negative values?
 
 }
 

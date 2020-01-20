@@ -68,7 +68,7 @@ public class LiveSRRF_optimised_ implements PlugIn {
             do3DSRRF;
 
     private final boolean enable3DSRRF = true;
-    private final String LiveSRRFVersion = "v1.3d-bci.16";
+    private final String LiveSRRFVersion = "v1.3d-bci.17";
 
     private String pathToDisk = "",
             fileName,
@@ -565,6 +565,7 @@ public class LiveSRRF_optimised_ implements PlugIn {
 
         MyDialogListenerMainGUI dl = new MyDialogListenerMainGUI(); // this serves to estimate a few indicators such as RAM usage
         gd.addDialogListener(dl);
+        grabSettingsMainGUI(gd); // important to make sure that settings are grabbed properly even when no parameters is changed
 
         gd.showDialog();
 
@@ -782,7 +783,7 @@ public class LiveSRRF_optimised_ implements PlugIn {
 
 //        prefs.set("chosenTemporalAnalysis", chosenTemporalAnalysis);
         prefs.set("calculateAVG", calculateAVG);
-        prefs.set("calculateSTD", calculateVAR);
+        prefs.set("calculateVAR", calculateVAR);
         prefs.set("calculateTAC2", calculateTAC2);
         prefs.set("getInterpolatedImage", getInterpolatedImage);
 

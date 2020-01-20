@@ -243,6 +243,7 @@ public class LiveSRRF_CL {
         clBufferGxInt = context.createFloatBuffer(nFramesOnGPU * gradientMag * gradientMag * singleFrameSize, READ_WRITE); // single frame Gx
         clBufferGyInt = context.createFloatBuffer(nFramesOnGPU * gradientMag * gradientMag * singleFrameSize, READ_WRITE); // single frame Gy
 
+
         // initialise buffers for 3D-SRRF
         if (do3DSRRF) {
             clBufferAlignedPx = context.createFloatBuffer(nFramesOnGPU * singleFrameSize, READ_WRITE);
@@ -254,11 +255,11 @@ public class LiveSRRF_CL {
         }
 
         if (do3DSRRF) {
-            clBufferPreviousFrame = context.createFloatBuffer(widthM * heightM, READ_WRITE);
+            clBufferPreviousFrame = context.createFloatBuffer(singleFrameSize * magnification * magnification * magnification, READ_WRITE);
             clBufferOut = context.createFloatBuffer((nReconstructions + 1) * singleFrameSize * magnification * magnification * magnification, WRITE_ONLY); // single frame cumulative AVG projection of RGC
         }
         else {
-            clBufferPreviousFrame = context.createFloatBuffer(widthM * heightM, READ_WRITE);
+            clBufferPreviousFrame = context.createFloatBuffer(singleFrameSize * magnification * magnification, READ_WRITE);
             clBufferOut = context.createFloatBuffer((nReconstructions + 1) * singleFrameSize * magnification * magnification, WRITE_ONLY); // single frame cumulative AVG projection of RGC
         }
 
@@ -271,7 +272,7 @@ public class LiveSRRF_CL {
 
         // Create the program
         float sigma = fwhm / 2.354f;
-        float radius = ((float) ((int) (gradientMag * 2 * sigma))) / gradientMag + 1;    // this reduces the radius for speed, works when using dGauss^4 and 2p+I
+        float radius = ((float) ((int) (gradientMag * 2 * sigma))) / gradientMag + 1;    // this reduces the radius for speed, works when using dGauss^4 and 2p+I, needs testing for others
 
         String programString;
         if (do3DSRRF) programString = getResourceAsString(LiveSRRF_CL.class, "live3DSRRF.cl");
@@ -370,11 +371,11 @@ public class LiveSRRF_CL {
         kernelIncrementFramePosition.setArg(argn++, clBufferCurrentFrame); // make sure type is the same !!
 
         argn = 0;
-        kernelCalculateMPmap.setArg(argn++, clBufferOut); // make sure type is the same !!
-        kernelCalculateMPmap.setArg(argn++, clBufferMPmap); // make sure type is the same !!
+        kernelCalculateVar.setArg(argn++, clBufferOut);
 
         argn = 0;
-        kernelCalculateVar.setArg(argn++, clBufferOut);
+        kernelCalculateMPmap.setArg(argn++, clBufferOut); // make sure type is the same !!
+        kernelCalculateMPmap.setArg(argn++, clBufferMPmap); // make sure type is the same !!
 
         argn = 0;
         kernelCorrectMPmap.setArg(argn++, clBufferOut); // make sure type is the same !!
@@ -521,7 +522,7 @@ public class LiveSRRF_CL {
         int nDimMag;
         if (do3DSRRF) nDimMag = magnification * magnification * magnification;
         else nDimMag = magnification * magnification;
-        queue.put1DRangeKernel(kernelCalculateVar, 0, nDimMag*singleFrameSize,0);
+        queue.put1DRangeKernel(kernelCalculateVar, 0, nDimMag * singleFrameSize,0);
         prof.recordTime("Calculate VAR image", prof.endTimer(id));
 
         // weirdness..... in 3D.............................
@@ -554,7 +555,6 @@ public class LiveSRRF_CL {
                 imsSRRF.addSlice(new FloatProcessor(widthM, heightM, dataSRRF));
             }
         }
-
     }
 
     // --- Read the gradient buffers ---
@@ -646,7 +646,7 @@ public class LiveSRRF_CL {
     }
 
 
-    // --- Read the gradient buffers --- only used for testing!
+    // --- Read the MP map buffers --- only used for testing!
     public ImageStack readMPmaps() {
 
         queue.finish(); // Make sure everything is done
