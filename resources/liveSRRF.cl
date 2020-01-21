@@ -374,7 +374,7 @@ __kernel void calculateRadialGradientConvergence(
                 OutArray[offset + 2 * whM] = OutArray[offset + 2 * whM] + v * CGLH * PreviousFrameArray[offset] / (nFrameForSRRF-1);
                 OutArray[offset + 3 * whM] = OutArray[offset + 3 * whM] + v / nFrameForSRRF;
             }
-        PreviousFrameArray[offset] = v * CGLH / (nFrameForSRRF-1); // update the value of the previous frame
+        PreviousFrameArray[offset] = v * CGLH; // update the value of the previous frame
     }
     else{
             if (nCurrentFrame[0] == 0) {
@@ -389,7 +389,7 @@ __kernel void calculateRadialGradientConvergence(
                 OutArray[offset + 2 * whM] = OutArray[offset + 2 * whM] + CGLH * PreviousFrameArray[offset] / (nFrameForSRRF-1);
                 OutArray[offset + 3 * whM] = OutArray[offset + 3 * whM] + v / nFrameForSRRF;
             }
-        PreviousFrameArray[offset] = CGLH / (nFrameForSRRF-1);
+        PreviousFrameArray[offset] = CGLH;
     }
 
 //        }

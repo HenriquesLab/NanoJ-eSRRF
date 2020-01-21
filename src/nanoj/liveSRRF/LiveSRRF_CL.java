@@ -462,6 +462,7 @@ public class LiveSRRF_CL {
 //        IJ.log("Calculating gradient...");
         id = prof.startTimer();
         queue.finish(); // Make sure everything is done
+        IJ.log("Number of frames loaded on GPU: "+nFrameToLoad);
         if(do3DSRRF) queue.put1DRangeKernel(kernelCalculateGradient, 0,  singleFrameSize * nFrameToLoad, 0);
         else         queue.put3DRangeKernel(kernelCalculateGradient, 0, 0, 0, widthS, heightS, nFrameToLoad, 0, 0, 0);
         prof.recordTime("kernelCalculateGradient", prof.endTimer(id));
