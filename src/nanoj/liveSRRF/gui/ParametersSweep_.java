@@ -362,7 +362,7 @@ public class ParametersSweep_ implements PlugIn {
                         // Calculate and get the reconstruction from the odd frames // TODO: add options to do intensity weighting or MPcorrection
                         liveSRRF.initialise(width, height, magnification, fwhmArray[fi], sensitivityArray[si], 1, nframeArray[nfi], blockSize, null, true, true, "RobX");
                         liveSRRF.resetFramePosition();
-                        liveSRRF.loadShiftXYGPUbuffer(shiftXtempOdd, shiftYtempOdd);
+                        liveSRRF.loadDriftXYGPUbuffer(shiftXtempOdd, shiftYtempOdd);
 
                         userPressedEscape = calculateLiveSRRFsingleframeLoad(imsAllRawData, nfi, 1, liveSRRF);
                         if (userPressedEscape) {
@@ -380,7 +380,7 @@ public class ParametersSweep_ implements PlugIn {
                         // Calculate and get the reconstruction from the even frames // TODO: add options to do intensity weighting or MPcorrection
                         liveSRRF.initialise(width, height, magnification, fwhmArray[fi], sensitivityArray[si], 1, nframeArray[nfi], blockSize, null, true, true, "RobX");
                         liveSRRF.resetFramePosition();
-                        liveSRRF.loadShiftXYGPUbuffer(shiftXtempEven, shiftYtempEven);
+                        liveSRRF.loadDriftXYGPUbuffer(shiftXtempEven, shiftYtempEven);
 
                         calculateLiveSRRFsingleframeLoad(imsAllRawData, nfi, 2, liveSRRF);
                         imsBuffer = liveSRRF.imsSRRF;
@@ -399,7 +399,7 @@ public class ParametersSweep_ implements PlugIn {
                         // TODO: add options to do intensity weighting or MPcorrection
                         liveSRRF.initialise(width, height, magnification, fwhmArray[fi], sensitivityArray[si], 1, nframeArray[nfi], blockSize, null, true, true, "RobX");
                         liveSRRF.resetFramePosition();
-                        liveSRRF.loadShiftXYGPUbuffer(shiftXtemp, shiftYtemp);
+                        liveSRRF.loadDriftXYGPUbuffer(shiftXtemp, shiftYtemp);
 
                         calculateLiveSRRFsingleframeLoad(imsAllRawData, nfi, 0, liveSRRF);
                         imsBuffer = liveSRRF.imsSRRF;

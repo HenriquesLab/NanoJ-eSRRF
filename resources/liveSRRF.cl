@@ -1,9 +1,11 @@
 //#pragma OPENCL EXTENSION cl_khr_fp64: enable
 #define magnification $MAGNIFICATION$
-#define fwhm $FWHM$
+//#define fwhm $FWHM$
 #define sensitivity $SENSITIVITY$
 #define GxGyMagnification $GXGYMAGNIFICATION$
-#define sigma $SIGMA$
+//#define sigma $SIGMA$
+#define tSS $TWOSIGSQUARE$
+#define tSO $TWOSIGpONE$
 #define radius $RADIUS$
 #define w $WIDTH$
 #define h $HEIGHT$
@@ -40,13 +42,13 @@ static float getInterpolatedValue(__global float* array, int const width, int co
     float q = 0.0f;
 
     // Bicubic interpolation
-    if (u0 > 0 && u0 < w - 2 && v0 > 0 && v0 < h - 2) {
+    if (u0 > 0 && u0 < width - 2 && v0 > 0 && v0 < height - 2) {
         for (int j = 0; j <= 3; j++) {
-            int v = min(max(v0 - 1 + j, 0), h-1);
+            int v = min(max(v0 - 1 + j, 0), height-1);
             float p = 0.0f;
             for (int i = 0; i <= 3; i++) {
-                int u = min(max(u0 - 1 + i, 0), w-1);
-                p = p + array[v*width+u + whf] * cubic(x - (float) (u));
+                int u = min(max(u0 - 1 + i, 0), width-1);
+                p = p + array[v*width + u + whf] * cubic(x - (float) (u));
             }
             q = q + p * cubic(y - (float) (v));
         }
@@ -128,10 +130,10 @@ static float getInterpolatedValue(__global float* array, int const width, int co
 }
 
 // Check boundaries of the image and returns the gradient value // TODO: extrapolate instead of boundary check?
-static float getVBoundaryCheck(__global float* array, int const width, int const height, int const x, int const y, int const f) {
-    const int _x = min(max(x, 0), width-1);
-    const int _y = min(max(y, 0), height-1);
-    return array[_y*width+_x + width*height*f];
+static float getVBoundaryCheck(__global float* array, int const thisWidth, int const thisHeight, int const x, int const y, int const f) {
+    const int _x = min(max(x, 0), thisWidth-1);
+    const int _y = min(max(y, 0), thisHeight-1);
+    return array[_x + _y*thisWidth + thisWidth*thisHeight*f];
 }
 
 
@@ -267,6 +269,7 @@ __kernel void calculateRadialGradientConvergence(
     __global float* pixels,
     __global float* GxArray,
     __global float* GyArray,
+    __global float* PreviousFrameArray,
     __global float* OutArray,
     __global float* shiftXY,
     __global int* nCurrentFrame
@@ -291,7 +294,7 @@ __kernel void calculateRadialGradientConvergence(
 
     const float xc = (xM + 0.5) / magnification + shiftX; // continuous space position at the centre of magnified pixel
     const float yc = (yM + 0.5) / magnification + shiftY;
-    const float sigma22 = 2 * sigma * sigma; // TODO: add as hardcoded value?
+//    const float sigma22 = 2 * sigma * sigma; // TODO: add as hardcoded value?
 
     float CGLH = 0; // CGLH stands for Radiality original name - Culley-Gustafsson-Laine-Henriques transform
     float distanceWeightSum = 0;
@@ -302,61 +305,79 @@ __kernel void calculateRadialGradientConvergence(
 //    float radius = ((float) ((int) (GxGyMagnification*fradius)))/GxGyMagnification + 1;    // this reduces the radius for speed, works when using dGauss^4 and 2p+I
 //    int radius = (int) (fradius) + 1;    // this should be used otherwise
 
+    float dx, dy; // define dx and dy as the differences of coordinates
+    float distance, distanceWeight, GdotR, GMag, Dk;
 
-// Estimate the mean gradient
-    float GxMean = 0;
-    float GyMean = 0;
-    int nGradient = 0;
-    for (int j=-GxGyMagnification*radius; j<=(GxGyMagnification*radius+1); j++) { // stepping in pixels space of the Gradient matrix
+//// Estimate the mean gradient
+//    float GxMean = 0;
+//    float GyMean = 0;
+//    int nGradient = 0;
+//    for (int j=-(int) ((float) GxGyMagnification*(float) radius); j<=(int) ((float) GxGyMagnification*(float) radius+1); j++) { // stepping in pixels space of the Gradient matrix
+//        vy = ((float) ((int) (GxGyMagnification*(yc-vxy_offset))) + j)/(float) GxGyMagnification + vxy_offset; // position in continuous space TODO: problems with negative values and (int)?
+//
+//        if (vy > 0 && vy < h){
+//            for (int i=-GxGyMagnification*radius; i<=(GxGyMagnification*radius+1); i++) {
+//                vx = ((float) ((int) (GxGyMagnification*(xc-vxy_offset))) + i)/(float) GxGyMagnification + vxy_offset; // position in continuous space TODO: problems with negative values and (int)?
+//                if (vx > 0 && vx < w){
+//
+//                    dx = vx - xc;
+//                    dy = vy - yc;
+//                    distance = sqrt(dx*dx + dy*dy);    // Distance D
+////                    float distance = sqrt((vx - xc)*(vx - xc) + (vy - yc)*(vy - yc));    // Distance D
+//
+////                    if (distance != 0 && distance <= (2*sigma+1)) {
+//                    if (distance != 0 && distance <= (float) tS0) {
+//
+//                        nGradient ++;
+//                        GxMean += getVBoundaryCheck(GxArray, wInt, hInt, GxGyMagnification*(vx - vxy_offset) + vxy_ArrayShift, GxGyMagnification*(vy - vxy_offset), nCurrentFrame[1]);
+//                        GyMean += getVBoundaryCheck(GyArray, wInt, hInt, GxGyMagnification*(vx - vxy_offset), GxGyMagnification*(vy - vxy_offset) + vxy_ArrayShift, nCurrentFrame[1]);
+//
+//                    }
+//                }
+//            }
+//        }
+//    }
+//    GxMean /= nGradient;
+//    GyMean /= nGradient;
+
+
+    for (int j=-(int) ((float) GxGyMagnification*(float) radius); j<=(int) ((float) GxGyMagnification*(float) radius+1); j++) { // stepping in pixels space of the Gradient matrix
         vy = ((float) ((int) (GxGyMagnification*(yc-vxy_offset))) + j)/(float) GxGyMagnification + vxy_offset; // position in continuous space TODO: problems with negative values and (int)?
+        // TODO: check whether vxy_offset should be there
 
         if (vy > 0 && vy < h){
-            for (int i=-GxGyMagnification*radius; i<=(GxGyMagnification*radius+1); i++) {
+            for (int i=-(int) ((float) GxGyMagnification*(float) radius); i<=(int) ((float) GxGyMagnification*(float) radius+1); i++) {
                 vx = ((float) ((int) (GxGyMagnification*(xc-vxy_offset))) + i)/(float) GxGyMagnification + vxy_offset; // position in continuous space TODO: problems with negative values and (int)?
+                        // TODO: check whether vxy_offset should be there
+
                 if (vx > 0 && vx < w){
 
-                    float distance = sqrt((vx - xc)*(vx - xc) + (vy - yc)*(vy - yc));    // Distance D
+                    dx = vx - xc;
+                    dy = vy - yc;
+                    distance = sqrt(dx*dx + dy*dy);    // Distance D
 
-                    if (distance != 0 && distance <= (2*sigma+1)) {
-                        nGradient ++;
-                        GxMean += getVBoundaryCheck(GxArray, wInt, hInt, GxGyMagnification*(vx - vxy_offset) + vxy_ArrayShift, GxGyMagnification*(vy - vxy_offset), nCurrentFrame[1]);
-                        GyMean += getVBoundaryCheck(GyArray, wInt, hInt, GxGyMagnification*(vx - vxy_offset), GxGyMagnification*(vy - vxy_offset) + vxy_ArrayShift, nCurrentFrame[1]);
+//                    float distance = sqrt((vx - xc)*(vx - xc) + (vy - yc)*(vy - yc));    // Distance D
 
-                    }
-                }
-            }
-        }
-    }
-    GxMean /= nGradient;
-    GyMean /= nGradient;
+//                    if (distance != 0 && distance <= (2*sigma+1)) {
+                     if (distance != 0 && distance <= (float) tSO) {
 
+                        Gx = getVBoundaryCheck(GxArray, wInt, hInt, GxGyMagnification*(vx - vxy_offset) + vxy_ArrayShift, GxGyMagnification*(vy - vxy_offset), nCurrentFrame[1]);
+                        Gy = getVBoundaryCheck(GyArray, wInt, hInt, GxGyMagnification*(vx - vxy_offset), GxGyMagnification*(vy - vxy_offset) + vxy_ArrayShift, nCurrentFrame[1]);
 
-    for (int j=-GxGyMagnification*radius; j<=(GxGyMagnification*radius+1); j++) { // stepping in pixels space of the Gradient matrix
-        vy = ((float) ((int) (GxGyMagnification*(yc-vxy_offset))) + j)/(float) GxGyMagnification + vxy_offset; // position in continuous space TODO: problems with negative values and (int)?
+//                     Gx = getVBoundaryCheck(GxArray, wInt, hInt, GxGyMagnification*(vx - vxy_offset) + vxy_ArrayShift, GxGyMagnification*(vy - vxy_offset), nCurrentFrame[1]) - GxMean;
+//                     Gy = getVBoundaryCheck(GyArray, wInt, hInt, GxGyMagnification*(vx - vxy_offset), GxGyMagnification*(vy - vxy_offset) + vxy_ArrayShift, nCurrentFrame[1]) - GyMean;
 
-        if (vy > 0 && vy < h){
-            for (int i=-GxGyMagnification*radius; i<=(GxGyMagnification*radius+1); i++) {
-                vx = ((float) ((int) (GxGyMagnification*(xc-vxy_offset))) + i)/(float) GxGyMagnification + vxy_offset; // position in continuous space TODO: problems with negative values and (int)?
-                if (vx > 0 && vx < w){
-
-                    float distance = sqrt((vx - xc)*(vx - xc) + (vy - yc)*(vy - yc));    // Distance D
-
-                    if (distance != 0 && distance <= (2*sigma+1)) {
-
-                        Gx = getVBoundaryCheck(GxArray, wInt, hInt, GxGyMagnification*(vx - vxy_offset) + vxy_ArrayShift, GxGyMagnification*(vy - vxy_offset), nCurrentFrame[1]) - GxMean;
-                        Gy = getVBoundaryCheck(GyArray, wInt, hInt, GxGyMagnification*(vx - vxy_offset), GxGyMagnification*(vy - vxy_offset) + vxy_ArrayShift, nCurrentFrame[1]) - GyMean;
-
-                        float distanceWeight = distance*exp(-(distance*distance)/sigma22);  // TODO: dGauss: can use Taylor expansion there
+                        distanceWeight = distance*exp(-(distance*distance)/((float) tSS));
                         distanceWeight = distanceWeight * distanceWeight * distanceWeight * distanceWeight;
 //distanceWeight = distanceWeight * distanceWeight;
                         distanceWeightSum += distanceWeight;
 //distanceWeightSum ++;
-                        float GdotR = (Gx * (vx - xc) + Gy * (vy - yc)); // tells you if vector was pointing inward or outward
+                        GdotR = (Gx*dx + Gy*dy); // tells you if vector was pointing inward or outward
 
-//                        if (GdotR < 0) {
+                        if (GdotR < 0) {
                             // Calculate perpendicular distance from (xc,yc) to gradient line through (vx,vy)
-                            float GMag = sqrt(Gx * Gx + Gy * Gy);
-                            float Dk = fabs(Gy * (xc - vx) - Gx * (yc - vy)) / GMag;    // Dk = D*sin(theta) obtained from cross-product
+                            GMag = sqrt(Gx*Gx + Gy*Gy);
+                            Dk = fabs(Gy*dx - Gx*dy) / GMag;    // Dk = D*sin(theta) obtained from cross-product
                             if (isnan(Dk)) Dk = distance; // this makes Dk = 0 in the next line
 
                             // Linear function ----------------------
@@ -395,16 +416,15 @@ __kernel void calculateRadialGradientConvergence(
 //                  float SigmaTheta = 0.25;
 //                  Dk = exp(-1.0f*(float) (Dk/SigmaTheta));
 
-                        if (GdotR < 0) {
-                            CGLH += Dk*distanceWeight; // ----------------WEIGHTING----------------
-//                            CGLH += Dk;
-                        }
-                        else {
-                            CGLH -= Dk*distanceWeight;
+//                        if (GdotR < 0) {
+//                            CGLH += Dk*distanceWeight; // ----------------WEIGHTING----------------
+////                            CGLH += Dk;
+//                        }
+//                        else {
+//                            CGLH -= Dk*distanceWeight;
+//                        }
 
-                        }
-
-
+                    CGLH += Dk*distanceWeight;
 //                Dk *= distanceWeight;
 //
 //                // Accumulate Variables
@@ -416,6 +436,7 @@ __kernel void calculateRadialGradientConvergence(
             }
        }
     }
+    }
 
 
 //    CGLH = distanceWeightSum;
@@ -426,28 +447,39 @@ __kernel void calculateRadialGradientConvergence(
     float v = getInterpolatedValue(pixels, w, h, ((float) xM)/magnification + shiftX - 0.5f, ((float) yM)/magnification + shiftY - 0.5f, nCurrentFrame[1]);
 
     if (intWeighting == 1) {
-            if (nCurrentFrame[0] == 0) {
-                OutArray[offset] = v * CGLH / nFrameForSRRF;
-                OutArray[offset + whM] = v * CGLH * v * CGLH / nFrameForSRRF;
-                OutArray[offset + 2 * whM] = v / nFrameForSRRF;
+
+            if (nCurrentFrame[0] == 0) { // Initialising the values of the array
+                OutArray[offset] = v * CGLH / nFrameForSRRF;                    // AVG
+                OutArray[offset + whM] = v * CGLH * v * CGLH / nFrameForSRRF;   // VAR
+                OutArray[offset + 2 * whM] = 0;                                 // 2nd Order SOFI Tau = 1
+                OutArray[offset + 3 * whM] = v / nFrameForSRRF;                 // interpolated
             }
             else {
                 OutArray[offset] = OutArray[offset] + v * CGLH / nFrameForSRRF;
                 OutArray[offset + whM] = OutArray[offset + whM] + v * CGLH * v * CGLH / nFrameForSRRF;
-                OutArray[offset + 2 * whM] = OutArray[offset + 2 * whM] + v / nFrameForSRRF;
+                OutArray[offset + 2 * whM] = OutArray[offset + 2 * whM] + v * CGLH * PreviousFrameArray[offset] / (nFrameForSRRF-1);
+                OutArray[offset + 3 * whM] = OutArray[offset + 3 * whM] + v / nFrameForSRRF;
             }
+//        PreviousFrameArray[offset] = v * CGLH / (nFrameForSRRF-1); // update the value of the previous frame
+        PreviousFrameArray[offset] = v * CGLH; // update the value of the previous frame
+
     }
     else{
             if (nCurrentFrame[0] == 0) {
                 OutArray[offset] = CGLH / nFrameForSRRF;
                 OutArray[offset + whM] = CGLH * CGLH / nFrameForSRRF;
-                OutArray[offset + 2 * whM] = v / nFrameForSRRF;
+                OutArray[offset + 2 * whM] = 0;
+                OutArray[offset + 3 * whM] = v / nFrameForSRRF;
             }
             else {
                 OutArray[offset] = OutArray[offset] + CGLH / nFrameForSRRF;
                 OutArray[offset + whM] = OutArray[offset + whM] + CGLH * CGLH / nFrameForSRRF;
-                OutArray[offset + 2 * whM] = OutArray[offset + 2 * whM] + v / nFrameForSRRF;
+                OutArray[offset + 2 * whM] = OutArray[offset + 2 * whM] + CGLH * PreviousFrameArray[offset] / (nFrameForSRRF-1);
+                OutArray[offset + 3 * whM] = OutArray[offset + 3 * whM] + v / nFrameForSRRF;
             }
+//        PreviousFrameArray[offset] = CGLH / (nFrameForSRRF-1);
+        PreviousFrameArray[offset] = CGLH;
+
     }
 
 //        }
@@ -481,13 +513,15 @@ __kernel void calculateRadialGradientConvergence(
 //}
 
 
-// Kernel: calculate STD image from the OutputArray
-__kernel void kernelCalculateStd(
+// Kernel: calculate VARIANCE image from the OutputArray
+__kernel void kernelCalculateVar(
     __global float* OutArray
     ){
-
     const int offset = get_global_id(0);
-    OutArray[offset + whM] = sqrt(OutArray[offset + whM] - OutArray[offset]*OutArray[offset]);
+
+    const float av2 = OutArray[offset]*OutArray[offset];
+    OutArray[offset + whM] = OutArray[offset + whM] - av2;     // Var[X] = E[X^2] - (E[X])^2
+    OutArray[offset + 2*whM] = OutArray[offset + 2*whM] - av2; // TAC2[X] = E[Xt*Xt+1] - (E[X])^2
 
 }
 
@@ -502,7 +536,6 @@ __kernel void kernelIncrementFramePosition(
         // Current frame is a 2 element Int buffer:
                 // nCurrentFrame[0] is the global current frame in the current SRRF frame (reset every SRRF frame)
                 // nCurrentFrame[1] is the local current frame in the current GPU-loaded dataset (reset every turn of the method calculateSRRF (within the gradient calculation))
-
 }
 
 // Fifth kernel: reset the frame number -----------------------------------------------------------------
@@ -524,7 +557,7 @@ __kernel void kernelCalculateMPmap(
     ){
 
     const int offset_MPmap = get_global_id(0);
-    const int frame = offset_MPmap/(magnification*magnification); // 0 or 1 depending on whether we're dealing with AVG or STD
+    const int frame = offset_MPmap/(magnification*magnification); // 0, 1 or 2 depending on whether we're dealing with AVG or VAR or SOFI2ndTau1
     const int y_MPmap = (offset_MPmap - frame*(magnification*magnification))/magnification;
     const int x_MPmap = offset_MPmap - y_MPmap*magnification - frame*(magnification*magnification);
 
@@ -550,7 +583,7 @@ __kernel void kernelCorrectMPmap(
 ){
 
     const int offset = get_global_id(0);
-    const int frame = offset/whM; // 0 or 1 depending on whether we're dealing with AVG or STD
+    const int frame = offset/whM; // 0, 1 or 2 depending on whether we're dealing with AVG or VAR or SOFI2ndTau1
     const int yM = (offset - frame*(whM))/wM;
     const int xM = offset - yM*wM - frame*whM;
     const int x = xM/magnification;
