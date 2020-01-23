@@ -61,7 +61,7 @@ public class LiveSRRF_optimised_ implements PlugIn {
             showGradients,
             intWeighting;
 
-    private final String LiveSRRFVersion = "v1.2d-fhi.12";
+    private final String LiveSRRFVersion = "v1.2d-fhi.13";
     private String pathToDisk = "",
             fileName,
             chosenDeviceName,

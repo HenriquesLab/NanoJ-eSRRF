@@ -53,13 +53,13 @@ public class LiveSRRF_CL {
     static private CLContext context;
     static private CLProgram programLiveSRRF;
     static private CLKernel kernelCalculateGradient,
-//                            kernelInterpolateGradient,
-                            kernelIncrementFramePosition,
-                            kernelResetFramePosition,
-                            kernelCalculateSRRF,
-                            kernelCalculateMPmap,
+    //                            kernelInterpolateGradient,
+    kernelIncrementFramePosition,
+            kernelResetFramePosition,
+            kernelCalculateSRRF,
+            kernelCalculateMPmap,
             kernelCalculateVar,
-                            kernelCorrectMPmap;
+            kernelCorrectMPmap;
 
     static private CLPlatform clPlatformMaxFlop;
     static private CLDevice clDeviceMaxFlop;
@@ -70,8 +70,8 @@ public class LiveSRRF_CL {
     private CLBuffer<FloatBuffer>
             clBufferPx,
             clBufferGx, clBufferGy,
-//            clBufferGxInt, clBufferGyInt,
-clBufferDriftXY,
+    //            clBufferGxInt, clBufferGyInt,
+    clBufferDriftXY,
             clBufferPreviousFrame,
             clBufferOut,
             clBufferMPmap;
@@ -149,7 +149,7 @@ clBufferDriftXY,
         this.magnification = magnification;
         this.doMPmapCorrection = doMPmapCorrection;
 //        this.thisGradientChoice = thisGradientChoice;
-//        this.nFramesOnGPU = nFramesOnGPU;
+        this.nFramesOnGPU = nFramesOnGPU;
 
         if (chosenDevice == null) {
 //            IJ.log("Looking for the fastest device...");
