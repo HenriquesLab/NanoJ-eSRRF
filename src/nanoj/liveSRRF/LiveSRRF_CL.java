@@ -39,6 +39,7 @@ public class LiveSRRF_CL {
     private int vxy_ArrayShift;
 
     public final int nReconstructions = 3; // Currently AVG, VAR (2nd order SOFI Tau=0) and 2nd order cumulants Tau=1
+    public final String[] reconNames = new String[]{"AVG", "VAR", "TAC2"}; // TODO: use these definiations for the names on other classes?
 
     private boolean doMPmapCorrection;
 
@@ -264,9 +265,9 @@ public class LiveSRRF_CL {
 
         programLiveSRRF = context.createProgram(programString).build();
 //        IJ.log("Program executable? "+programLiveSRRF.isExecutable());
-        IJ.log("------------------------------------");
-        IJ.log(programLiveSRRF.getBuildLog());
-        IJ.log("------------------------------------");
+//        IJ.log("------------------------------------");
+//        IJ.log(programLiveSRRF.getBuildLog());
+//        IJ.log("------------------------------------");
 
         if (thisGradientChoice.equals("RobX")) kernelCalculateGradient = programLiveSRRF.createCLKernel("calculateGradientRobX");
         else if (thisGradientChoice.equals("3pPlus")) kernelCalculateGradient = programLiveSRRF.createCLKernel("calculateGradient3pPlus");
@@ -338,16 +339,20 @@ public class LiveSRRF_CL {
 
 
     // --- Load Drift array on GPU ---
-    public void loadDriftXYGPUbuffer(float[] driftX, float[] driftY) {
+    public void loadDriftXYGPUbuffer(float[][] driftXY) {
 
 //        System.out.println("loading drift buffers");
 
-        float[] driftXY = new float[2 * nFrameForSRRF];
-        System.arraycopy(driftX, 0, driftXY, 0, nFrameForSRRF);
-        System.arraycopy(driftY, 0, driftXY, nFrameForSRRF, nFrameForSRRF);
+        float[] driftXYarray = new float[2 * nFrameForSRRF];
+        for (int i = 0; i < nFrameForSRRF; i++) {
+            driftXYarray[i] = driftXY[i][0];
+            driftXYarray[i + nFrameForSRRF] = driftXY[i][1];
+        }
+//        System.arraycopy(driftX, 0, driftXY, 0, nFrameForSRRF);
+//        System.arraycopy(driftY, 0, driftXY, nFrameForSRRF, nFrameForSRRF);
 
         int id = prof.startTimer();
-        fillBuffer(clBufferDriftXY, driftXY);
+        fillBuffer(clBufferDriftXY, driftXYarray);
         queue.putWriteBuffer(clBufferDriftXY, false);
         prof.recordTime("Uploading drift array to GPU", prof.endTimer(id));
     }
@@ -417,7 +422,6 @@ public class LiveSRRF_CL {
                     IJ.resetEscape();
                     return true;
                 }
-
             }
 
             // This kernel needs to be done outside of the previous kernel because of concommitent execution (you never know when each pixel is executed)

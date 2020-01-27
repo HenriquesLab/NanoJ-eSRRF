@@ -34,21 +34,21 @@ static float cubic(float x) {
 }
 
 // Interpolation function: interpolate in continuous space with respect to the reference of the array // TODO: check confusion between width and w height and h
-static float getInterpolatedValue(__global float* array, int const width, int const height, float const x, float const y, int const f) {
+static float getInterpolatedValue(__global float* array, int const thisWidth, int const thisHeight, float const x, float const y, int const f) {
     const int u0 = (int) floor(x);
     const int v0 = (int) floor(y);
-    const int whf = width*height*f;
+    const int thisWhf = thisWidth*thisHeight*f;
 
     float q = 0.0f;
 
     // Bicubic interpolation
-    if (u0 > 0 && u0 < width - 2 && v0 > 0 && v0 < height - 2) {
+    if (u0 > 0 && u0 < thisWidth - 2 && v0 > 0 && v0 < thisHeight - 2) {
         for (int j = 0; j <= 3; j++) {
-            int v = min(max(v0 - 1 + j, 0), height-1);
+            int v = min(max(v0 - 1 + j, 0), thisHeight-1);
             float p = 0.0f;
             for (int i = 0; i <= 3; i++) {
-                int u = min(max(u0 - 1 + i, 0), width-1);
-                p = p + array[v*width + u + whf] * cubic(x - (float) (u));
+                int u = min(max(u0 - 1 + i, 0), thisWidth-1);
+                p = p + array[v*thisWidth + u + thisWhf] * cubic(x - (float) (u));
             }
             q = q + p * cubic(y - (float) (v));
         }
@@ -116,10 +116,10 @@ static float getInterpolatedValue(__global float* array, int const width, int co
 //        xFraction = fmax(xFraction, 0);
 //        yFraction = fmax(yFraction, 0);
 
-        float lowerLeft = array[whf + ybase * width + xbase];
-        float lowerRight = array[whf + ybase * width + xbase1];
-        float upperRight = array[whf + ybase1 * width + xbase1];
-        float upperLeft = array[whf + ybase1 * width + xbase];
+        float lowerLeft = array[thisWhf + ybase * thisWidth + xbase];
+        float lowerRight = array[thisWhf + ybase * thisWidth + xbase1];
+        float upperRight = array[thisWhf + ybase1 * thisWidth + xbase1];
+        float upperLeft = array[thisWhf + ybase1 * thisWidth + xbase];
         float upperAverage = upperLeft + xFraction * (upperRight - upperLeft);
         float lowerAverage = lowerLeft + xFraction * (lowerRight - lowerLeft);
         q = lowerAverage + yFraction * (upperAverage - lowerAverage);

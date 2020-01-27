@@ -72,7 +72,7 @@ public class LiveSRRF_optimised_ implements PlugIn {
 //            temporalAnalysis = {"AVG","STD","Both AVG and STD"},
             gradientChoice = {"RobX", "3pPlus", "3pX"};
 
-    private float[] shiftX, shiftY;
+    private float[][] driftXY;
 
     // Image formats
     private ImagePlus imp,
@@ -227,8 +227,8 @@ public class LiveSRRF_optimised_ implements PlugIn {
 
         liveSRRF.initialise(width, height, magnification, fwhm, sensitivity, nFrameOnGPU, nFrameForSRRFtoUse, blockSize, chosenDevice, intWeighting, doMPmapCorrection, thisGradientChoice);
 
-        shiftX = new float[nFrameForSRRFtoUse];
-        shiftY = new float[nFrameForSRRFtoUse];
+        driftXY = new float[nFrameForSRRFtoUse][2];
+//        driftY = new float[nFrameForSRRFtoUse];
 
         XYShiftCalculator shiftCalculator = new XYShiftCalculator(imp);
         ImageStack imsBuffer;
@@ -267,8 +267,11 @@ public class LiveSRRF_optimised_ implements PlugIn {
 
             if (correctVibration) {
                 shiftCalculator.calculateShiftArray(indexStartSRRFframe, nFrameForSRRFtoUse);
-                shiftX = shiftCalculator.shiftX;
-                shiftY = shiftCalculator.shiftY;
+                for (int i = 0; i < nFrameForSRRFtoUse; i++) {
+                    driftXY[i][0] = shiftCalculator.shiftX[i];
+                    driftXY[i][1] = shiftCalculator.shiftY[i];
+                }
+
 
                 if (showImStabPlot) {
                     // Scatter plot
@@ -276,8 +279,8 @@ public class LiveSRRF_optimised_ implements PlugIn {
                     for (int i = 0; i < nFrameForSRRFtoUse; i++) {
                         float[] x_temp = new float[1];
                         float[] y_temp = new float[1];
-                        x_temp[0] = shiftX[i];
-                        y_temp[0] = shiftY[i];
+                        x_temp[0] = driftXY[i][0];
+                        y_temp[0] = driftXY[i][1];
                         scatterPlot.setColor(Color.getHSBColor(i / (float) nFramesRawData, 1f, 1f)); // this corresponds to the spectrum LUT
                         scatterPlot.addPoints(x_temp, y_temp, Plot.CROSS);
                     }
@@ -287,7 +290,7 @@ public class LiveSRRF_optimised_ implements PlugIn {
 
             }
 
-            liveSRRF.loadDriftXYGPUbuffer(shiftX, shiftY);
+            liveSRRF.loadDriftXYGPUbuffer(driftXY);
 
             IJ.showProgress(r - 1, nSRRFframe);
 
