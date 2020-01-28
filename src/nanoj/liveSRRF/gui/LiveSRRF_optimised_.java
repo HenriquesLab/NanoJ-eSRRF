@@ -61,7 +61,7 @@ public class LiveSRRF_optimised_ implements PlugIn {
             showGradients,
             intWeighting;
 
-    private final String LiveSRRFVersion = "v1.2d-fhi.13";
+    private final String LiveSRRFVersion = "v1.2d-fhi.14";
     private String pathToDisk = "",
             fileName,
             chosenDeviceName,
@@ -306,7 +306,8 @@ public class LiveSRRF_optimised_ implements PlugIn {
                     imsRawData.addSlice(imsAllRawData.getProcessor(indexStartSRRFframe + nFrameOnGPU * l + f));
                 }
 
-                userPressedEscape = liveSRRF.calculateSRRF(imsRawData); // resets the local GPU load frame counter
+                liveSRRF.prepareDataSRRF(imsRawData);
+                userPressedEscape = liveSRRF.calculateSRRF(); // resets the local GPU load frame counter
 
                 // Check if user is cancelling calculation
                 if (userPressedEscape) {

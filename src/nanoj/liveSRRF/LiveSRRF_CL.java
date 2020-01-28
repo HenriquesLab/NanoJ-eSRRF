@@ -28,7 +28,8 @@ public class LiveSRRF_CL {
             nFrameForSRRF,
             blockLength,
             magnification,
-            nFramesOnGPU;
+            nFramesOnGPU,
+            nFrameToLoad;
 
     private final int GxGyMagnification = 1;
     //    private final float vxy_offset = 0.5f; // These are for the 2pI method
@@ -198,17 +199,17 @@ public class LiveSRRF_CL {
         if (thisGradientChoice.equals("RobX")) {
             vxy_offset = 0.0f;
             vxy_ArrayShift = 0;
-            IJ.log("Using RobX");
+//            IJ.log("Using RobX");
         }
         else if (thisGradientChoice.equals("3pPlus")) {
             vxy_offset = 0.5f;
             vxy_ArrayShift = 0;
-            IJ.log("Using 3pPlus");
+//            IJ.log("Using 3pPlus");
         }
         else if (thisGradientChoice.equals("3pX")) {
             vxy_offset = 0.5f;
             vxy_ArrayShift = 0;
-            IJ.log("Using 3pX");
+//            IJ.log("Using 3pX");
         }
 
         // Create the program
@@ -359,12 +360,10 @@ public class LiveSRRF_CL {
 
 
     // --- Calculate SRRF images ---
-    public synchronized boolean calculateSRRF(ImageStack imsRawData) { // returns boolean describing whether it was cancelled by user or not
-
-//        System.out.println("Calculate SRRF entry");
+    public void prepareDataSRRF(ImageStack imsRawData) {
 
         assert (imsRawData.getWidth() == width && imsRawData.getHeight() == height);
-        int nFrameToLoad = imsRawData.getSize();
+        nFrameToLoad = imsRawData.getSize();
 
         int id;
         if (magnification > 1) {
@@ -378,8 +377,7 @@ public class LiveSRRF_CL {
             fillBuffer(clBufferPx, imsRawDataInt);
             queue.putWriteBuffer(clBufferPx, false);
             prof.recordTime("Uploading data to GPU", prof.endTimer(id));
-        }
-        else {
+        } else {
 
 //        IJ.log("Uploading raw data to GPU...");
             id = prof.startTimer();
@@ -403,11 +401,16 @@ public class LiveSRRF_CL {
 
         // Make kernelCalculateSRRF assignment
 //        IJ.log("Calculating SRRF...");
+    }
+
+    // --- Calculate SRRF images ---
+    public synchronized boolean calculateSRRF() { // returns boolean describing whether it was cancelled by user or not
 
         int workSize;
         int nBlocks = widthM * heightM / blockLength + ((widthM * heightM % blockLength == 0) ? 0 : 1);
         queue.finish(); // Make sure everything is done
 
+        int id;
         for (int f = 0; f < nFrameToLoad; f++) {
 //            System.out.println("Calculate SRRF frame #"+f);
 
