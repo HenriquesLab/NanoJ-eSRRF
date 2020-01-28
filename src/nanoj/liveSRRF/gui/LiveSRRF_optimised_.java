@@ -56,12 +56,12 @@ public class LiveSRRF_optimised_ implements PlugIn {
             previousWriteToDisk = false,
             previousAdvSettings = false,
             writeSuggestOKeyed = false,
-            doMPmapCorrection,
+//            doMPmapCorrection,
             showImStabPlot,
             showGradients,
             intWeighting;
 
-    private final String LiveSRRFVersion = "v1.2d-fhi.14";
+    private final String LiveSRRFVersion = "v1.2d-fhi.15";
     private String pathToDisk = "",
             fileName,
             chosenDeviceName,
@@ -70,7 +70,7 @@ public class LiveSRRF_optimised_ implements PlugIn {
 
     private String[] deviceNames,
 //            temporalAnalysis = {"AVG","STD","Both AVG and STD"},
-            gradientChoice = {"RobX", "3pPlus", "3pX"};
+            gradientChoice = {"RobX", "3pPlus", "3pX", "5pPlus"};
 
     private float[][] driftXY;
 
@@ -120,8 +120,9 @@ public class LiveSRRF_optimised_ implements PlugIn {
         blockSize = (int) prefs.get("blockSize", 20000);
         writeToDiskToUse = false;
         intWeighting = prefs.get("intWeighting", true);
-        doMPmapCorrection = prefs.get("doMPmapCorrection", true);
+//        doMPmapCorrection = prefs.get("doMPmapCorrection", true);
         showGradients = prefs.get("showGradients", false);
+        thisGradientChoice = prefs.get("thisGradientChoice", gradientChoice[0]);
 
 
 //        // Close the log: //TODO: this seems to sometimes make a different whether OpenCL runs or not (observation from Nvidia 1050, not repeatable)
@@ -202,7 +203,7 @@ public class LiveSRRF_optimised_ implements PlugIn {
         IJ.log("Running on: " + chosenDeviceName);
         IJ.log("# reconstructed frames: " + nSRRFframe);
         IJ.log("# device load / SRRF frame: " + nGPUloadPerSRRFframe);
-        IJ.log("Macro-pixel artefact removal: " + doMPmapCorrection);
+//        IJ.log("Macro-pixel artefact removal: " + doMPmapCorrection);
         IJ.log("Vibration correction: "+ correctVibration);
 
         // Initialize ZipSaver in case we're writing to disk
@@ -225,7 +226,7 @@ public class LiveSRRF_optimised_ implements PlugIn {
 
         ImageStack imsAllRawData = imp.getImageStack();
 
-        liveSRRF.initialise(width, height, magnification, fwhm, sensitivity, nFrameOnGPU, nFrameForSRRFtoUse, blockSize, chosenDevice, intWeighting, doMPmapCorrection, thisGradientChoice);
+        liveSRRF.initialise(width, height, magnification, fwhm, sensitivity, nFrameOnGPU, nFrameForSRRFtoUse, blockSize, chosenDevice, intWeighting, thisGradientChoice);
 
         driftXY = new float[nFrameForSRRFtoUse][2];
 //        driftY = new float[nFrameForSRRFtoUse];
@@ -538,8 +539,6 @@ public class LiveSRRF_optimised_ implements PlugIn {
 
         gd.addMessage("-=-= Advanced settings =-=-\n", headerFont);
         gd.addCheckbox("Show advanced settings", false);
-        gd.addChoice("Gradient type", gradientChoice, gradientChoice[0]);
-//        gd.addChoice("Gradient mag.", new int[] {1,2}, 1);
 
         gd.addHelp("https://www.youtube.com/watch?v=PJQVlVHsFF8"); // If you're hooked on a feeling
 
@@ -609,8 +608,6 @@ public class LiveSRRF_optimised_ implements PlugIn {
         if (showAdvancedSettings && !previousAdvSettings) advancedSettingsGUI();
         previousAdvSettings = showAdvancedSettings;
 
-        thisGradientChoice = gd.getNextChoice();
-
         nGPUloadPerSRRFframe = (int) math.ceil((float) nFrameForSRRFtoUse / (float) nFrameOnGPU);
 
         return goodToGo;
@@ -643,10 +640,10 @@ public class LiveSRRF_optimised_ implements PlugIn {
 
         gd.addMessage("-=-= Advanced reconstruction settings (for testing) =-=-\n", headerFont);
         gd.addCheckbox("Intensity weighting", prefs.get("intWeighting", true));
-        gd.addCheckbox("Macro-pixel patterning correction", prefs.get("doMPmapCorrection", true));
+//        gd.addCheckbox("Macro-pixel patterning correction", prefs.get("doMPmapCorrection", true));
         gd.addCheckbox("Show image stabilisation scatter plot", prefs.get("showImStabPlot", false));
         gd.addCheckbox("Show gradients", prefs.get("showGradients", false));
-
+        gd.addChoice("Gradient type", gradientChoice, prefs.get("thisGradientChoice", gradientChoice[0]));
 
         gd.addHelp("https://www.youtube.com/watch?v=otCpCn0l4Wo"); // it's Hammer time
 
@@ -660,10 +657,10 @@ public class LiveSRRF_optimised_ implements PlugIn {
             maxMemoryGPU = prefs.get("maxMemoryGPU", 500);
             blockSize = (int) prefs.get("blockSize", 20000);
             intWeighting = prefs.get("intWeighting", true);
-            doMPmapCorrection = prefs.get("doMPmapCorrection", true);
+//            doMPmapCorrection = prefs.get("doMPmapCorrection", true);
             showImStabPlot = prefs.get("showImStabPlot", false);
             showGradients = prefs.get("showGradients", false);
-
+            thisGradientChoice = prefs.get("thisGradientChoice", gradientChoice[0]);
             // re-initialises to how it was before entering advanced GUI
             writeToDiskToUse = writeToDiskTemp;
             previousWriteToDisk = writeToDiskTemp;
@@ -673,9 +670,10 @@ public class LiveSRRF_optimised_ implements PlugIn {
             prefs.set("maxMemoryGPU", maxMemoryGPU);
             prefs.set("blockSize", blockSize);
             prefs.set("intWeighting", intWeighting);
-            prefs.set("doMPmapCorrection", doMPmapCorrection);
+//            prefs.set("doMPmapCorrection", doMPmapCorrection);
             prefs.set("showImStabPlot", showImStabPlot);
             prefs.set("showGradients", showGradients);
+            prefs.set("thisGradientChoice", thisGradientChoice);
             prefs.save();
         }
 
@@ -701,9 +699,10 @@ public class LiveSRRF_optimised_ implements PlugIn {
 
         writeToDiskTemp = gd.getNextBoolean();
         intWeighting = gd.getNextBoolean();
-        doMPmapCorrection = gd.getNextBoolean();
+//        doMPmapCorrection = gd.getNextBoolean();
         showImStabPlot = gd.getNextBoolean();
         showGradients = gd.getNextBoolean();
+        thisGradientChoice = gd.getNextChoice();
 
         if (writeToDiskTemp && !previousWriteToDisk) {
             pathToDisk = IJ.getDirectory("");

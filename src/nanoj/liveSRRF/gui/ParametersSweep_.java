@@ -57,7 +57,7 @@ public class ParametersSweep_ implements PlugIn {
 
     private float fixedSigma;
 
-    private final String LiveSRRFVersion = "v1.2d-fhi.4";
+    private final String LiveSRRFVersion = "v1.2d-fhi.5";
     private float[] shiftX, shiftY;
 
     private String imageTitle;
@@ -302,6 +302,9 @@ public class ParametersSweep_ implements PlugIn {
                 }
             }
 
+            int nFramesOnGPU;
+            if (dataLoadType == 0) nFramesOnGPU = 1;
+            else if (dataLoadType == 1) nFramesOnGPU = nframeArray[nfi];
 
             for (int si = 0; si < sensitivityArray.length; si++) {
                 for (int fi = 0; fi < radiusArray.length; fi++) {
@@ -325,15 +328,11 @@ public class ParametersSweep_ implements PlugIn {
 
                     String label = "R=" + radiusArray[fi] + "/S=" + sensitivityArray[si] + "/#fr=" + nframeArray[nfi];
 
-                    int nFramesOnGPU;
-                    if (dataLoadType == 0) nFramesOnGPU = 1;
-                    else if (dataLoadType == 1) nFramesOnGPU = nframeArray[nfi];
-
                     // FRC resolution estimation
                     if (calculateFRC) {
                         // Calculate and get the reconstruction from the odd frames // TODO: add options to do intensity weighting or MPcorrection?
                         // TODO: consider only doing the initialisation and data preparation once, currently repeated for every parameter
-                        liveSRRF.initialise(width, height, magnification, radiusArray[fi], sensitivityArray[si], nFramesOnGPU, nframeArray[nfi], blockSize, null, true, false, "RobX");
+                        liveSRRF.initialise(width, height, magnification, radiusArray[fi], sensitivityArray[si], nFramesOnGPU, nframeArray[nfi], blockSize, null, true, "RobX");
                         liveSRRF.resetFramePosition();
                         liveSRRF.loadDriftXYGPUbuffer(shiftXYtempOdd);
 
@@ -353,7 +352,7 @@ public class ParametersSweep_ implements PlugIn {
 
                         // Calculate and get the reconstruction from the even frames // TODO: add options to do intensity weighting or MPcorrection
 
-                        liveSRRF.initialise(width, height, magnification, radiusArray[fi], sensitivityArray[si], nFramesOnGPU, nframeArray[nfi], blockSize, null, true, true, "RobX");
+                        liveSRRF.initialise(width, height, magnification, radiusArray[fi], sensitivityArray[si], nFramesOnGPU, nframeArray[nfi], blockSize, null, true, "RobX");
                         liveSRRF.resetFramePosition();
                         liveSRRF.loadDriftXYGPUbuffer(shiftXYtempEven);
 
@@ -376,15 +375,15 @@ public class ParametersSweep_ implements PlugIn {
                     }
 
 
-                    else { // if (calculateFRC)
-                        // TODO: add options to do intensity weighting or MPcorrection?
-                        liveSRRF.initialise(width, height, magnification, radiusArray[fi], sensitivityArray[si], nFramesOnGPU, nframeArray[nfi], blockSize, null, true, true, "RobX");
-                        liveSRRF.resetFramePosition();
-                        liveSRRF.loadDriftXYGPUbuffer(shiftXYtemp);
+//                    else { // if (calculateFRC)
+//                        // TODO: add options to do intensity weighting or MPcorrection?
+                    liveSRRF.initialise(width, height, magnification, radiusArray[fi], sensitivityArray[si], nFramesOnGPU, nframeArray[nfi], blockSize, null, true, "RobX");
+                    liveSRRF.resetFramePosition();
+                    liveSRRF.loadDriftXYGPUbuffer(shiftXYtemp);
 
-                        calculateLiveSRRFframeLoad(imsAllRawData, nfi, 0, liveSRRF);
-                        imsBuffer = liveSRRF.imsSRRF;
-                    }
+                    calculateLiveSRRFframeLoad(imsAllRawData, nfi, 0, liveSRRF);
+                    imsBuffer = liveSRRF.imsSRRF;
+//                    }
 
                     // Collate the reconstructions
                     for (int i = 0; i < nRecons; i++) {
@@ -660,26 +659,26 @@ public class ParametersSweep_ implements PlugIn {
         int fmode;
 
         // loadType 0 = single frame load
-            IJ.showStatus("Calculating LiveSRRF image...");
-            for (int f = 1; f <= nframeArray[nf]; f++) {
+        IJ.showStatus("Calculating LiveSRRF image...");
+        for (int f = 1; f <= nframeArray[nf]; f++) {
 
-                if (dataLoadType == 0) imsThisRawData = new ImageStack(width, height); // re-initialise the stack every time
+            if (dataLoadType == 0) imsThisRawData = new ImageStack(width, height); // re-initialise the stack every time
 
-                if (mode == 0) fmode = f;  // no FRC
-                else if (mode == 1) fmode = 2 * (f - 1) + 1; // FRC odd frames
-                else fmode = 2 * f; // FRC even frames
+            if (mode == 0) fmode = f;  // no FRC
+            else if (mode == 1) fmode = 2 * (f - 1) + 1; // FRC odd frames
+            else fmode = 2 * f; // FRC even frames
 
-                imsThisRawData.addSlice(imsAllRawData.getProcessor(fmode));
+            imsThisRawData.addSlice(imsAllRawData.getProcessor(fmode));
 
-                if (dataLoadType == 0) {
-                    liveSRRF.prepareDataSRRF(imsThisRawData);
-                    userPressedEscape = liveSRRF.calculateSRRF();
-                    // Check if user is cancelling calculation
-                    if (userPressedEscape) {
-                        return userPressedEscape;
-                    }
+            if (dataLoadType == 0) {
+                liveSRRF.prepareDataSRRF(imsThisRawData);
+                userPressedEscape = liveSRRF.calculateSRRF();
+                // Check if user is cancelling calculation
+                if (userPressedEscape) {
+                    return userPressedEscape;
                 }
             }
+        }
 
         if (dataLoadType == 1) {
             liveSRRF.prepareDataSRRF(imsThisRawData);
