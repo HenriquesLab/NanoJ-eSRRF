@@ -35,7 +35,8 @@ public class LiveSRRF_CL {
     private int vxy_ArrayShift;
 
     public final int nReconstructions = 3; // Currently AVG, VAR (2nd order SOFI Tau=0) and 2nd order cumulants Tau=1
-    public final String[] reconNames = new String[]{"AVG", "VAR", "TAC2"};
+    public final String[] reconNames = new String[]{"AVG", "VAR", "TAC2"},
+            gradientMethods = new String[]{"RobX", "3pPlus","3pX","5pPlus"};
 
     public ImageStack imsSRRF;
 
@@ -67,12 +68,13 @@ public class LiveSRRF_CL {
     private CLBuffer<IntBuffer>
             clBufferCurrentFrame;
 
+    private boolean DEBUG = false;
+
 
     // --- Constructor ---
     public LiveSRRF_CL() {
         // Nothing to see here. Keep calm and carry on. -----> -------->
     }
-
 
     // -- Check devices --
     public void checkDevices() {
@@ -137,11 +139,16 @@ public class LiveSRRF_CL {
         this.nFramesOnGPU = nFramesOnGPU;
 
         if (chosenDevice == null) {
-//            IJ.log("Looking for the fastest device...");
-            System.out.println("Using the fastest device...");
+            if (DEBUG) {
+                IJ.log("Looking for the fastest device...");
+                System.out.println("Using the fastest device...");
+            }
             context = CLContext.create(clPlatformMaxFlop);
             chosenDevice = context.getMaxFlopsDevice();
-//            IJ.log("Using "+chosenDevice.getName());
+
+            if (DEBUG) {
+                IJ.log("Using "+chosenDevice.getName());
+            }
         }
         else{
             context = CLContext.create(chosenDevice.getPlatform());
@@ -154,8 +161,10 @@ public class LiveSRRF_CL {
             chosenDevice = allCLdevicesOnThisPlatform[i];
         }
 
-        System.out.println("using " + chosenDevice);
-        //IJ.log("Using " + chosenDevice.getName());
+        if (DEBUG) {
+            System.out.println("using " + chosenDevice);
+            IJ.log("Using " + chosenDevice.getName());
+        }
 
         clBufferPx = context.createFloatBuffer(nFramesOnGPU * widthM * heightM, READ_ONLY);
         clBufferDriftXY = context.createFloatBuffer(2 * nFrameForSRRF, READ_ONLY);
@@ -164,26 +173,22 @@ public class LiveSRRF_CL {
         clBufferPreviousFrame = context.createFloatBuffer(widthM * heightM, READ_WRITE);
         clBufferOut = context.createFloatBuffer((nReconstructions + 1) * widthM * heightM, WRITE_ONLY); // single frame cumulative AVG projection of RGC
         clBufferCurrentFrame = context.createIntBuffer(2, READ_WRITE);
+
         // Current frame is a 2 element Int buffer:
         // nCurrentFrame[0] is the global current frame in the current SRRF frame (reset every SRRF frame)
         // nCurrentFrame[1] is the local current frame in the current GPU-loaded dataset (reset every tun of the method calculateSRRF (within the gradient calculation))
 
+        // Set the pixel offset for the methods (this depends on where in real space the gradient is estimated)
         switch (thisGradientChoice) {
             case "RobX":
                 vxy_offset = 0.0f;
                 vxy_ArrayShift = 0;
-//            IJ.log("Using RobX");
                 break;
             case "3pPlus":
             case "5pPlus":
-                vxy_offset = 0.5f;
-                vxy_ArrayShift = 0;
-//            IJ.log("Using 3pPlus");
-                break;
             case "3pX":
                 vxy_offset = 0.5f;
                 vxy_ArrayShift = 0;
-//            IJ.log("Using 3pX");
                 break;
         }
 
@@ -209,26 +214,31 @@ public class LiveSRRF_CL {
         else programString = replaceFirst(programString, "$INTWEIGHTING$", "" + 0);
 
         programLiveSRRF = context.createProgram(programString).build();
-//        IJ.log("Program executable? "+programLiveSRRF.isExecutable());
-//        IJ.log("------------------------------------");
-//        IJ.log(programLiveSRRF.getBuildLog());
-//        IJ.log("------------------------------------");
 
-        switch (thisGradientChoice) {
-            case "RobX":
-                kernelCalculateGradient = programLiveSRRF.createCLKernel("calculateGradientRobX");
-                break;
-            case "3pPlus":
-                kernelCalculateGradient = programLiveSRRF.createCLKernel("calculateGradient3pPlus");
-                break;
-            case "3pX":
-                kernelCalculateGradient = programLiveSRRF.createCLKernel("calculateGradient3pX");
-                break;
-            case "5pPlus":
-                kernelCalculateGradient = programLiveSRRF.createCLKernel(("calculateGradient5pPlus"));
-                break;
+        if (DEBUG) {
+            IJ.log("Program executable? "+programLiveSRRF.isExecutable());
+            IJ.log("------------------------------------");
+            IJ.log(programLiveSRRF.getBuildLog());
+            IJ.log("------------------------------------");
         }
 
+
+//        switch (thisGradientChoice) {
+//            case "RobX":
+//                kernelCalculateGradient = programLiveSRRF.createCLKernel("calculateGradientRobX");
+//                break;
+//            case "3pPlus":
+//                kernelCalculateGradient = programLiveSRRF.createCLKernel("calculateGradient3pPlus");
+//                break;
+//            case "3pX":
+//                kernelCalculateGradient = programLiveSRRF.createCLKernel("calculateGradient3pX");
+//                break;
+//            case "5pPlus":
+//                kernelCalculateGradient = programLiveSRRF.createCLKernel(("calculateGradient5pPlus"));
+//                break;
+//        }
+
+        kernelCalculateGradient = programLiveSRRF.createCLKernel("calculateGradient"+thisGradientChoice);
         kernelCalculateSRRF = programLiveSRRF.createCLKernel("calculateRadialGradientConvergence");
         kernelIncrementFramePosition = programLiveSRRF.createCLKernel("kernelIncrementFramePosition");
         kernelResetFramePosition = programLiveSRRF.createCLKernel("kernelResetFramePosition");
@@ -255,26 +265,26 @@ public class LiveSRRF_CL {
 
         argn = 0;
         kernelCalculateVar.setArg(argn++, clBufferOut);
-
         queue = chosenDevice.createCommandQueue();
 
-        System.out.println("used device memory: " + (
-                clBufferPx.getCLSize() +
-                        clBufferDriftXY.getCLSize() +
-                        clBufferGx.getCLSize() +
-                        clBufferGy.getCLSize() +
-                        clBufferPreviousFrame.getCLSize() +
-                        clBufferOut.getCLSize() +
-                        clBufferCurrentFrame.getCLSize()
-        )
-                / 1000000d + "MB"); // conversion in base 10
+        if (DEBUG) {
+            System.out.println("used device memory: " + (
+                    clBufferPx.getCLSize() +
+                            clBufferDriftXY.getCLSize() +
+                            clBufferGx.getCLSize() +
+                            clBufferGy.getCLSize() +
+                            clBufferPreviousFrame.getCLSize() +
+                            clBufferOut.getCLSize() +
+                            clBufferCurrentFrame.getCLSize()
+            )
+                    / 1000000d + "MB"); // conversion in base 10
+        }
     }
 
 
     // --- Load Drift array on GPU ---
     public void loadDriftXYGPUbuffer(float[][] driftXY) {
 
-//        System.out.println("loading drift buffers");
         float[] driftXYarray = new float[2 * nFrameForSRRF];
         for (int i = 0; i < nFrameForSRRF; i++) {
             driftXYarray[i] = magnification*driftXY[i][0]; // loaded as drift in pixels in the magnified pixel space
@@ -306,7 +316,6 @@ public class LiveSRRF_CL {
             queue.putWriteBuffer(clBufferPx, false);
             prof.recordTime("Uploading data to GPU", prof.endTimer(id));
         } else {
-
 //        IJ.log("Uploading raw data to GPU...");
             id = prof.startTimer();
             fillBuffer(clBufferPx, imsRawData);
@@ -317,7 +326,7 @@ public class LiveSRRF_CL {
         // Make kernelCalculateGradient assignment (this kernel also resets the local GPU load frame counter)
 //        IJ.log("Calculating gradient...");
         id = prof.startTimer();
-        queue.finish(); // Make sure everything is done
+//        queue.finish(); // Make sure everything is done
         queue.put3DRangeKernel(kernelCalculateGradient, 0, 0, 0, widthM, heightM, nFrameToLoad, 0, 0, 0);
         prof.recordTime("kernelCalculateGradient", prof.endTimer(id));
     }
@@ -327,11 +336,13 @@ public class LiveSRRF_CL {
 
         int workSize;
         int nBlocks = widthM * heightM / blockLength + ((widthM * heightM % blockLength == 0) ? 0 : 1);
-        queue.finish(); // Make sure everything is done
+//        queue.finish(); // Make sure everything is done
 
         int id;
         for (int f = 0; f < nFrameToLoad; f++) {
-//            System.out.println("Calculate SRRF frame #"+f);
+            if (DEBUG) {
+                System.out.println("Calculate SRRF frame #"+f);
+            }
 
             for (int nB = 0; nB < nBlocks; nB++) {
                 workSize = min(blockLength, widthM * heightM - nB * blockLength);
@@ -345,9 +356,12 @@ public class LiveSRRF_CL {
                 }
             }
 
+//            id = prof.startTimer();
+//            queue.finish(); // Make sure everything is done
+//            prof.recordTime("Finishing queue", prof.endTimer(id));
+
             // This kernel needs to be done outside of the previous kernel because of concomitent execution (you never know when each pixel is executed)
             id = prof.startTimer();
-            queue.finish(); // Make sure everything is done
             queue.put1DRangeKernel(kernelIncrementFramePosition, 0, 2, 0); // this internally increment the frame position f
             prof.recordTime("Increment frame count", prof.endTimer(id));
         }
@@ -359,14 +373,13 @@ public class LiveSRRF_CL {
     // --- Read the output buffer ---
     public void readSRRFbuffer() {
 
-//        System.out.println("Reading SRRF buffer");
         // Calculate the VARIANCE on the OutputArray on the GPU
         int id = prof.startTimer();
-        queue.finish(); // Make sure everything is done
+//        queue.finish(); // Make sure everything is done
         queue.put1DRangeKernel(kernelCalculateVar, 0, heightM*widthM,0);
         prof.recordTime("Calculate VAR image", prof.endTimer(id));
 
-        queue.finish(); // Make sure everything is done
+//        queue.finish(); // Make sure everything is done
         queue.putReadBuffer(clBufferOut, true);
         FloatBuffer bufferSRRF = clBufferOut.getBuffer();
 
@@ -399,7 +412,7 @@ public class LiveSRRF_CL {
     // --- Read the gradient buffers ---
     public ImageStack readGradientBuffers() {
 
-        queue.finish(); // Make sure everything is done
+//        queue.finish(); // Make sure everything is done
 
         int imageWidth = widthM;
         int imageHeight = heightM;

@@ -36,7 +36,8 @@ public class ParametersSweep_ implements PlugIn {
 
     private final int dataLoadType = 1;
 
-    private boolean showRecons,
+    private boolean DEBUG = false,
+            showRecons,
             showErrorMaps,
             showRSC,
             calculateFRC,
@@ -57,7 +58,7 @@ public class ParametersSweep_ implements PlugIn {
 
     private float fixedSigma;
 
-    private final String LiveSRRFVersion = "v1.2d-fhi.6";
+    private final String LiveSRRFVersion = "v1.2d-fhi.7";
     private float[] shiftX, shiftY;
 
     private String imageTitle;
@@ -175,7 +176,6 @@ public class ParametersSweep_ implements PlugIn {
             IJ.log("Aborted: Not enough frames in the stack for this analysis.");
             return;
         }
-
 
         // Log the settings used
         IJ.log("Magnification: " + magnification);
@@ -373,15 +373,12 @@ public class ParametersSweep_ implements PlugIn {
                         }
                     }
 
-
-//                    else { // if (calculateFRC) // do in all cases, important for TAC2!
                     liveSRRF.initialise(width, height, magnification, radiusArray[fi], sensitivityArray[si], nFramesOnGPU, nframeArray[nfi], blockSize, null, true, "RobX");
                     liveSRRF.resetFramePosition();
                     liveSRRF.loadDriftXYGPUbuffer(shiftXYtemp);
 
                     calculateLiveSRRFframeLoad(imsAllRawData, nfi, 0, liveSRRF);
                     imsBuffer = liveSRRF.imsSRRF;
-//                    }
 
                     // Collate the reconstructions
                     for (int i = 0; i < nRecons; i++) {
@@ -469,7 +466,6 @@ public class ParametersSweep_ implements PlugIn {
             sweepMapCalib.pixelHeight = sensitivityArray[0];
             sweepMapCalib.yOrigin = -1;
         }
-
 
         if (nframeArray.length > 1){
             sweepMapCalib.pixelDepth = nframeArray[1]-nframeArray[0];
@@ -641,7 +637,7 @@ public class ParametersSweep_ implements PlugIn {
         return true;
     }
 
-
+    // ---- Wrapper to get the frames loaded properly for FRC ---- (also choses whether to load as single frame or full stack)
     private boolean calculateLiveSRRFframeLoad(ImageStack imsAllRawData, int nf, int mode, LiveSRRF_CL liveSRRF) {
         ImageStack imsThisRawData = new ImageStack(width, height);
         boolean userPressedEscape = false;
@@ -669,6 +665,7 @@ public class ParametersSweep_ implements PlugIn {
             }
         }
 
+        // loadType 1 = load the whole stack (hoping for the best)
         if (dataLoadType == 1) {
             liveSRRF.prepareDataSRRF(imsThisRawData);
             userPressedEscape = liveSRRF.calculateSRRF();
@@ -680,6 +677,7 @@ public class ParametersSweep_ implements PlugIn {
         return userPressedEscape;
     }
 
+    // ---- Displayer!! ----
     private void displayImagePlus(ImageStack ims, String titleAppendix, Calibration cal, String nameLUT) {
 
         ImagePlus imp = new ImagePlus(imageTitle + titleAppendix, ims);
