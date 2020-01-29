@@ -31,22 +31,13 @@ public class LiveSRRF_CL {
             nFramesOnGPU,
             nFrameToLoad;
 
-    //    private final int GxGyMagnification = 1;
-    //    private final float vxy_offset = 0.5f; // These are for the 2pI method
-//    private final int vxy_ArrayShift = 1;
-//    private final float vxy_offset = 0.0f; //These are for the RobX method
-//    private final int vxy_ArrayShift = 0;
-    private float vxy_offset; //These are for the RobX method
+    private float vxy_offset;
     private int vxy_ArrayShift;
 
     public final int nReconstructions = 3; // Currently AVG, VAR (2nd order SOFI Tau=0) and 2nd order cumulants Tau=1
-    public final String[] reconNames = new String[]{"AVG", "VAR", "TAC2"}; // TODO: use these definiations for the names on other classes?
-
-//    private boolean doMPmapCorrection;
+    public final String[] reconNames = new String[]{"AVG", "VAR", "TAC2"};
 
     public ImageStack imsSRRF;
-
-//    private String thisGradientChoice;
 
     // Advanced formats
     private final NanoJProfiler prof = new NanoJProfiler();
@@ -55,13 +46,10 @@ public class LiveSRRF_CL {
     static private CLContext context;
     static private CLProgram programLiveSRRF;
     static private CLKernel kernelCalculateGradient,
-    //                            kernelInterpolateGradient,
-    kernelIncrementFramePosition,
+            kernelIncrementFramePosition,
             kernelResetFramePosition,
             kernelCalculateSRRF,
-    //            kernelCalculateMPmap,
-    //            kernelCorrectMPmap,
-    kernelCalculateVar;
+            kernelCalculateVar;
 
     static private CLPlatform clPlatformMaxFlop;
     static private CLDevice clDeviceMaxFlop;
@@ -72,10 +60,8 @@ public class LiveSRRF_CL {
     private CLBuffer<FloatBuffer>
             clBufferPx,
             clBufferGx, clBufferGy,
-    //            clBufferGxInt, clBufferGyInt,
-    clBufferDriftXY,
+            clBufferDriftXY,
             clBufferPreviousFrame,
-//            clBufferMPmap,
             clBufferOut;
 
     private CLBuffer<IntBuffer>
@@ -84,7 +70,7 @@ public class LiveSRRF_CL {
 
     // --- Constructor ---
     public LiveSRRF_CL() {
-        // Nothing to see here. Keep calm and carry on.
+        // Nothing to see here. Keep calm and carry on. -----> -------->
     }
 
 
@@ -138,7 +124,6 @@ public class LiveSRRF_CL {
 
     }
 
-
     // ---------------------------------- Initialization method ----------------------------------
     public void initialise(int width, int height, int magnification, float fwhm, int sensitivity, int nFramesOnGPU, int nFrameForSRRF, int blockLength, CLDevice chosenDevice, boolean intWeighting, String thisGradientChoice) {
 
@@ -149,15 +134,12 @@ public class LiveSRRF_CL {
         this.nFrameForSRRF = nFrameForSRRF;
         this.blockLength = blockLength;
         this.magnification = magnification;
-//        this.doMPmapCorrection = doMPmapCorrection;
-//        this.thisGradientChoice = thisGradientChoice;
         this.nFramesOnGPU = nFramesOnGPU;
 
         if (chosenDevice == null) {
 //            IJ.log("Looking for the fastest device...");
             System.out.println("Using the fastest device...");
             context = CLContext.create(clPlatformMaxFlop);
-//            context = CLContext.create();
             chosenDevice = context.getMaxFlopsDevice();
 //            IJ.log("Using "+chosenDevice.getName());
         }
@@ -172,44 +154,37 @@ public class LiveSRRF_CL {
             chosenDevice = allCLdevicesOnThisPlatform[i];
         }
 
-
         System.out.println("using " + chosenDevice);
         //IJ.log("Using " + chosenDevice.getName());
 
-//        clBufferPx = context.createFloatBuffer(nFramesOnGPU * width * height, READ_ONLY);
         clBufferPx = context.createFloatBuffer(nFramesOnGPU * widthM * heightM, READ_ONLY);
         clBufferDriftXY = context.createFloatBuffer(2 * nFrameForSRRF, READ_ONLY);
-//        clBufferGx = context.createFloatBuffer(nFramesOnGPU * width * height, READ_WRITE); // single frame Gx
-//        clBufferGy = context.createFloatBuffer(nFramesOnGPU * width * height, READ_WRITE); // single frame Gy
-
-        clBufferGx = context.createFloatBuffer(nFramesOnGPU * widthM * heightM, READ_WRITE); // single frame Gx
-        clBufferGy = context.createFloatBuffer(nFramesOnGPU * widthM * heightM, READ_WRITE); // single frame Gy
+        clBufferGx = context.createFloatBuffer(nFramesOnGPU * widthM * heightM, READ_WRITE);
+        clBufferGy = context.createFloatBuffer(nFramesOnGPU * widthM * heightM, READ_WRITE);
         clBufferPreviousFrame = context.createFloatBuffer(widthM * heightM, READ_WRITE);
-
-//        clBufferGxInt = context.createFloatBuffer(nFramesOnGPU * 4 * width * height, READ_WRITE); // single frame Gx
-//        clBufferGyInt = context.createFloatBuffer(nFramesOnGPU * 4 * width * height, READ_WRITE); // single frame Gy
         clBufferOut = context.createFloatBuffer((nReconstructions + 1) * widthM * heightM, WRITE_ONLY); // single frame cumulative AVG projection of RGC
         clBufferCurrentFrame = context.createIntBuffer(2, READ_WRITE);
-//        clBufferMPmap = context.createFloatBuffer(nReconstructions * magnification * magnification, READ_WRITE);
-
         // Current frame is a 2 element Int buffer:
         // nCurrentFrame[0] is the global current frame in the current SRRF frame (reset every SRRF frame)
         // nCurrentFrame[1] is the local current frame in the current GPU-loaded dataset (reset every tun of the method calculateSRRF (within the gradient calculation))
 
-        if (thisGradientChoice.equals("RobX")) {
-            vxy_offset = 0.0f;
-            vxy_ArrayShift = 0;
+        switch (thisGradientChoice) {
+            case "RobX":
+                vxy_offset = 0.0f;
+                vxy_ArrayShift = 0;
 //            IJ.log("Using RobX");
-        }
-        else if (thisGradientChoice.equals("3pPlus") || thisGradientChoice.equals("5pPlus")) {
-            vxy_offset = 0.5f;
-            vxy_ArrayShift = 0;
+                break;
+            case "3pPlus":
+            case "5pPlus":
+                vxy_offset = 0.5f;
+                vxy_ArrayShift = 0;
 //            IJ.log("Using 3pPlus");
-        }
-        else if (thisGradientChoice.equals("3pX")) {
-            vxy_offset = 0.5f;
-            vxy_ArrayShift = 0;
+                break;
+            case "3pX":
+                vxy_offset = 0.5f;
+                vxy_ArrayShift = 0;
 //            IJ.log("Using 3pX");
+                break;
         }
 
         // Create the program
@@ -217,44 +192,15 @@ public class LiveSRRF_CL {
         float analysisRadius = (float) ((int) (2 * sigma)) + 1;    // this reduces the radius for speed, works when using dGauss^4 and 2p+I
 
         String programString = getResourceAsString(LiveSRRF_CL.class, "liveSRRF_noInterpolation.cl");
-//        programString = replaceFirst(programString, "$MAGNIFICATION$", "" + magnification);
-//        programString = replaceFirst(programString, "$FWHM$", "" + fwhm);
-//        programString = replaceFirst(programString, "$SENSITIVITY$", "" + sensitivity);
-//        programString = replaceFirst(programString, "$GXGYMAGNIFICATION$", "" + GxGyMagnification);
 
-//        programString = replaceFirst(programString, "$SIGMA$", "" + sigma);
-//        programString = replaceFirst(programString, "$RADIUS$", "" + radius);
-//        programString = replaceFirst(programString, "$WIDTH$", "" + width);
-//        programString = replaceFirst(programString, "$HEIGHT$", "" + height);
-//        programString = replaceFirst(programString, "$WH$", "" + (width * height));
-//        programString = replaceFirst(programString, "$WM$", "" + (width * magnification));
-//        programString = replaceFirst(programString, "$HM$", "" + (height * magnification));
-//        programString = replaceFirst(programString, "$WHM$", "" + (width * height * magnification * magnification));
-//        programString = replaceFirst(programString, "$WINT$", "" + (GxGyMagnification * width));
-//        programString = replaceFirst(programString, "$HINT$", "" + (GxGyMagnification * height));
-//        programString = replaceFirst(programString, "$VXY_OFFSET$", "" + vxy_offset);
-//        programString = replaceFirst(programString, "$VXY_ARRAYSHIFT$", "" + vxy_ArrayShift);
-//        programString = replaceFirst(programString, "$NFRAMEFORSRRF$", "" + nFrameForSRRF);
-
-        // This lot of definition works for no interpolation on GPU only (GxGyMagnification = 1 and width/height widthM/heightM are the same from the GPU's point of view)
-//        programString = replaceFirst(programString, "$MAGNIFICATION$", "" + 1);
-//        programString = replaceFirst(programString, "$FWHM$", "" + magnification*fwhm);
         programString = replaceFirst(programString, "$SENSITIVITY$", "" + sensitivity);
-//        programString = replaceFirst(programString, "$GXGYMAGNIFICATION$", "" + 1);
-
         programString = replaceFirst(programString, "$TWOSIGSQUARE$", "" + 2 * sigma*magnification * sigma*magnification);
         programString = replaceFirst(programString, "$TWOSIGpONE$", "" + (2 * sigma + 1)*magnification);
 
-//        programString = replaceFirst(programString, "$SIGMA$", "" + magnification*sigma);
         programString = replaceFirst(programString, "$RADIUS$", "" + magnification*analysisRadius);
         programString = replaceFirst(programString, "$WIDTH$", "" + widthM);
         programString = replaceFirst(programString, "$HEIGHT$", "" + heightM);
         programString = replaceFirst(programString, "$WH$", "" + (widthM * heightM));
-//        programString = replaceFirst(programString, "$WM$", "" + widthM);
-//        programString = replaceFirst(programString, "$HM$", "" + heightM);
-//        programString = replaceFirst(programString, "$WHM$", "" + (widthM * heightM));
-//        programString = replaceFirst(programString, "$WINT$", "" + widthM);
-//        programString = replaceFirst(programString, "$HINT$", "" + heightM);
         programString = replaceFirst(programString, "$VXY_OFFSET$", "" + vxy_offset);
         programString = replaceFirst(programString, "$VXY_ARRAYSHIFT$", "" + vxy_ArrayShift);
         programString = replaceFirst(programString, "$NFRAMEFORSRRF$", "" + nFrameForSRRF);
@@ -268,17 +214,24 @@ public class LiveSRRF_CL {
 //        IJ.log(programLiveSRRF.getBuildLog());
 //        IJ.log("------------------------------------");
 
-        if (thisGradientChoice.equals("RobX")) kernelCalculateGradient = programLiveSRRF.createCLKernel("calculateGradientRobX");
-        else if (thisGradientChoice.equals("3pPlus")) kernelCalculateGradient = programLiveSRRF.createCLKernel("calculateGradient3pPlus");
-        else if (thisGradientChoice.equals("3pX")) kernelCalculateGradient = programLiveSRRF.createCLKernel("calculateGradient3pX");
-        else if (thisGradientChoice.equals("5pPlus")) kernelCalculateGradient = programLiveSRRF.createCLKernel(("calculateGradient5pPlus"));
+        switch (thisGradientChoice) {
+            case "RobX":
+                kernelCalculateGradient = programLiveSRRF.createCLKernel("calculateGradientRobX");
+                break;
+            case "3pPlus":
+                kernelCalculateGradient = programLiveSRRF.createCLKernel("calculateGradient3pPlus");
+                break;
+            case "3pX":
+                kernelCalculateGradient = programLiveSRRF.createCLKernel("calculateGradient3pX");
+                break;
+            case "5pPlus":
+                kernelCalculateGradient = programLiveSRRF.createCLKernel(("calculateGradient5pPlus"));
+                break;
+        }
 
-//        kernelInterpolateGradient = programLiveSRRF.createCLKernel("calculateGradientInterpolation");
         kernelCalculateSRRF = programLiveSRRF.createCLKernel("calculateRadialGradientConvergence");
         kernelIncrementFramePosition = programLiveSRRF.createCLKernel("kernelIncrementFramePosition");
         kernelResetFramePosition = programLiveSRRF.createCLKernel("kernelResetFramePosition");
-//        kernelCalculateMPmap = programLiveSRRF.createCLKernel("kernelCalculateMPmap");
-//        kernelCorrectMPmap = programLiveSRRF.createCLKernel("kernelCorrectMPmap");
         kernelCalculateVar = programLiveSRRF.createCLKernel("kernelCalculateVar");
 
         int argn;
@@ -288,18 +241,10 @@ public class LiveSRRF_CL {
         kernelCalculateGradient.setArg(argn++, clBufferGy); // make sure type is the same !!
         kernelCalculateGradient.setArg(argn++, clBufferCurrentFrame); // make sure type is the same !!
 
-//        argn = 0;
-//        kernelInterpolateGradient.setArg(argn++, clBufferGx); // make sure type is the same !!
-//        kernelInterpolateGradient.setArg(argn++, clBufferGy); // make sure type is the same !!
-//        kernelInterpolateGradient.setArg(argn++, clBufferGxInt); // make sure type is the same !!
-//        kernelInterpolateGradient.setArg(argn++, clBufferGyInt); // make sure type is the same !!
-
         argn = 0;
         kernelCalculateSRRF.setArg(argn++, clBufferPx); // make sure type is the same !!
         kernelCalculateSRRF.setArg(argn++, clBufferGx); // make sure type is the same !!
         kernelCalculateSRRF.setArg(argn++, clBufferGy); // make sure type is the same !!
-//        kernelCalculateSRRF.setArg(argn++, clBufferGxInt); // make sure type is the same !!
-//        kernelCalculateSRRF.setArg(argn++, clBufferGyInt); // make sure type is the same !!
         kernelCalculateSRRF.setArg(argn++, clBufferPreviousFrame);
         kernelCalculateSRRF.setArg(argn++, clBufferOut); // make sure type is the same !!
         kernelCalculateSRRF.setArg(argn++, clBufferDriftXY); // make sure type is the same !!
@@ -311,14 +256,6 @@ public class LiveSRRF_CL {
         argn = 0;
         kernelCalculateVar.setArg(argn++, clBufferOut);
 
-//        argn = 0;
-//        kernelCalculateMPmap.setArg(argn++, clBufferOut); // make sure type is the same !!
-//        kernelCalculateMPmap.setArg(argn++, clBufferMPmap); // make sure type is the same !!
-
-//        argn = 0;
-//        kernelCorrectMPmap.setArg(argn++, clBufferOut); // make sure type is the same !!
-//        kernelCorrectMPmap.setArg(argn++, clBufferMPmap); // make sure type is the same !!
-
         queue = chosenDevice.createCommandQueue();
 
         System.out.println("used device memory: " + (
@@ -326,14 +263,11 @@ public class LiveSRRF_CL {
                         clBufferDriftXY.getCLSize() +
                         clBufferGx.getCLSize() +
                         clBufferGy.getCLSize() +
-//                        clBufferGxInt.getCLSize() +
-//                        clBufferGyInt.getCLSize() +
                         clBufferPreviousFrame.getCLSize() +
                         clBufferOut.getCLSize() +
                         clBufferCurrentFrame.getCLSize()
-//                        clBufferMPmap.getCLSize()
         )
-                / 1000000d + "MB");
+                / 1000000d + "MB"); // conversion in base 10
     }
 
 
@@ -341,14 +275,11 @@ public class LiveSRRF_CL {
     public void loadDriftXYGPUbuffer(float[][] driftXY) {
 
 //        System.out.println("loading drift buffers");
-
         float[] driftXYarray = new float[2 * nFrameForSRRF];
         for (int i = 0; i < nFrameForSRRF; i++) {
             driftXYarray[i] = magnification*driftXY[i][0]; // loaded as drift in pixels in the magnified pixel space
             driftXYarray[i + nFrameForSRRF] = magnification*driftXY[i][1];
         }
-//        System.arraycopy(driftX, 0, driftXY, 0, nFrameForSRRF);
-//        System.arraycopy(driftY, 0, driftXY, nFrameForSRRF, nFrameForSRRF);
 
         int id = prof.startTimer();
         fillBuffer(clBufferDriftXY, driftXYarray);
@@ -371,7 +302,6 @@ public class LiveSRRF_CL {
 
 //        IJ.log("Uploading raw data to GPU...");
             id = prof.startTimer();
-//        fillBuffer(clBufferPx, imsRawData);
             fillBuffer(clBufferPx, imsRawDataInt);
             queue.putWriteBuffer(clBufferPx, false);
             prof.recordTime("Uploading data to GPU", prof.endTimer(id));
@@ -390,15 +320,6 @@ public class LiveSRRF_CL {
         queue.finish(); // Make sure everything is done
         queue.put3DRangeKernel(kernelCalculateGradient, 0, 0, 0, widthM, heightM, nFrameToLoad, 0, 0, 0);
         prof.recordTime("kernelCalculateGradient", prof.endTimer(id));
-
-////        IJ.log("Interpolating gradient...");
-//        id = prof.startTimer();
-//        queue.finish(); // Make sure everything is done
-//        queue.put3DRangeKernel(kernelInterpolateGradient, 0, 0, 0, GxGyMagnification * width, GxGyMagnification * height, nFrameToLoad, 0, 0, 0);
-//        prof.recordTime("kernelInterpolateGradient", prof.endTimer(id));
-
-        // Make kernelCalculateSRRF assignment
-//        IJ.log("Calculating SRRF...");
     }
 
     // --- Calculate SRRF images ---
@@ -414,9 +335,8 @@ public class LiveSRRF_CL {
 
             for (int nB = 0; nB < nBlocks; nB++) {
                 workSize = min(blockLength, widthM * heightM - nB * blockLength);
-
                 id = prof.startTimer();
-                queue.put1DRangeKernel(kernelCalculateSRRF, nB * blockLength, workSize, 0);
+                queue.put1DRangeKernel(kernelCalculateSRRF, nB * blockLength, workSize, 0); // TODO: compare 1D kernel vs ND kernel
                 prof.recordTime("kernelCalculateSRRF", prof.endTimer(id));
 
                 if (IJ.escapePressed()) {
@@ -425,7 +345,7 @@ public class LiveSRRF_CL {
                 }
             }
 
-            // This kernel needs to be done outside of the previous kernel because of concommitent execution (you never know when each pixel is executed)
+            // This kernel needs to be done outside of the previous kernel because of concomitent execution (you never know when each pixel is executed)
             id = prof.startTimer();
             queue.finish(); // Make sure everything is done
             queue.put1DRangeKernel(kernelIncrementFramePosition, 0, 2, 0); // this internally increment the frame position f
@@ -440,23 +360,11 @@ public class LiveSRRF_CL {
     public void readSRRFbuffer() {
 
 //        System.out.println("Reading SRRF buffer");
-
-        // Calculate the STD on the OutputArray on the GPU
+        // Calculate the VARIANCE on the OutputArray on the GPU
         int id = prof.startTimer();
         queue.finish(); // Make sure everything is done
         queue.put1DRangeKernel(kernelCalculateVar, 0, heightM*widthM,0);
         prof.recordTime("Calculate VAR image", prof.endTimer(id));
-
-        // Macro-pixel pattern correction
-//        if (doMPmapCorrection) {
-//            id = prof.startTimer();
-//            queue.put1DRangeKernel(kernelCalculateMPmap, 0, nReconstructions * magnification * magnification, 0);
-//            prof.recordTime("Calculate MP map", prof.endTimer(id));
-//
-//            id = prof.startTimer();
-//            queue.put1DRangeKernel(kernelCorrectMPmap, 0, nReconstructions * heightM*widthM, 0);
-//            prof.recordTime("Correct for MP map", prof.endTimer(id));
-//        }
 
         queue.finish(); // Make sure everything is done
         queue.putReadBuffer(clBufferOut, true);
@@ -464,7 +372,7 @@ public class LiveSRRF_CL {
 
         imsSRRF = new ImageStack(widthM, heightM);
 
-        // Load data back to memory
+        // Load data back to CPU memory
         for (int i = 0; i < nReconstructions+1; i++) {
             float[] dataSRRF = new float[widthM * heightM];
             for (int n = 0; n < widthM * heightM; n++) {
@@ -474,7 +382,6 @@ public class LiveSRRF_CL {
             imsSRRF.addSlice(new FloatProcessor(widthM, heightM, dataSRRF));
         }
     }
-
 
     // --- Reset the SRRF frame counter ---
     public void resetFramePosition() {
@@ -499,9 +406,7 @@ public class LiveSRRF_CL {
 
         FloatBuffer bufferGx;
         FloatBuffer bufferGy;
-//        FloatBuffer bufferGz = null;
 
-//        if (!interpolated){
 //        System.out.println("Reading Gx/Gy buffers");
         queue.putReadBuffer(clBufferGx, true);
         queue.putReadBuffer(clBufferGy, true);
@@ -509,19 +414,6 @@ public class LiveSRRF_CL {
 
         bufferGx = clBufferGx.getBuffer();
         bufferGy = clBufferGy.getBuffer();
-//        }
-//        else {
-//            imageWidth *= gradientMag;
-//            imageHeight *= gradientMag;
-//
-//            queue.putReadBuffer(clBufferGxInt, true);
-//            queue.putReadBuffer(clBufferGyInt, true);
-//            if (do3DSRRF) queue.putReadBuffer(clBufferGzInt, true);
-//
-//            bufferGx = clBufferGxInt.getBuffer();
-//            bufferGy = clBufferGyInt.getBuffer();
-//            if (do3DSRRF) bufferGz = clBufferGzInt.getBuffer();
-//        }
 
         ImageStack imsGradient = new ImageStack(imageWidth, imageHeight);
         // Load data
@@ -535,44 +427,14 @@ public class LiveSRRF_CL {
                 if (Float.isNaN(dataGx[n])) dataGx[n] = 0; // make sure we dont get any weirdness
                 dataGy[n] = bufferGy.get(n + i*imageWidth*imageHeight);
                 if (Float.isNaN(dataGy[n])) dataGy[n] = 0; // make sure we dont get any weirdness
-//                if (do3DSRRF) {
-//                    dataGz[n] = bufferGz.get(n + i * imageWidth * imageHeight);
-//                    if (Float.isNaN(dataGz[n])) dataGz[n] = 0; // make sure we dont get any weirdness
-//                }
             }
 
             imsGradient.addSlice(new FloatProcessor(imageWidth, imageHeight, dataGx));
             imsGradient.addSlice(new FloatProcessor(imageWidth, imageHeight, dataGy));
-//            if (do3DSRRF) imsGradient.addSlice(new FloatProcessor(imageWidth, imageHeight, dataGz));
         }
 
         return imsGradient;
     }
-
-//    // --- Read the MP map buffers --- only used for testing!
-//    public ImageStack readMPmaps() {
-//
-//        queue.finish(); // Make sure everything is done
-//
-//        int imageWidth = magnification;
-//        int imageHeight = magnification;
-//
-//        queue.putReadBuffer(clBufferMPmap, true);
-//        FloatBuffer bufferMPmap = clBufferMPmap.getBuffer();
-//
-//        ImageStack imsMPmap = new ImageStack(imageWidth, imageHeight);
-//        for (int i = 0; i < nReconstructions; i++) {
-//            float[] dataMPmap = new float[imageWidth * imageHeight];
-//            for (int n = 0; n < imageWidth * imageHeight; n++) {
-//                dataMPmap[n] = bufferMPmap.get(n + i * imageWidth * imageHeight);
-//                if (Float.isNaN(dataMPmap[n])) dataMPmap[n] = 0; // make sure we dont get any weirdness
-//            }
-//            imsMPmap.addSlice(new FloatProcessor(imageWidth, imageHeight, dataMPmap));
-//        }
-//
-//        return imsMPmap;
-//
-//    }
 
 
     // --- Release GPU context ---

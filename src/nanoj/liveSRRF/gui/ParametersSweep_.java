@@ -57,7 +57,7 @@ public class ParametersSweep_ implements PlugIn {
 
     private float fixedSigma;
 
-    private final String LiveSRRFVersion = "v1.2d-fhi.5";
+    private final String LiveSRRFVersion = "v1.2d-fhi.6";
     private float[] shiftX, shiftY;
 
     private String imageTitle;
@@ -330,8 +330,8 @@ public class ParametersSweep_ implements PlugIn {
 
                     // FRC resolution estimation
                     if (calculateFRC) {
-                        // Calculate and get the reconstruction from the odd frames // TODO: add options to do intensity weighting or MPcorrection?
-                        // TODO: consider only doing the initialisation and data preparation once, currently repeated for every parameter
+                        // Calculate and get the reconstruction from the odd frames
+                        // TODO: consider only doing the initialisation and data preparation once, currently repeated for every parameter --> speed improvement possible
                         liveSRRF.initialise(width, height, magnification, radiusArray[fi], sensitivityArray[si], nFramesOnGPU, nframeArray[nfi], blockSize, null, true, "RobX");
                         liveSRRF.resetFramePosition();
                         liveSRRF.loadDriftXYGPUbuffer(shiftXYtempOdd);
@@ -350,8 +350,7 @@ public class ParametersSweep_ implements PlugIn {
                             if (calculateReconArray[i]) fpOddEvenArray[i][0] = imsBuffer.getProcessor(i+1).convertToFloatProcessor();
                         }
 
-                        // Calculate and get the reconstruction from the even frames // TODO: add options to do intensity weighting or MPcorrection
-
+                        // Calculate and get the reconstruction from the even frames
                         liveSRRF.initialise(width, height, magnification, radiusArray[fi], sensitivityArray[si], nFramesOnGPU, nframeArray[nfi], blockSize, null, true, "RobX");
                         liveSRRF.resetFramePosition();
                         liveSRRF.loadDriftXYGPUbuffer(shiftXYtempEven);
@@ -375,8 +374,7 @@ public class ParametersSweep_ implements PlugIn {
                     }
 
 
-//                    else { // if (calculateFRC)
-//                        // TODO: add options to do intensity weighting or MPcorrection?
+//                    else { // if (calculateFRC) // do in all cases, important for TAC2!
                     liveSRRF.initialise(width, height, magnification, radiusArray[fi], sensitivityArray[si], nFramesOnGPU, nframeArray[nfi], blockSize, null, true, "RobX");
                     liveSRRF.resetFramePosition();
                     liveSRRF.loadDriftXYGPUbuffer(shiftXYtemp);
@@ -419,7 +417,6 @@ public class ParametersSweep_ implements PlugIn {
             }
 
             if (calculateRSE) {
-
                 for (int i = 0; i < nRecons; i++) {
                     if (calculateReconArray[i]){
                         imsRMSEarray[i].setProcessor(new FloatProcessor(radiusArray.length, sensitivityArray.length, pixelsRMSEarray[i]), nfi + 1);
@@ -429,7 +426,6 @@ public class ParametersSweep_ implements PlugIn {
             }
 
             if (calculateRSP) {
-
                 for (int i = 0; i < nRecons; i++) {
                     if (calculateReconArray[i]){
                         imsPPMCCarray[i].setProcessor(new FloatProcessor(radiusArray.length, sensitivityArray.length, pixelsPPMCarray[i]), nfi + 1);
@@ -494,14 +490,12 @@ public class ParametersSweep_ implements PlugIn {
 
         // Showing error maps
         if (showErrorMaps) {
-
             for (int i = 0; i < nRecons; i++) {
                 if (calculateReconArray[i]) displayImagePlus(imsErrorMapArray[i], " - Error map ("+reconsNames[i]+")", cal, "ErrorMap-LUT");
             }
         }
 
         if (showRSC) {
-
             for (int i = 0; i < nRecons; i++) {
                 if (calculateReconArray[i]) displayImagePlus(imsRSCarray[i], " - rescaled LiveSRRF ("+reconsNames[i]+")", cal, "");
             }
@@ -514,14 +508,12 @@ public class ParametersSweep_ implements PlugIn {
         }
 
         if (calculateRSP) {
-
             for (int i = 0; i < nRecons; i++) {
                 if (calculateReconArray[i]) displayImagePlus(imsPPMCCarray[i], " - RSP sweep map ("+reconsNames[i]+")", sweepMapCalib, "ErrorMap-LUT");
             }
         }
 
         if (calculateFRC) {
-
             for (int i = 0; i < nRecons; i++) {
                 if (calculateReconArray[i]) displayImagePlus(imsFRCresolutionArray[i], " - FRC resolution sweep map ("+reconsNames[i]+")", sweepMapCalib, "FRC-LUT");
             }
@@ -549,7 +541,6 @@ public class ParametersSweep_ implements PlugIn {
     private boolean grabSettings(GenericDialog gd) {
 
         magnification = (int) gd.getNextNumber();
-//        chosenTemporalAnalysis = gd.getNextChoice();
 
         for (int i = 0; i < nRecons; i++) calculateReconArray[i] = gd.getNextBoolean();
         correctVibration = gd.getNextBoolean();
@@ -600,7 +591,6 @@ public class ParametersSweep_ implements PlugIn {
         int n_nfToUse;
         if (calculateFRC) n_nfToUse = Math.min((nSlices / 2 - nf0) / deltanf + 1, n_nf);
         else n_nfToUse = Math.min((nSlices - nf0) / deltanf + 1, n_nf);
-        // TODO: ABORT IF NOT enough frames in original stack for even 1 analysis
 
         if (n_nfToUse < 0){
             return false;
@@ -645,7 +635,6 @@ public class ParametersSweep_ implements PlugIn {
         prefs.set("calculateFRC", calculateFRC);
 
         prefs.set("blockSize", blockSize);
-
 
         prefs.save();
 
