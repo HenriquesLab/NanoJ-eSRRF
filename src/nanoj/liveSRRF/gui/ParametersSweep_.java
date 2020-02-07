@@ -34,7 +34,7 @@ public class ParametersSweep_ implements PlugIn {
             blockSize,
             cropSize;
 
-    private final int dataLoadType = 1;
+//    private final int dataLoadType = 1;
 
     private boolean DEBUG = false,
             showRecons,
@@ -46,7 +46,8 @@ public class ParametersSweep_ implements PlugIn {
             doErrorMapping,
             fixSigma,
             correctVibration,
-            cropBorder;
+            cropBorder,
+            singleFrameLoad;
 
     private String[] reconsNames;
 
@@ -157,6 +158,7 @@ public class ParametersSweep_ implements PlugIn {
 
         gd.addMessage("-=-= GPU processing =-=-\n", headerFont);
         gd.addNumericField("Analysis block size (default: 20000)", prefs.get("blockSize", 20000), 0);
+        gd.addCheckbox("Single frame load", prefs.get("singleFrameLoad",true));
         gd.addMessage("A large analysis block size will speed up the analysis but will use more resources and\n" +
                 " may slow down your computer.");
 
@@ -303,8 +305,8 @@ public class ParametersSweep_ implements PlugIn {
             }
 
             int nFramesOnGPU;
-            if (dataLoadType == 0) nFramesOnGPU = 1;
-            else if (dataLoadType == 1) nFramesOnGPU = nframeArray[nfi];
+            if (singleFrameLoad) nFramesOnGPU = 1;
+            else nFramesOnGPU = nframeArray[nfi];
 
             for (int si = 0; si < sensitivityArray.length; si++) {
                 for (int fi = 0; fi < radiusArray.length; fi++) {
@@ -572,6 +574,7 @@ public class ParametersSweep_ implements PlugIn {
         calculateFRC = gd.getNextBoolean();
 
         blockSize = (int) gd.getNextNumber();
+        singleFrameLoad = gd.getNextBoolean();
 
         radiusArray = new float[n_fwhm];
         for (int i = 0; i < n_fwhm; i++) {
@@ -631,6 +634,7 @@ public class ParametersSweep_ implements PlugIn {
         prefs.set("calculateFRC", calculateFRC);
 
         prefs.set("blockSize", blockSize);
+        prefs.set("singleFrameLoad", singleFrameLoad);
 
         prefs.save();
 
@@ -647,7 +651,7 @@ public class ParametersSweep_ implements PlugIn {
         IJ.showStatus("Calculating LiveSRRF image...");
         for (int f = 1; f <= nframeArray[nf]; f++) {
 
-            if (dataLoadType == 0) imsThisRawData = new ImageStack(width, height); // re-initialise the stack every time
+            if (singleFrameLoad) imsThisRawData = new ImageStack(width, height); // re-initialise the stack every time
 
             if (mode == 0) fmode = f;  // no FRC
             else if (mode == 1) fmode = 2 * (f - 1) + 1; // FRC odd frames
@@ -655,7 +659,7 @@ public class ParametersSweep_ implements PlugIn {
 
             imsThisRawData.addSlice(imsAllRawData.getProcessor(fmode));
 
-            if (dataLoadType == 0) {
+            if (singleFrameLoad) {
                 liveSRRF.prepareDataSRRF(imsThisRawData);
                 userPressedEscape = liveSRRF.calculateSRRF();
                 // Check if user is cancelling calculation
@@ -666,7 +670,7 @@ public class ParametersSweep_ implements PlugIn {
         }
 
         // loadType 1 = load the whole stack (hoping for the best)
-        if (dataLoadType == 1) {
+        if (!singleFrameLoad) {
             liveSRRF.prepareDataSRRF(imsThisRawData);
             userPressedEscape = liveSRRF.calculateSRRF();
         }
