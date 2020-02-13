@@ -293,6 +293,7 @@ public class LiveSRRF_optimised_ implements PlugIn {
                     imsRawData.addSlice(imsAllRawData.getProcessor(indexStartSRRFframe + nFrameOnGPU * l + f));
                 }
 
+//                liveSRRF.finishQueue(); // TODO: this was necessary in single frame mode for the parameter sweep but doesn't seem to be necessary here, not sure why?
                 liveSRRF.prepareDataSRRF(imsRawData);
                 userPressedEscape = liveSRRF.calculateSRRF(); // resets the local GPU load frame counter
 

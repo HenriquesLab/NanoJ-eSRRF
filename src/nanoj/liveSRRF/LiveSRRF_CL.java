@@ -56,7 +56,7 @@ public class LiveSRRF_CL {
     static private CLDevice clDeviceMaxFlop;
     static public CLDevice[] allCLdevices;
 
-    static private CLCommandQueue queue;
+    static private CLCommandQueue queue = null;
 
     private CLBuffer<FloatBuffer>
             clBufferPx,
@@ -128,6 +128,12 @@ public class LiveSRRF_CL {
 
     // ---------------------------------- Initialization method ----------------------------------
     public void initialise(int width, int height, int magnification, float fwhm, int sensitivity, int nFramesOnGPU, int nFrameForSRRF, int blockLength, CLDevice chosenDevice, boolean intWeighting, String thisGradientChoice) {
+
+//        if (queue != null){
+//            int id = prof.startTimer();
+//            queue.finish(); // Make sure everything is done
+//            prof.recordTime("Finishing the queue", prof.endTimer(id));
+//        }
 
         this.width = width;
         this.height = height;
@@ -300,11 +306,15 @@ public class LiveSRRF_CL {
 
     // --- Calculate SRRF images ---
     public void prepareDataSRRF(ImageStack imsRawData) {
+        int id;
+
+//        int id = prof.startTimer();
+//        queue.finish(); // Make sure everything is done
+//        prof.recordTime("Finishing the queue", prof.endTimer(id));
 
         assert (imsRawData.getWidth() == width && imsRawData.getHeight() == height);
         nFrameToLoad = imsRawData.getSize();
 
-        int id;
         if (magnification > 1) {
             id = prof.startTimer();
             ImageStack imsRawDataInt = fhtSpaceInterpolation(imsRawData, magnification, true); // enables mirror padding by default
@@ -430,7 +440,7 @@ public class LiveSRRF_CL {
 
         ImageStack imsGradient = new ImageStack(imageWidth, imageHeight);
         // Load data
-        for (int i = 0; i < nFramesOnGPU; i++) {
+        for (int i = 0; i < nFramesOnGPU; i++) { // TODO: this is asking for trouble since the number of frames on the GPU may actually vary at the end and be != from nFrameToLoad
 
             float[] dataGx = new float[imageWidth * imageHeight];
             float[] dataGy = new float[imageWidth * imageHeight];
@@ -461,5 +471,15 @@ public class LiveSRRF_CL {
             }
         }
     }
+
+    // --- Finishing the queue --- // seems necessary for Parameter Sweep only for some reasons that are currently unclear
+    public void finishQueue() {
+        if (queue != null) {
+            int id = prof.startTimer();
+            queue.finish(); // Make sure everything is done
+            prof.recordTime("Finishing the queue", prof.endTimer(id));
+        }
+    }
+
 
 }

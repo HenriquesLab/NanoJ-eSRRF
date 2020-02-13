@@ -59,10 +59,12 @@ public class ParametersSweep_ implements PlugIn {
 
     private float fixedSigma;
 
-    private final String LiveSRRFVersion = "v1.2d-fhi.7";
+    private final String LiveSRRFVersion = "v1.2d-fhi.8";
     private float[] shiftX, shiftY;
 
     private String imageTitle;
+
+    private LiveSRRF_CL liveSRRF;
 
     // Advanced formats
     private final NanoJPrefs prefs = new NanoJPrefs(this.getClass().getName());
@@ -90,7 +92,7 @@ public class ParametersSweep_ implements PlugIn {
         IJ.log(now.format(formatter));
 
         // Initialise the liveSRRF engine (creates a context really)
-        LiveSRRF_CL liveSRRF = new LiveSRRF_CL();
+        liveSRRF = new LiveSRRF_CL();
         nRecons = liveSRRF.nReconstructions;
         reconsNames = liveSRRF.reconNames;
         calculateReconArray = new boolean[nRecons];
@@ -168,6 +170,7 @@ public class ParametersSweep_ implements PlugIn {
         // If the GUI was cancelled
         if (gd.wasCanceled()) {
             liveSRRF.release();
+            IJ.log("Cancelled by user.");
             return;
         }
 
@@ -338,7 +341,7 @@ public class ParametersSweep_ implements PlugIn {
                         liveSRRF.resetFramePosition();
                         liveSRRF.loadDriftXYGPUbuffer(shiftXYtempOdd);
 
-                        userPressedEscape = calculateLiveSRRFframeLoad(imsAllRawData, nfi, 1, liveSRRF);
+                        userPressedEscape = calculateLiveSRRFframeLoad(imsAllRawData, nfi, 1);
                         if (userPressedEscape) {
                             liveSRRF.release();
                             IJ.log("-------------------------------------");
@@ -357,7 +360,7 @@ public class ParametersSweep_ implements PlugIn {
                         liveSRRF.resetFramePosition();
                         liveSRRF.loadDriftXYGPUbuffer(shiftXYtempEven);
 
-                        userPressedEscape = calculateLiveSRRFframeLoad(imsAllRawData, nfi, 2, liveSRRF);
+                        userPressedEscape = calculateLiveSRRFframeLoad(imsAllRawData, nfi, 2);
                         if (userPressedEscape) {
                             liveSRRF.release();
                             IJ.log("-------------------------------------");
@@ -379,7 +382,7 @@ public class ParametersSweep_ implements PlugIn {
                     liveSRRF.resetFramePosition();
                     liveSRRF.loadDriftXYGPUbuffer(shiftXYtemp);
 
-                    calculateLiveSRRFframeLoad(imsAllRawData, nfi, 0, liveSRRF);
+                    calculateLiveSRRFframeLoad(imsAllRawData, nfi, 0);
                     imsBuffer = liveSRRF.imsSRRF;
 
                     // Collate the reconstructions
@@ -445,6 +448,10 @@ public class ParametersSweep_ implements PlugIn {
 
         // Release the GPU
         liveSRRF.release();
+
+        if (DEBUG) {
+            liveSRRF.checkProfiler();
+        }
 
         //Display results
         Calibration sweepMapCalib = new Calibration();
@@ -642,7 +649,7 @@ public class ParametersSweep_ implements PlugIn {
     }
 
     // ---- Wrapper to get the frames loaded properly for FRC ---- (also choses whether to load as single frame or full stack)
-    private boolean calculateLiveSRRFframeLoad(ImageStack imsAllRawData, int nf, int mode, LiveSRRF_CL liveSRRF) {
+    private boolean calculateLiveSRRFframeLoad(ImageStack imsAllRawData, int nf, int mode) {
         ImageStack imsThisRawData = new ImageStack(width, height);
         boolean userPressedEscape = false;
         int fmode;
@@ -654,12 +661,13 @@ public class ParametersSweep_ implements PlugIn {
             if (singleFrameLoad) imsThisRawData = new ImageStack(width, height); // re-initialise the stack every time
 
             if (mode == 0) fmode = f;  // no FRC
-            else if (mode == 1) fmode = 2 * (f - 1) + 1; // FRC odd frames
+            else if (mode == 1) fmode = 2 * f - 1; // FRC odd frames
             else fmode = 2 * f; // FRC even frames
 
             imsThisRawData.addSlice(imsAllRawData.getProcessor(fmode));
 
             if (singleFrameLoad) {
+                liveSRRF.finishQueue(); // TODO: this seems necessary to provide reliable results, not sure why it's not necessary in the standard recon code though
                 liveSRRF.prepareDataSRRF(imsThisRawData);
                 userPressedEscape = liveSRRF.calculateSRRF();
                 // Check if user is cancelling calculation
@@ -669,7 +677,7 @@ public class ParametersSweep_ implements PlugIn {
             }
         }
 
-        // loadType 1 = load the whole stack (hoping for the best)
+        // loadType 1 = load the whole stack (hoping for the best in terms of memory)
         if (!singleFrameLoad) {
             liveSRRF.prepareDataSRRF(imsThisRawData);
             userPressedEscape = liveSRRF.calculateSRRF();
