@@ -59,7 +59,7 @@ public class ParametersSweep_ implements PlugIn {
 
     private float fixedSigma;
 
-    private final String LiveSRRFVersion = "v1.2d-fhi.8";
+    private final String LiveSRRFVersion = "v1.2d-fhi.9";
     private float[] shiftX, shiftY;
 
     private String imageTitle;

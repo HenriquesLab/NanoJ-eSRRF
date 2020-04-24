@@ -149,6 +149,7 @@ public class LiveSRRF_CL {
                 IJ.log("Looking for the fastest device...");
                 System.out.println("Using the fastest device...");
             }
+            release();
             context = CLContext.create(clPlatformMaxFlop);
             chosenDevice = context.getMaxFlopsDevice();
 
@@ -409,8 +410,16 @@ public class LiveSRRF_CL {
     // --- Reset the SRRF frame counter ---
     public void resetFramePosition() {
         int id = prof.startTimer();
-        kernelResetFramePosition.setArg(0, clBufferCurrentFrame); // make sure type is the same !!
-        queue.put1DRangeKernel(kernelResetFramePosition, 0, 1, 0);
+        boolean success = false;
+
+        while (!success) {
+            try {
+                kernelResetFramePosition.setArg(0, clBufferCurrentFrame); // make sure type is the same !!
+                queue.put1DRangeKernel(kernelResetFramePosition, 0, 1, 0);
+                success = true;
+            } catch (Exception e) {}
+        }
+
         prof.recordTime("Reset SRRF frame counter", prof.endTimer(id));
     }
 
@@ -464,11 +473,14 @@ public class LiveSRRF_CL {
     public void release() {
 
         if (context != null) {
+            int count = 0;
             while (!context.isReleased()) {
-                IJ.log("-------------");
-                IJ.log("Releasing context...");
+//                IJ.log("-------------");
+//                IJ.log("Releasing context...");
                 context.release();
+                count ++;
             }
+            if (count > 1) IJ.log("Successful context release after "+count+" attempts.");
         }
     }
 

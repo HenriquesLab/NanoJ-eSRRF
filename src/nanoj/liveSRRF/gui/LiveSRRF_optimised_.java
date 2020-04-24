@@ -63,7 +63,7 @@ public class LiveSRRF_optimised_ implements PlugIn {
     private boolean[] calculateReconArray;
     private String[] reconsNames;
 
-    private final String LiveSRRFVersion = "v1.2d-fhi.17";
+    private final String LiveSRRFVersion = "v1.2d-fhi.18";
     private String pathToDisk = "",
             fileName,
             chosenDeviceName,
