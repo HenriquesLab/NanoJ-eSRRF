@@ -51,7 +51,7 @@ public class FluorescenceSimulator_ implements PlugIn {
         Calibration cal = imp.getCalibration();
         if (cal.pixelHeight != cal.pixelWidth) return;
         float simPixelSize = (float) cal.pixelHeight;
-        if ((cal.getUnit().equals("micron")) || (cal.getUnit().equals("um"))) simPixelSize *= 1000; // convert to nm // TODO: this doesnt work for some reason
+        if ((cal.getUnit().equals("micron")) || (cal.getUnit().equals("um")) || (cal.getUnit().equals("µm"))) simPixelSize *= 1000; // convert to nm // TODO: this doesnt work for some reason
         IJ.log("Ground truth pixel size: "+simPixelSize+" nm");
 
         ImageStack imsGT = imp.getStack();
@@ -175,6 +175,7 @@ public class FluorescenceSimulator_ implements PlugIn {
                 intensityTraces[i][j] = thisTrace[j];
             }
         }
+
 
         ImageStack imsSim = new ImageStack();
         ImageStack imsFullSim = new ImageStack();
