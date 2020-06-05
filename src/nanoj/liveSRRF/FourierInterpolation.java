@@ -1,6 +1,5 @@
 package nanoj.liveSRRF;
 
-import ij.IJ;
 import ij.ImageStack;
 import ij.process.FloatProcessor;
 

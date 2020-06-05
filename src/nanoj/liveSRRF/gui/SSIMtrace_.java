@@ -12,16 +12,15 @@ import ij.process.ImageProcessor;
 import nanoj.liveSRRF.SSIMCalculator;
 import nanoj.core2.NanoJPrefs;
 
-
-import java.util.Arrays;
 import static nanoj.core.java.image.calculator.FloatProcessorCalculator.add;
-import static nanoj.core2.NanoJImageStackArrayConvertion.ImageStackToFloatArray;
+import static nanoj.liveSRRF.SSIMCalculator.getRegularizationFactors;
+import static org.apache.commons.math.stat.inference.TestUtils.tTest;
 
 
 public class SSIMtrace_ implements PlugIn {
 
     private NanoJPrefs prefs = new NanoJPrefs(this.getClass().getName());
-    private ZAxisProfiler zProfiler = new ZAxisProfiler();
+//    private ZAxisProfiler zProfiler = new ZAxisProfiler();
 
 
     public void run(String arg) {
@@ -38,8 +37,6 @@ public class SSIMtrace_ implements PlugIn {
         ImageStack ims = imp.getStack();
 
         int nFrames = imp.getImageStack().getSize();
-        int width = imp.getImageStack().getWidth();
-        int height = imp.getImageStack().getHeight();
         String imageTitle = imp.getTitle();
 
         String[] regularizationMethods = new String[2];
@@ -48,15 +45,14 @@ public class SSIMtrace_ implements PlugIn {
         regularizationMethods[n++] = "image dynamic range";
 
         // ----- GUI -----
-        GenericDialog gd = new GenericDialog("liveSRRF - SSIM estimator");
+        GenericDialog gd = new GenericDialog("eSRRF - SSIM estimator");
         gd.addChoice("Regularization method", regularizationMethods, prefs.get("regMethod", regularizationMethods[0]));
-        gd.addNumericField("Radius (in pixels)", prefs.get("radius", 2), 2);
-        gd.addNumericField("Frames to average for ref.", prefs.get("nFramesToAverage", 5), 0);
-        gd.addCheckbox("Temporal blocking", prefs.get("tempBlocking", true));
-        gd.addNumericField("Block size (frames)", prefs.get("blockSize", 100), 0);
-        gd.addCheckbox("Show trace", prefs.get("showTrace", true));
-        gd.addNumericField("Smoothing factor", prefs.get("smoothingFactor", 0.9f),2);
-        gd.addNumericField("Sigma cut-off", prefs.get("sigmaCutOff", 10),1);
+//        gd.addNumericField("Radius (in pixels)", prefs.get("radius", 2), 2);
+        gd.addNumericField("Block size (frames, 0 = auto)", prefs.get("blockSize", 200), 0);
+//        gd.addCheckbox("Show trace", prefs.get("showTrace", true));
+        gd.addNumericField("Smoothing factor", prefs.get("smoothingFactor", 0.15f),2);
+        gd.addNumericField("Sigma cut-off", prefs.get("sigmaCutOff", 2),1);
+        gd.addCheckbox("Calculate Cut-off over time", prefs.get("calculateCutoffVStime", true));
         gd.showDialog();
 
         if (gd.wasCanceled()) {
@@ -64,142 +60,80 @@ public class SSIMtrace_ implements PlugIn {
         }
 
         String regMethod = gd.getNextChoice();
-        double radius = gd.getNextNumber();
-        int nFramesToAverage = (int) gd.getNextNumber();
-        boolean tempBlocking = gd.getNextBoolean();
+//        double radius = gd.getNextNumber();
         int blockSize = (int) gd.getNextNumber();
-        boolean showTrace = gd.getNextBoolean();
+//        boolean showTrace = gd.getNextBoolean();
         float smoothingFactor = (float) gd.getNextNumber();
         float sigmaCutOff = (float) gd.getNextNumber();
+        boolean calculateCutoffVStime = gd.getNextBoolean();
 
         prefs.set("regMethod", regMethod);
-        prefs.set("radius", (float) radius);
-        prefs.set("nFramesToAverage", nFramesToAverage);
-        prefs.set("tempBlocking", tempBlocking);
+//        prefs.set("radius", (float) radius);
         prefs.set("blockSize", blockSize);
-        prefs.set("showTrace", showTrace);
+//        prefs.set("showTrace", showTrace);
         prefs.set("smoothingFactor", smoothingFactor);
         prefs.set("sigmaCutOff", sigmaCutOff);
+        prefs.set("calculateCutoffVStime", calculateCutoffVStime);
 
-        int nBlocks = 1;
-        if (tempBlocking) {
-            nBlocks = (int) (float) nFrames / blockSize;
-        }
-        else{
-            blockSize = nFrames;
-        }
 
 
         // Get the regularization factors from the stack
         float[] regFactors = getRegularizationFactors(ims, regMethod);
-        int startingPoint, currentBlockSize;
-        float[] ssimTrace;
-        double[] frames;
-        double[][] dataSmoothed;
-        int cutOffPosition;
+        SSIMCalculator ssimCalculator;
+
+        int nBlocks = nFrames - blockSize - 1;
+
+        if  (blockSize == 0) {
+            ssimCalculator = new SSIMCalculator(ims.duplicate().getProcessor(1).convertToFloatProcessor(), 0, regFactors);
+
+            double[] initialSSIMtrace = new double[nFrames - 1];
+            for (int i = 0; i < nFrames - 1; i++) {
+                initialSSIMtrace[i] = ssimCalculator.CalculateMetric(ims.getProcessor(i + 2).convertToFloatProcessor());
+            }
+
+            int initialCutOffPosition = getSigmacutOffPosition(initialSSIMtrace, smoothingFactor, sigmaCutOff, true);
+            IJ.log("Initial Cut-off position: " + initialCutOffPosition);
+            blockSize = Math.min(2*initialCutOffPosition, nFrames-1);
+            nBlocks = nFrames - blockSize - 1;
+        }
+
+        if (nBlocks < 0) {
+            nBlocks = 1;
+            blockSize = nFrames-1;
+        }
+
+        IJ.log("Block size: "+blockSize);
+        IJ.log("Number of blocks: "+nBlocks);
+        IJ.log("Sigma cut-off: "+sigmaCutOff);
+
+//        ImageProcessor ipRef;
+        double[][] ssimTraces = new double[nBlocks][blockSize];
 
         for (int b = 0; b < nBlocks; b++) {
+            IJ.showProgress(b, nBlocks);
 
-            IJ.log("Block #"+(b+1));
-            // Get the reference image by averaging the first "nFramesToAverage" frames
-            ImageProcessor ipRef = ims.duplicate().getProcessor(1 + b*blockSize).convertToFloatProcessor();
-            for (int i = 1; i < nFramesToAverage; i++) {
-                ipRef = add(ipRef.convertToFloatProcessor(), ims.duplicate().getProcessor(i + 1 + b*blockSize).convertToFloatProcessor());
+//            ipRef = ims.duplicate().getProcessor(1 + b).convertToFloatProcessor(); // rolling analysis
+            ssimCalculator = new SSIMCalculator(ims.getProcessor(1 + b).convertToFloatProcessor(), Float.MAX_VALUE, regFactors);
+
+//            ImageStack imsBlock = new ImageStack(ims.getWidth(), ims.getHeight());
+//            for (int i = 0; i < blockSize; i++) {
+//                imsBlock.addSlice(ims.getProcessor(b+i+2).convertToFloatProcessor());
+//            }
+//            ssimTraces[b] = ssimCalculator.CalculateMetric(imsBlock);
+
+            for (int i = 0; i < blockSize; i++) {
+                ssimTraces[b][i] = ssimCalculator.CalculateMetric(ims.getProcessor(b+i+2).convertToFloatProcessor());
             }
-            ipRef.multiply(1.0f / (double) nFramesToAverage);
-
-
-            SSIMCalculator ssimCalculator = new SSIMCalculator(ipRef, radius, regFactors);
-            ImageStack imsSSIM = new ImageStack(width, height, blockSize);
-            startingPoint = 1;
-            currentBlockSize = blockSize;
-            if (b == 0){
-                startingPoint = nFramesToAverage+1;
-                imsSSIM = new ImageStack(width, height, blockSize-nFramesToAverage);
-                currentBlockSize = blockSize - nFramesToAverage;
-            }
-            for (int i = 0; i < currentBlockSize; i++) {
-//                IJ.showProgress(i, currentBlockSize);
-                ImageProcessor ip = ims.getProcessor(startingPoint + i + b*blockSize);
-                imsSSIM.setProcessor(ssimCalculator.Calculate(ip), i+1);
-            }
-
-            ImagePlus impSSIM = new ImagePlus();
-            impSSIM.setStack(imageTitle + " - SSIM stack (block #"+(b+1)+")", imsSSIM);
-            impSSIM.show();
-
-
-            Plot ssimPlot = zProfiler.getPlot(impSSIM);
-            ssimTrace = ssimPlot.getYValues();
-
-            frames = new double[ssimTrace.length];
-            for (int f = 0; f < ssimTrace.length; f++) {
-                frames[f] = f+1;
-            }
-
-            dataSmoothed = exponentialCurveSmoothing(ssimTrace, smoothingFactor, true);
-            cutOffPosition = getSigmacutOffPosition(ssimTrace, smoothingFactor, sigmaCutOff);
-
-            if (showTrace) {
-                ssimPlot.setAxisXLog(true);
-                ssimPlot.setXYLabels("Number of frames", "SSIM score");
-//                ssimPlot.setLimits(NaN, NaN, -0.1, 1.0);
-                ssimPlot.show();
-                ssimPlot.setColor("red");
-                ssimPlot.setLineWidth(2);
-                ssimPlot.add("line", frames, dataSmoothed[0]);
-                ssimPlot.setColor("blue");
-                ssimPlot.add("line", new double[]{cutOffPosition, cutOffPosition}, new double[]{-1, 1});
-
-                Plot deltaPlot = new Plot(imageTitle + " - SSIM stack (block #"+(b+1)+") Delta Plot", "Number of frames", "Difference of SSIM score");
-                deltaPlot.add("line", frames, dataSmoothed[1]);
-                deltaPlot.setAxisXLog(true);
-                deltaPlot.show();
-            }
-
-
         }
+
+        displaySSIMtraces(ssimTraces, imageTitle, sigmaCutOff);
+        if (calculateCutoffVStime) getTimeConstantOverTime(ssimTraces, smoothingFactor, sigmaCutOff);
+
     }
 
     // ------------------ Functions ------------------
-    private static float[] getRegularizationFactors(ImageStack ims, String regMethod){
 
-        float[] C = new float[2];
-        // Regularization factors
-        if (regMethod.equals("image bit depth")) {
-            int bitDepth = ims.getBitDepth();
-            C[0] = (float) Math.pow(0.01f * (float) (Math.pow(2.0f, bitDepth) - 1), 2);
-            IJ.log("Bit depth: "+bitDepth);
-        }
-        else{
-            float[] percentiles = new float[2];
-            percentiles[0] = getPercentileFromImageStack(ims, 0.01f);
-            percentiles[1] = getPercentileFromImageStack(ims, 0.99f);
-            IJ.log("1% percentile: "+percentiles[0]);
-            IJ.log("99% percentile: "+percentiles[1]);
-            C[0] = (float) Math.pow(0.01f * (percentiles[1] - percentiles[0]), 2);
-        }
-        C[1] = 9 * C[0];
-
-        IJ.log("Regularization factors: "+regMethod);
-        IJ.log("C1: "+C[0]);
-        IJ.log("C2: "+C[1]);
-
-        return C;
-
-    }
-
-    public static float getPercentileFromImageStack(ImageStack ims, float percentile){
-
-        float[] pixelValues = ImageStackToFloatArray(ims);
-        Arrays.sort(pixelValues);
-        int nPixels = ims.getWidth()*ims.getHeight()*ims.getSize();
-        int id = (int) ((float) nPixels*percentile);
-
-        return pixelValues[id];
-    }
-
-    public static double[][] exponentialCurveSmoothing(float[] data, float smoothingfactor, boolean flip){
+    public static double[][] exponentialCurveSmoothing(double[] data, float smoothingfactor, boolean flip){
 
         double[][] data_smoothed = new double[2][data.length];
 
@@ -224,7 +158,7 @@ public class SSIMtrace_ implements PlugIn {
         return data_smoothed;
     }
 
-    public static int getSigmacutOffPosition(float[] data, float smoothingfactor, float sigmaCutOff){
+    public static int getSigmacutOffPosition(double[] data, float smoothingfactor, float sigmaCutOff, boolean showTrace){
 
         double[][] data_smoothed = exponentialCurveSmoothing(data, smoothingfactor, true);
 
@@ -240,9 +174,149 @@ public class SSIMtrace_ implements PlugIn {
             cutOffPosition ++;
         }
         cutOffPosition ++; // adjust for the fact that frame numbers start at 1
-        IJ.log("Sigma: "+std);
+
+        if (showTrace) {
+            IJ.log("Sigma: "+std);
+            double[] frames = new double[data.length];
+            for (int f = 0; f < data.length; f++) {
+                frames[f] = f+1;
+            }
+            Plot tracePlot = new Plot( "SSIM plot smoothed curve", "Number of frames", "Difference of SSIM score");
+            tracePlot.add("line", frames, data);
+            tracePlot.setAxisXLog(true);
+
+//                ssimPlot.setLimits(NaN, NaN, -0.1, 1.0);
+            tracePlot.show();
+            tracePlot.setColor("red");
+            tracePlot.setLineWidth(2);
+            tracePlot.add("line", frames, data_smoothed[0]);
+            tracePlot.setColor("blue");
+            tracePlot.add("line", new double[]{cutOffPosition, cutOffPosition}, new double[]{-1, 1});
+            tracePlot.show();
+        }
+
+        return cutOffPosition;
+    }
+
+
+    public static int getSigmacutOffPosition(double[] meanArray, double[] stdArray, float sigmaCutOff){
+
+        double meanSTD = 0;
+        for (int i = 0; i < meanArray.length; i++) {
+            meanSTD += stdArray[i];
+        }
+        meanSTD /= meanArray.length;
+
+        int cutOffPosition = 0;
+        while ((meanArray[cutOffPosition] > meanArray[0]-sigmaCutOff*meanSTD) && (cutOffPosition<meanArray.length-1)) {
+            cutOffPosition ++;
+        }
+        cutOffPosition ++; // adjust for the fact that frame numbers start at 1
+        IJ.log("Sigma: "+meanSTD);
         IJ.log("Cut-off position: "+cutOffPosition);
         return cutOffPosition;
     }
+
+
+    public static void displaySSIMtraces(double[][] ssimTraces, String title, float sigmaCutOff){
+
+        Plot ssimTracePlot = new Plot(title + " - SSIM metric", "Number of frames", "SSIM metric");
+        int traceLength = ssimTraces[0].length;
+        int nTraces = ssimTraces.length;
+
+        double[] frames = new double[traceLength];
+        for (int f = 0; f < traceLength; f++) {
+            frames[f] = f+1;
+        }
+
+        for (int i = 0; i < nTraces; i++) {
+            ssimTracePlot.add("line", frames, ssimTraces[i]);
+        }
+
+        ssimTracePlot.setAxisXLog(true);
+        ssimTracePlot.show();
+
+        double[][] meanSTDptrace = getMeanSTDPvaluefromArray(ssimTraces);
+        double[][] stdOffsetTraces = new double[2][traceLength];
+        for (int i = 0; i < traceLength; i++) {
+            stdOffsetTraces[0][i] = meanSTDptrace[0][i] + meanSTDptrace[1][i];
+            stdOffsetTraces[1][i] = meanSTDptrace[0][i] - meanSTDptrace[1][i];
+        }
+
+        int cutoffPosition = getSigmacutOffPosition(meanSTDptrace[0], meanSTDptrace[1], sigmaCutOff);
+
+        ssimTracePlot.setColor("red");
+        ssimTracePlot.setLineWidth(2);
+        ssimTracePlot.add("line", frames, meanSTDptrace[0]);
+        ssimTracePlot.setLineWidth(1);
+        ssimTracePlot.add("line", frames, stdOffsetTraces[0]);
+        ssimTracePlot.add("line", frames, stdOffsetTraces[1]);
+        ssimTracePlot.setColor("blue");
+        ssimTracePlot.add("line", new double[]{cutoffPosition, cutoffPosition}, new double[]{-1, 1});
+        ssimTracePlot.show();
+    }
+
+
+    public static double[][] getMeanSTDPvaluefromArray(double[][] traces){
+        int traceLength = traces[0].length;
+        int nTraces = traces.length;
+
+        double[][] meanSTDPvalTraces = new double[3][traceLength];
+
+//        double[] sampleT0 = new double[nTraces];
+//        for (int j = 0; j < nTraces; j++) {
+//            sampleT0[j] = traces[j][0];
+//        }
+
+//        double[] sampleT = new double[nTraces];
+        for (int i = 0; i < traceLength; i++) {
+            for (int j = 0; j < nTraces; j++) {
+                meanSTDPvalTraces[0][i] += traces[j][i]/nTraces;
+                meanSTDPvalTraces[1][i] += traces[j][i]*traces[j][i]/nTraces;
+//                sampleT[j] = traces[j][i];
+            }
+//            try{
+//                meanSTDPvalTraces[2][i] = Math.log10(tTest(sampleT0, sampleT));}
+//            catch(Exception e){
+////                IJ.log("T-test unsuccessful...");
+//            }
+//            if (meanSTDPvalTraces[2][i] == Double.MIN_VALUE){
+//                IJ.log("Prout!");
+//                meanSTDPvalTraces[2][i] = Double.NaN;
+//            }
+        }
+
+        for (int i = 0; i < traceLength; i++) {
+            meanSTDPvalTraces[1][i] = Math.sqrt(meanSTDPvalTraces[1][i] - meanSTDPvalTraces[0][i]*meanSTDPvalTraces[0][i]);
+        }
+
+        return meanSTDPvalTraces;
+    }
+
+
+    public static double[] getTimeConstantOverTime(double[][] data, float smoothingfactor, float sigmaCutOff){
+
+        int nTraces = data.length;
+//        int traceLength = data[0].length;
+        double[] cutOffList = new double[nTraces];
+
+        for (int i = 0; i < nTraces; i++) {
+            cutOffList[i] = getSigmacutOffPosition(data[i], smoothingfactor, sigmaCutOff, false);
+        }
+
+        double[] frames = new double[nTraces];
+        for (int f = 0; f < nTraces; f++) {
+            frames[f] = f+1;
+        }
+
+        Plot cutoffPlot = new Plot("Cut-off vs. time", "Frames ", "Time constant (frames)");
+        cutoffPlot.add("line", frames, cutOffList);
+        cutoffPlot.show();
+
+        return cutOffList;
+    }
+
+
+
 
 }

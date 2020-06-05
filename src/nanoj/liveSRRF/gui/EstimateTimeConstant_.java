@@ -105,7 +105,7 @@ public class EstimateTimeConstant_ implements PlugIn {
                 for (int i = 1; i <= blockSize; i++) {
                     IJ.showProgress(i, blockSize);
                     ImageProcessor ip = ims.getProcessor(i + b*blockSize);
-                    imsMotion.setProcessor(ssimCalculator.Calculate(ip), i);
+                    imsMotion.setProcessor(ssimCalculator.CalculateSSIMmap(ip), i);
                 }
             }
 
