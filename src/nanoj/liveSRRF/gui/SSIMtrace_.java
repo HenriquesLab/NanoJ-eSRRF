@@ -79,17 +79,19 @@ public class SSIMtrace_ implements PlugIn {
 
         // Get the regularization factors from the stack
         float[] regFactors = getRegularizationFactors(ims, regMethod);
-        SSIMCalculator ssimCalculator;
+        SSIMCalculator ssimCalculator =  new SSIMCalculator(ims, regFactors);
 
         int nBlocks = nFrames - blockSize - 1;
 
         if  (blockSize == 0) {
-            ssimCalculator = new SSIMCalculator(ims.duplicate().getProcessor(1).convertToFloatProcessor(), 0, regFactors);
+//            ssimCalculator = new SSIMCalculator(ims.duplicate().getProcessor(1).convertToFloatProcessor(), 0, regFactors);
 
-            double[] initialSSIMtrace = new double[nFrames - 1];
-            for (int i = 0; i < nFrames - 1; i++) {
-                initialSSIMtrace[i] = ssimCalculator.CalculateMetric(ims.getProcessor(i + 2).convertToFloatProcessor());
-            }
+//            double[] initialSSIMtrace = new double[nFrames - 1];
+//            for (int i = 0; i < nFrames - 1; i++) {
+//                initialSSIMtrace[i] = ssimCalculator.CalculateMetric(ims.getProcessor(i + 2).convertToFloatProcessor());
+//            }
+
+            double[] initialSSIMtrace = ssimCalculator.rollingSSIM(0,nFrames - 1);
 
             int initialCutOffPosition = getSigmacutOffPosition(initialSSIMtrace, smoothingFactor, sigmaCutOff, true);
             IJ.log("Initial Cut-off position: " + initialCutOffPosition);
@@ -113,7 +115,7 @@ public class SSIMtrace_ implements PlugIn {
             IJ.showProgress(b, nBlocks);
 
 //            ipRef = ims.duplicate().getProcessor(1 + b).convertToFloatProcessor(); // rolling analysis
-            ssimCalculator = new SSIMCalculator(ims.getProcessor(1 + b).convertToFloatProcessor(), Float.MAX_VALUE, regFactors);
+//            ssimCalculator = new SSIMCalculator(ims.getProcessor(1 + b).convertToFloatProcessor(), Float.MAX_VALUE, regFactors);
 
 //            ImageStack imsBlock = new ImageStack(ims.getWidth(), ims.getHeight());
 //            for (int i = 0; i < blockSize; i++) {
@@ -121,9 +123,10 @@ public class SSIMtrace_ implements PlugIn {
 //            }
 //            ssimTraces[b] = ssimCalculator.CalculateMetric(imsBlock);
 
-            for (int i = 0; i < blockSize; i++) {
-                ssimTraces[b][i] = ssimCalculator.CalculateMetric(ims.getProcessor(b+i+2).convertToFloatProcessor());
-            }
+//            for (int i = 0; i < blockSize; i++) {
+//                ssimTraces[b][i] = ssimCalculator.CalculateMetric(ims.getProcessor(b+i+2).convertToFloatProcessor());
+//            }
+            ssimTraces[b] = ssimCalculator.rollingSSIM(b,blockSize);
         }
 
         displaySSIMtraces(ssimTraces, imageTitle, sigmaCutOff);
