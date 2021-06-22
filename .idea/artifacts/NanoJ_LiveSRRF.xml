@@ -1,0 +1,8 @@
+<component name="ArtifactManager">
+    <artifact type="jar" build-on-make="true" name="NanoJ_LiveSRRF">
+        <output-path>/Applications/Fiji.app/plugins</output-path>
+        <root id="archive" name="NanoJ_LiveSRRF.jar">
+            <element id="module-output" name="LiveSRRF" />
+        </root>
+    </artifact>
+</component>
