@@ -4,6 +4,7 @@ import ij.IJ;
 import ij.ImagePlus;
 import ij.ImageStack;
 import ij.WindowManager;
+import ij.gui.DialogListener;
 import ij.gui.GenericDialog;
 import ij.gui.NonBlockingGenericDialog;
 import ij.measure.Calibration;
@@ -47,7 +48,8 @@ public class ParametersSweep_ implements PlugIn {
             doErrorMapping,
             fixSigma,
             correctVibration,
-            cropBorder;
+            cropBorder,
+            previousAdvSettings = false;
 
     private float[] fwhmArray;
     private int[] sensitivityArray,
@@ -88,11 +90,21 @@ public class ParametersSweep_ implements PlugIn {
         // Initialise the eSRRF engine (creates a context really)
         LiveSRRF_CL eSRRF = new LiveSRRF_CL();
 
+        // Set advanced variables to default or preset values
+        showErrorMaps = prefs.get("showErrorMaps", true);
+        showRSC = prefs.get("showRSC", false);
+        calculateRSE = prefs.get("calculateRSE", false);
+        calculateRSP = prefs.get("calculateRSP", false);
+        fixSigma = prefs.get("fixSigma", false);
+        fixedSigma = (float) prefs.get("fixedSigma", 1);
+        cropBorder = prefs.get("cropBorder", true);
+        cropSize = (int) prefs.get("cropSize", 3);
+        calculateFRC = prefs.get("calculateFRC", false);
+        blockSize = (int) prefs.get("blockSize", 20000);
+
         // Build GUI
         Font headerFont = new Font("Arial", Font.BOLD, 16);
-        String[] temporalAnalysis = {"AVG","STD","Both AVG and STD"};
-
-
+//        String[] temporalAnalysis = {"AVG","STD","Both AVG and STD"};
         NonBlockingGenericDialog gd = new NonBlockingGenericDialog("eSRRF - Parameters sweep " + eSRRFVersion);
         gd.addMessage("-=-= eSRRF reconstruction =-=-\n", headerFont);
         gd.addNumericField("Magnification (default: 5)", prefs.get("magnification", 5), 0);
@@ -131,38 +143,46 @@ public class ParametersSweep_ implements PlugIn {
         gd.addToSameRow();
         gd.addNumericField("Number", prefs.get("n_nf", 3), 0);
 
+        gd.addMessage("-=-= Advanced settings =-=-\n", headerFont);
+        gd.addCheckbox("Show advanced settings", false);
 
-        gd.addMessage("-=-= Error maps =-=-\n", headerFont);
-        gd.addCheckbox("Show all error maps (default: on)", prefs.get("showErrorMaps", true));
-        gd.addToSameRow();
-        gd.addCheckbox("Show rescaled reconstructions (default: off)", prefs.get("showRSC", false));
+//        gd.addMessage("-=-= Error maps =-=-\n", headerFont);
+//        gd.addCheckbox("Show all error maps (default: on)", prefs.get("showErrorMaps", true));
+//        gd.addToSameRow();
+//        gd.addCheckbox("Show rescaled reconstructions (default: off)", prefs.get("showRSC", false));
+//
+//        gd.addCheckbox("Calculate RSE (default: off)", prefs.get("calculateRSE", false));
+//        gd.addToSameRow();
+//        gd.addCheckbox("Calculate RSP (default: off)", prefs.get("calculateRSP", false));
+//
+//        gd.addCheckbox("Fix sigma (default: off)", prefs.get("fixSigma", false));
+//        gd.addToSameRow();
+//        gd.addNumericField("Sigma (in pixels, used if fixed)", prefs.get("fixedSigma", 1), 2);
+//        gd.addMessage("Sigma can be evaluated by: (0.21 x Emission wavelength (in nm) / NA) / pixel size (in nm)\n"+
+//                "It should typically be around ~1 pixel.");
+//
+//        gd.addCheckbox("Crop border (default: on)", prefs.get("cropBorder", true));
+//        gd.addToSameRow();
+//        gd.addNumericField("Pixels to crop (in pixels, used if selected)", prefs.get("cropSize", 3), 0);
+//        gd.addMessage("Cropping the border of the images avoids biasing error mapping analysis if extrapolation\n"+
+//                " artefacts may occur.");
+//
+//        gd.addMessage("-=-= FRC resolution =-=-\n", headerFont);
+//        gd.addCheckbox("Calculate FRC (default: off)", prefs.get("calculateFRC", false));
+//
+//        gd.addMessage("Calculating FRC will split all dataset in two halves and therefore the maximum number\n" +
+//                "of frames will be half of the total frames available in the dataset.");
+//
+//        gd.addMessage("-=-= GPU processing =-=-\n", headerFont);
+//        gd.addNumericField("Analysis block size (default: 20000)", prefs.get("blockSize", 20000), 0);
+//        gd.addMessage("A large analysis block size will speed up the analysis but will use more resources and\n" +
+//                " may slow down your computer.");
 
-        gd.addCheckbox("Calculate RSE (default: off)", prefs.get("calculateRSE", false));
-        gd.addToSameRow();
-        gd.addCheckbox("Calculate RSP (default: off)", prefs.get("calculateRSP", false));
+//        LiveSRRF_optimised_.MyDialogListenerMainGUI dl = new LiveSRRF_optimised_.MyDialogListenerMainGUI(); // this serves to estimate a few indicators such as RAM usage
+//        gd.addDialogListener(dl);
 
-        gd.addCheckbox("Fix sigma (default: off)", prefs.get("fixSigma", false));
-        gd.addToSameRow();
-        gd.addNumericField("Sigma (in pixels, used if fixed)", prefs.get("fixedSigma", 1), 2);
-        gd.addMessage("Sigma can be evaluated by: (0.21 x Emission wavelength (in nm) / NA) / pixel size (in nm)\n"+
-                "It should typically be around ~1 pixel.");
-
-        gd.addCheckbox("Crop border (default: on)", prefs.get("cropBorder", true));
-        gd.addToSameRow();
-        gd.addNumericField("Pixels to crop (in pixels, used if selected)", prefs.get("cropSize", 3), 0);
-        gd.addMessage("Cropping the border of the images avoids biasing error mapping analysis if extrapolation\n"+
-                " artefacts may occur.");
-
-        gd.addMessage("-=-= FRC resolution =-=-\n", headerFont);
-        gd.addCheckbox("Calculate FRC (default: off)", prefs.get("calculateFRC", false));
-
-        gd.addMessage("Calculating FRC will split all dataset in two halves and therefore the maximum number\n" +
-                "of frames will be half of the total frames available in the dataset.");
-
-        gd.addMessage("-=-= GPU processing =-=-\n", headerFont);
-        gd.addNumericField("Analysis block size (default: 20000)", prefs.get("blockSize", 20000), 0);
-        gd.addMessage("A large analysis block size will speed up the analysis but will use more resources and\n" +
-                " may slow down your computer.");
+        MyDialogListenerMainGUI dl = new MyDialogListenerMainGUI(); // this serves to estimate a few indicators such as RAM usage
+        gd.addDialogListener(dl);
 
         gd.addHelp("https://www.youtube.com/watch?v=Vs6awg-BJHo"); // If you don't know how to sweep
         gd.showDialog();
@@ -924,25 +944,26 @@ public class ParametersSweep_ implements PlugIn {
         int n_nf = (int) gd.getNextNumber();
 
 
-        showErrorMaps = gd.getNextBoolean();
-        showRSC = gd.getNextBoolean();
+//        showErrorMaps = gd.getNextBoolean();
+//        showRSC = gd.getNextBoolean();
+//
+//        calculateRSE = gd.getNextBoolean();
+//        calculateRSP = gd.getNextBoolean();
+//
+//        // If any of these things is ticked then do the analysis
+//        doErrorMapping = (showErrorMaps || showRSC || calculateRSE || calculateRSP);
+//
+//        fixSigma = gd.getNextBoolean();
+//        fixedSigma = (float) gd.getNextNumber();
+//
+//        cropBorder = gd.getNextBoolean();
+//        cropSize = (int) gd.getNextNumber();
+//
+//        calculateFRC = gd.getNextBoolean();
+//
+//        blockSize = (int) gd.getNextNumber();
 
-        calculateRSE = gd.getNextBoolean();
-        calculateRSP = gd.getNextBoolean();
-
-        // If any of these things is ticked then do the analysis
-        doErrorMapping = (showErrorMaps || showRSC || calculateRSE || calculateRSP);
-
-        fixSigma = gd.getNextBoolean();
-        fixedSigma = (float) gd.getNextNumber();
-
-        cropBorder = gd.getNextBoolean();
-        cropSize = (int) gd.getNextNumber();
-
-        calculateFRC = gd.getNextBoolean();
-
-        blockSize = (int) gd.getNextNumber();
-
+        // --- Prepare the variables ---
         fwhmArray = new float[n_fwhm];
         for (int i = 0; i < n_fwhm; i++) {
             fwhmArray[i] = fwhm0 + i * deltafwhm;
@@ -967,6 +988,10 @@ public class ParametersSweep_ implements PlugIn {
         for (int i = 0; i < n_nfToUse; i++) {
             nframeArray[i] = nf0 + i * deltanf;
         }
+
+        boolean showAdvancedSettings = gd.getNextBoolean();
+        if (showAdvancedSettings && !previousAdvSettings) advancedSettingsGUI();
+        previousAdvSettings = showAdvancedSettings;
 
         prefs.set("magnification", magnification);
 //        prefs.set("chosenTemporalAnalysis", chosenTemporalAnalysis);
@@ -1041,6 +1066,79 @@ public class ParametersSweep_ implements PlugIn {
 
         return userPressedEscape;
 
+    }
+
+    private void advancedSettingsGUI(){
+
+        // Build GUI
+        Font headerFont = new Font("Arial", Font.BOLD, 16);
+        GenericDialog gd = new GenericDialog("eSRRF Parameter sweep - Advanced settings");
+
+        gd.addMessage("-=-= Error maps =-=-\n", headerFont);
+        gd.addCheckbox("Show all error maps (default: on)", prefs.get("showErrorMaps", true));
+        gd.addToSameRow();
+        gd.addCheckbox("Show rescaled reconstructions (default: off)", prefs.get("showRSC", false));
+
+        gd.addCheckbox("Calculate RSE (default: off)", prefs.get("calculateRSE", false));
+        gd.addToSameRow();
+        gd.addCheckbox("Calculate RSP (default: off)", prefs.get("calculateRSP", false));
+
+        gd.addCheckbox("Fix sigma (default: off)", prefs.get("fixSigma", false));
+        gd.addToSameRow();
+        gd.addNumericField("Sigma (in pixels, used if fixed)", prefs.get("fixedSigma", 1), 2);
+        gd.addMessage("Sigma can be evaluated by: (0.21 x Emission wavelength (in nm) / NA) / pixel size (in nm)\n"+
+                "It should typically be around ~1 pixel.");
+
+        gd.addCheckbox("Crop border (default: on)", prefs.get("cropBorder", true));
+        gd.addToSameRow();
+        gd.addNumericField("Pixels to crop (in pixels, used if selected)", prefs.get("cropSize", 3), 0);
+        gd.addMessage("Cropping the border of the images avoids biasing error mapping analysis if extrapolation\n"+
+                " artefacts may occur.");
+
+        gd.addMessage("-=-= FRC resolution =-=-\n", headerFont);
+        gd.addCheckbox("Calculate FRC (default: off)", prefs.get("calculateFRC", false));
+
+        gd.addMessage("Calculating FRC will split all dataset in two halves and therefore the maximum number\n" +
+                "of frames will be half of the total frames available in the dataset.");
+
+        gd.addMessage("-=-= GPU processing =-=-\n", headerFont);
+        gd.addNumericField("Analysis block size (default: 20000)", prefs.get("blockSize", 20000), 0);
+        gd.addMessage("A large analysis block size will speed up the analysis but will use more resources and\n" +
+                " may slow down your computer.");
+
+
+        gd.showDialog();
+
+        if (!gd.wasCanceled()){
+            showErrorMaps = gd.getNextBoolean();
+            showRSC = gd.getNextBoolean();
+
+            calculateRSE = gd.getNextBoolean();
+            calculateRSP = gd.getNextBoolean();
+
+            // If any of these things is ticked then do the analysis
+            doErrorMapping = (showErrorMaps || showRSC || calculateRSE || calculateRSP);
+
+            fixSigma = gd.getNextBoolean();
+            fixedSigma = (float) gd.getNextNumber();
+
+            cropBorder = gd.getNextBoolean();
+            cropSize = (int) gd.getNextNumber();
+
+            calculateFRC = gd.getNextBoolean();
+
+            blockSize = (int) gd.getNextNumber();
+        }
+
+
+    }
+
+    // --- Main GUI Dialog listener ---
+    class MyDialogListenerMainGUI implements DialogListener {
+        @Override
+        public boolean dialogItemChanged(GenericDialog gd, AWTEvent awtEvent) {
+            return grabSettings(gd);
+        }
     }
 
 
