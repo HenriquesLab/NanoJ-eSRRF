@@ -68,7 +68,7 @@ public class LiveSRRF_optimised_ implements PlugIn {
             do3DSRRF;
 
     private final boolean enable3DSRRF = true;
-    private final String LiveSRRFVersion = "v1.3d-bci.18";
+    private final String eSRRFVersion = "v1.3d-bci.18";
 
     private String pathToDisk = "",
             fileName,
@@ -90,6 +90,7 @@ public class LiveSRRF_optimised_ implements PlugIn {
     private NanoJPrefs prefs = new NanoJPrefs(this.getClass().getName());
     private NanoJProfiler prof = new NanoJProfiler();
     private LiveSRRF_CL liveSRRF;
+    private LiveSRRF_CL eSRRF;
     private SaveFileInZip saveFileInZip;
     private CLDevice chosenDevice = null;
 
@@ -137,7 +138,7 @@ public class LiveSRRF_optimised_ implements PlugIn {
         IJ.log("\\Clear");  // Clear the log window
         IJ.log("-------------------------------------");
         IJ.log("-------------------------------------");
-        IJ.log("LiveSRRF " + LiveSRRFVersion);
+        IJ.log("eSRRF " + eSRRFVersion); //TODO: what's taking so long on Wolverine?
         IJ.log("Max RAM available: "+ (float) Math.round(maxMemoryRAMij*100)/100 + " MB");
 
         LocalDateTime now = LocalDateTime.now();
@@ -146,8 +147,8 @@ public class LiveSRRF_optimised_ implements PlugIn {
         IJ.log("Pixel size: "+pixelSize+" "+pixelSizeUnit);
 
         // Initialize the liveSRRF class and check the devices
-        liveSRRF = new LiveSRRF_CL();
-        liveSRRF.checkDevices();
+        eSRRF = new LiveSRRF_CL();
+        eSRRF.checkDevices();
         CLDevice[] allDevices = LiveSRRF_CL.allCLdevices;
         gradMag = liveSRRF.gradientMag;
         nRecons = liveSRRF.nReconstructions;
@@ -228,7 +229,7 @@ public class LiveSRRF_optimised_ implements PlugIn {
 
         ImageStack imsAllRawData = imp.getImageStack();
 
-        liveSRRF.initialise(width, height, magnification, fwhm, sensitivity, nFrameOnGPU, nFrameForSRRFtoUse, blockSize, chosenDevice, intWeighting, doMPmapCorrection, calibTablePath3DSRRF, axialOffset, (float) pixelSize);
+        eSRRF.initialise(width, height, magnification, fwhm, sensitivity, nFrameOnGPU, nFrameForSRRFtoUse, blockSize, chosenDevice, intWeighting, doMPmapCorrection, calibTablePath3DSRRF, axialOffset, (float) pixelSize);
         widthS = liveSRRF.widthS;
         heightS = liveSRRF.heightS;
         nPlanes = liveSRRF.nPlanes;
@@ -267,7 +268,7 @@ public class LiveSRRF_optimised_ implements PlugIn {
 
         // Start looping trough SRRF frames --------------------------------------------
         for (int r = 1; r <= nSRRFframe; r++) {
-            liveSRRF.resetFramePosition();  // resets only the global SRRF counter
+            eSRRF.resetFramePosition();  // resets only the global SRRF counter
 
             IJ.log("--------");
             IJ.log("SRRF frame: " + r + "/" + nSRRFframe);
@@ -296,7 +297,7 @@ public class LiveSRRF_optimised_ implements PlugIn {
 
             }
 
-            liveSRRF.loadDriftXYGPUbuffer(shiftX, shiftY);
+            eSRRF.loadDriftXYGPUbuffer(shiftX, shiftY);
 
             IJ.showProgress(r - 1, nSRRFframe);
 
@@ -312,11 +313,11 @@ public class LiveSRRF_optimised_ implements PlugIn {
                     imsRawData.addSlice(imsAllRawData.getProcessor(indexStartSRRFframe + nFrameOnGPU * l + f));
                 }
 
-                userPressedEscape = liveSRRF.calculateSRRF(imsRawData); // resets the local GPU load frame counter
+                userPressedEscape = eSRRF.calculateSRRF(imsRawData); // resets the local GPU load frame counter
 
                 // Check if user is cancelling calculation
                 if (userPressedEscape) {
-                    liveSRRF.release();
+                    eSRRF.release();
                     IJ.log("-------------------------------------");
                     IJ.log("Reconstruction aborted by user.");
                     return;
@@ -329,8 +330,8 @@ public class LiveSRRF_optimised_ implements PlugIn {
                 IJ.showStatus("LiveSRRF - Remaining time: " + timeToString(remainingTime));
             }
 
-            liveSRRF.readSRRFbuffer();
-            imsBuffer = liveSRRF.imsSRRF;
+            eSRRF.readSRRFbuffer();
+            imsBuffer = eSRRF.imsSRRF;
 
             if (writeToDiskToUse) {//  TODO: this will not work in 3D
                 try {
@@ -405,7 +406,7 @@ public class LiveSRRF_optimised_ implements PlugIn {
 //        }
 
         // Release the GPU
-        liveSRRF.release();
+        eSRRF.release();
 
         IJ.log("-------------------------------------");
         // Close the ZipSaver & display stack as virtual stacks
@@ -535,7 +536,7 @@ public class LiveSRRF_optimised_ implements PlugIn {
     private boolean mainGUI() {
         // Build GUI
         Font headerFont = new Font("Arial", Font.BOLD, 16);
-        NonBlockingGenericDialog gd = new NonBlockingGenericDialog("LiveSRRF " + LiveSRRFVersion);
+        NonBlockingGenericDialog gd = new NonBlockingGenericDialog("LiveSRRF " + eSRRFVersion);
         gd.addMessage("-=-= SRRF parameters =-=-\n", headerFont);
         gd.addNumericField("Magnification (default: 5)", prefs.get("magnification", 5), 0);
         gd.addNumericField("Radius (pixels, default: 1.5)", prefs.get("fwhm", (float) 1.5), 2);
