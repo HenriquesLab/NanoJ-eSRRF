@@ -59,7 +59,7 @@ public class LiveSRRF_optimised_ implements PlugIn {
             showImStabPlot,
             intWeighting;
 
-    private final String LiveSRRFVersion = "v1.11";
+    private final String eSRRFVersion = "v1.11";
     private String pathToDisk = "",
             fileName,
             chosenDeviceName;
@@ -82,7 +82,7 @@ public class LiveSRRF_optimised_ implements PlugIn {
     // Advanced formats
     private NanoJPrefs prefs = new NanoJPrefs(this.getClass().getName());
     private NanoJProfiler prof = new NanoJProfiler();
-    private LiveSRRF_CL liveSRRF;
+    private LiveSRRF_CL eSRRF;
     private SaveFileInZip saveFileInZip;
     private CLDevice chosenDevice = null;
 
@@ -125,7 +125,7 @@ public class LiveSRRF_optimised_ implements PlugIn {
         IJ.log("\\Clear");  // Clear the log window
         IJ.log("-------------------------------------");
         IJ.log("-------------------------------------");
-        IJ.log("LiveSRRF " + LiveSRRFVersion); //TODO: what's taking so long on Wolverine?
+        IJ.log("eSRRF " + eSRRFVersion); //TODO: what's taking so long on Wolverine?
         IJ.log("Max RAM available: "+ (float) Math.round(maxMemoryRAMij*100)/100 + " MB");
 
         LocalDateTime now = LocalDateTime.now();
@@ -133,8 +133,8 @@ public class LiveSRRF_optimised_ implements PlugIn {
         IJ.log(now.format(formatter));
 
         // Initialize the liveSRRF class and check the devices
-        liveSRRF = new LiveSRRF_CL();
-        liveSRRF.checkDevices();
+        eSRRF = new LiveSRRF_CL();
+        eSRRF.checkDevices();
         CLDevice[] allDevices = LiveSRRF_CL.allCLdevices;
 
         // Initializing string for device choice
@@ -148,14 +148,14 @@ public class LiveSRRF_optimised_ implements PlugIn {
         // Main GUI ----
         boolean cancelled = mainGUI();
         if (cancelled) {
-            liveSRRF.release();
+            eSRRF.release();
             IJ.log("Cancelled by user.");
             return;
         }
 
         // Check if something has gone wrong with the momory
         if (!calculatenFrameOnGPU()){
-            liveSRRF.release();
+            eSRRF.release();
             IJ.log("Problems with memory. Check advanced settings or else...");
             return;
         }
@@ -205,7 +205,7 @@ public class LiveSRRF_optimised_ implements PlugIn {
 
         ImageStack imsAllRawData = imp.getImageStack();
 
-        liveSRRF.initialise(width, height, magnification, fwhm, sensitivity, nFrameOnGPU, nFrameForSRRFtoUse, blockSize, chosenDevice, intWeighting, doMPmapCorrection);
+        eSRRF.initialise(width, height, magnification, fwhm, sensitivity, nFrameOnGPU, nFrameForSRRFtoUse, blockSize, chosenDevice, intWeighting, doMPmapCorrection);
 
         shiftX = new float[nFrameForSRRFtoUse];
         shiftY = new float[nFrameForSRRFtoUse];
@@ -239,7 +239,7 @@ public class LiveSRRF_optimised_ implements PlugIn {
 
         // Start looping trough SRRF frames --------------------------------------------
         for (int r = 1; r <= nSRRFframe; r++) {
-            liveSRRF.resetFramePosition();  // resets only the global SRRF counter
+            eSRRF.resetFramePosition();  // resets only the global SRRF counter
 
             IJ.log("--------");
             IJ.log("SRRF frame: " + r + "/" + nSRRFframe);
@@ -268,7 +268,7 @@ public class LiveSRRF_optimised_ implements PlugIn {
 
             }
 
-            liveSRRF.loadShiftXYGPUbuffer(shiftX, shiftY);
+            eSRRF.loadShiftXYGPUbuffer(shiftX, shiftY);
 
             IJ.showProgress(r - 1, nSRRFframe);
 
@@ -284,11 +284,11 @@ public class LiveSRRF_optimised_ implements PlugIn {
                     imsRawData.addSlice(imsAllRawData.getProcessor(indexStartSRRFframe + nFrameOnGPU * l + f));
                 }
 
-                userPressedEscape = liveSRRF.calculateSRRF(imsRawData); // resets the local GPU load frame counter
+                userPressedEscape = eSRRF.calculateSRRF(imsRawData); // resets the local GPU load frame counter
 
                 // Check if user is cancelling calculation
                 if (userPressedEscape) {
-                    liveSRRF.release();
+                    eSRRF.release();
                     IJ.log("-------------------------------------");
                     IJ.log("Reconstruction aborted by user.");
                     return;
@@ -301,8 +301,8 @@ public class LiveSRRF_optimised_ implements PlugIn {
                 IJ.showStatus("LiveSRRF - Remaining time: " + timeToString(remainingTime));
             }
 
-            liveSRRF.readSRRFbuffer();
-            imsBuffer = liveSRRF.imsSRRF;
+            eSRRF.readSRRFbuffer();
+            imsBuffer = eSRRF.imsSRRF;
 
 //            impMPmap = new ImagePlus("MP map",liveSRRF.getMPmap());
 //            impMPmap.setCalibration(cal);
@@ -349,7 +349,7 @@ public class LiveSRRF_optimised_ implements PlugIn {
 
 
         // Release the GPU
-        liveSRRF.release();
+        eSRRF.release();
 
         IJ.log("-------------------------------------");
         // Close the ZipSaver & display stack as virtual stacks
@@ -479,7 +479,7 @@ public class LiveSRRF_optimised_ implements PlugIn {
     private boolean mainGUI() {
         // Build GUI
         Font headerFont = new Font("Arial", Font.BOLD, 16);
-        NonBlockingGenericDialog gd = new NonBlockingGenericDialog("LiveSRRF " + LiveSRRFVersion);
+        NonBlockingGenericDialog gd = new NonBlockingGenericDialog("LiveSRRF " + eSRRFVersion);
         gd.addMessage("-=-= SRRF parameters =-=-\n", headerFont);
         gd.addNumericField("Magnification (default: 5)", prefs.get("magnification", 5), 0);
         gd.addNumericField("Radius (pixels, default: 1.5)", prefs.get("fwhm", (float) 1.5), 2);
