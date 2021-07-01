@@ -234,6 +234,7 @@ __kernel void calculateRadialGradientConvergence(
     __global float* pixels,
     __global float* GxArray,
     __global float* GyArray,
+    __global float* PreviousFrameArray,
     __global float* OutArray,
     __global float* shiftXY,
     __global int* nCurrentFrame
@@ -354,28 +355,35 @@ __kernel void calculateRadialGradientConvergence(
     float v = getInterpolatedValue(pixels, w, h, ((float) xM)/magnification + shiftX - 0.5f, ((float) yM)/magnification + shiftY - 0.5f, nCurrentFrame[1]);
 
     if (intWeighting == 1) {
-            if (nCurrentFrame[0] == 0) {
-                OutArray[offset] = v * CGLH / nFrameForSRRF;
-                OutArray[offset + whM] = v * CGLH * v * CGLH / nFrameForSRRF;
-                OutArray[offset + 2 * whM] = v / nFrameForSRRF;
+
+            if (nCurrentFrame[0] == 0) { // Initialising the values of the array
+                OutArray[offset] = v * CGLH / nFrameForSRRF;                    // AVG
+                OutArray[offset + whM] = v * CGLH * v * CGLH / nFrameForSRRF;   // VAR
+                OutArray[offset + 2 * whM] = 0;                                 // 2nd Order SOFI Tau = 1
+                OutArray[offset + 3 * whM] = v / nFrameForSRRF;                 // interpolated
             }
             else {
                 OutArray[offset] = OutArray[offset] + v * CGLH / nFrameForSRRF;
                 OutArray[offset + whM] = OutArray[offset + whM] + v * CGLH * v * CGLH / nFrameForSRRF;
-                OutArray[offset + 2 * whM] = OutArray[offset + 2 * whM] + v / nFrameForSRRF;
+                OutArray[offset + 2 * whM] = OutArray[offset + 2 * whM] + v * CGLH * PreviousFrameArray[offset] / (nFrameForSRRF-1);
+                OutArray[offset + 3 * whM] = OutArray[offset + 3 * whM] + v / nFrameForSRRF;
             }
+        PreviousFrameArray[offset] = v * CGLH / (nFrameForSRRF-1); // update the value of the
     }
     else{
             if (nCurrentFrame[0] == 0) {
                 OutArray[offset] = CGLH / nFrameForSRRF;
                 OutArray[offset + whM] = CGLH * CGLH / nFrameForSRRF;
-                OutArray[offset + 2 * whM] = v / nFrameForSRRF;
+                OutArray[offset + 2 * whM] = 0;
+                OutArray[offset + 3 * whM] = v / nFrameForSRRF;
             }
             else {
                 OutArray[offset] = OutArray[offset] + CGLH / nFrameForSRRF;
                 OutArray[offset + whM] = OutArray[offset + whM] + CGLH * CGLH / nFrameForSRRF;
-                OutArray[offset + 2 * whM] = OutArray[offset + 2 * whM] + v / nFrameForSRRF;
+                OutArray[offset + 2 * whM] = OutArray[offset + 2 * whM] + CGLH * PreviousFrameArray[offset] / (nFrameForSRRF-1);
+                OutArray[offset + 3 * whM] = OutArray[offset + 3 * whM] + v / nFrameForSRRF;
             }
+        PreviousFrameArray[offset] = CGLH / (nFrameForSRRF-1);
     }
 
 //        }
@@ -409,13 +417,15 @@ __kernel void calculateRadialGradientConvergence(
 //}
 
 
-// Kernel: calculate STD image from the OutputArray
-__kernel void kernelCalculateStd(
+// Kernel: calculate VARIANCE image from the OutputArray
+__kernel void kernelCalculateVariance(
     __global float* OutArray
     ){
-
     const int offset = get_global_id(0);
-    OutArray[offset + whM] = sqrt(OutArray[offset + whM] - OutArray[offset]*OutArray[offset]);
+
+    const float av2 = OutArray[offset]*OutArray[offset];
+    OutArray[offset + whM] = OutArray[offset + whM] - av2;     // Var[X] = E[X^2] - (E[X])^2
+    OutArray[offset + 2*whM] = OutArray[offset + 2*whM] - av2; // TAC2[X] = E[Xt*Xt+1] - (E[X])^2
 
 }
 
@@ -452,7 +462,7 @@ __kernel void kernelCalculateMPmap(
     ){
 
     const int offset_MPmap = get_global_id(0);
-    const int frame = offset_MPmap/(magnification*magnification); // 0 or 1 depending on whether we're dealing with AVG or STD
+    const int frame = offset_MPmap/(magnification*magnification); // 0, 1 or 2 depending on whether we're dealing with AVG or VAR or SOFI2ndTau1
     const int y_MPmap = (offset_MPmap - frame*(magnification*magnification))/magnification;
     const int x_MPmap = offset_MPmap - y_MPmap*magnification - frame*(magnification*magnification);
 
@@ -478,7 +488,7 @@ __kernel void kernelCorrectMPmap(
 ){
 
     const int offset = get_global_id(0);
-    const int frame = offset/whM; // 0 or 1 depending on whether we're dealing with AVG or STD
+    const int frame = offset/whM; // 0, 1 or 2 depending on whether we're dealing with AVG or VAR or SOFI2ndTau1
     const int yM = (offset - frame*(whM))/wM;
     const int xM = offset - yM*wM - frame*whM;
     const int x = xM/magnification;

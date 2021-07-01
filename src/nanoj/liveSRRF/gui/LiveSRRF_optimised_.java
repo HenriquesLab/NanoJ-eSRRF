@@ -15,17 +15,16 @@ import nanoj.core2.NanoJProfiler;
 import nanoj.core2.NanoJUsageTracker;
 import nanoj.liveSRRF.XYShiftCalculator;
 import org.python.modules.math;
-import nanoj.liveSRRF.liveSRRF_CL;
+import nanoj.liveSRRF.LiveSRRF_CL;
 
 import java.awt.*;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
-import static ij.IJ.selectWindow;
 import static java.lang.Math.min;
 
-public class liveSRRF_optimised_ implements PlugIn {
+public class LiveSRRF_optimised_ implements PlugIn {
 
     // Basic formats
     private int magnification,
@@ -47,7 +46,8 @@ public class liveSRRF_optimised_ implements PlugIn {
 
     private boolean correctVibration,
             calculateAVG,
-            calculateSTD,
+            calculateVAR,
+            calculateTAC2,
             getInterpolatedImage,
             writeToDiskToUse,
             writeToDiskTemp,
@@ -59,14 +59,14 @@ public class liveSRRF_optimised_ implements PlugIn {
             showImStabPlot,
             intWeighting;
 
-    private final String LiveSRRFVersion = "v1.10";
+    private final String eSRRFVersion = "v1.11";
     private String pathToDisk = "",
             fileName,
-            chosenDeviceName,
-            chosenTemporalAnalysis;
+            chosenDeviceName;
+//            chosenTemporalAnalysis;
 
-    private String[] deviceNames,
-            temporalAnalysis = {"AVG","STD","Both AVG and STD"};
+    private String[] deviceNames;
+//            temporalAnalysis = {"AVG","VAR","Both AVG and VAR"};
 
     private float[] shiftX, shiftY;
 
@@ -74,14 +74,15 @@ public class liveSRRF_optimised_ implements PlugIn {
     private ImagePlus imp;
 
     private ImagePlus impSRRFavg,
-            impSRRFstd,
+            impSRRFvar,
+            impSRRFtac2,
             impRawInterpolated;
 
 
     // Advanced formats
     private NanoJPrefs prefs = new NanoJPrefs(this.getClass().getName());
     private NanoJProfiler prof = new NanoJProfiler();
-    private liveSRRF_CL liveSRRF;
+    private LiveSRRF_CL eSRRF;
     private SaveFileInZip saveFileInZip;
     private CLDevice chosenDevice = null;
 
@@ -124,7 +125,7 @@ public class liveSRRF_optimised_ implements PlugIn {
         IJ.log("\\Clear");  // Clear the log window
         IJ.log("-------------------------------------");
         IJ.log("-------------------------------------");
-        IJ.log("liveSRRF " + LiveSRRFVersion); //TODO: what's taking so long on Wolverine?
+        IJ.log("eSRRF " + eSRRFVersion); //TODO: what's taking so long on Wolverine?
         IJ.log("Max RAM available: "+ (float) Math.round(maxMemoryRAMij*100)/100 + " MB");
 
         LocalDateTime now = LocalDateTime.now();
@@ -132,9 +133,9 @@ public class liveSRRF_optimised_ implements PlugIn {
         IJ.log(now.format(formatter));
 
         // Initialize the liveSRRF class and check the devices
-        liveSRRF = new liveSRRF_CL();
-        liveSRRF.checkDevices();
-        CLDevice[] allDevices = liveSRRF_CL.allCLdevices;
+        eSRRF = new LiveSRRF_CL();
+        eSRRF.checkDevices();
+        CLDevice[] allDevices = LiveSRRF_CL.allCLdevices;
 
         // Initializing string for device choice
         deviceNames = new String[allDevices.length + 1];
@@ -147,14 +148,14 @@ public class liveSRRF_optimised_ implements PlugIn {
         // Main GUI ----
         boolean cancelled = mainGUI();
         if (cancelled) {
-            liveSRRF.release();
+            eSRRF.release();
             IJ.log("Cancelled by user.");
             return;
         }
 
         // Check if something has gone wrong with the momory
         if (!calculatenFrameOnGPU()){
-            liveSRRF.release();
+            eSRRF.release();
             IJ.log("Problems with memory. Check advanced settings or else...");
             return;
         }
@@ -204,7 +205,7 @@ public class liveSRRF_optimised_ implements PlugIn {
 
         ImageStack imsAllRawData = imp.getImageStack();
 
-        liveSRRF.initialise(width, height, magnification, fwhm, sensitivity, nFrameOnGPU, nFrameForSRRFtoUse, blockSize, chosenDevice, intWeighting, doMPmapCorrection);
+        eSRRF.initialise(width, height, magnification, fwhm, sensitivity, nFrameOnGPU, nFrameForSRRFtoUse, blockSize, chosenDevice, intWeighting, doMPmapCorrection);
 
         shiftX = new float[nFrameForSRRFtoUse];
         shiftY = new float[nFrameForSRRFtoUse];
@@ -214,7 +215,8 @@ public class liveSRRF_optimised_ implements PlugIn {
 
         ImageStack imsRawData;
         ImageStack imsSRRFavg = new ImageStack(width * magnification, height * magnification);
-        ImageStack imsSRRFstd = new ImageStack(width * magnification, height * magnification);
+        ImageStack imsSRRFvar = new ImageStack(width * magnification, height * magnification);
+        ImageStack imsSRRFtac2 = new ImageStack(width * magnification, height * magnification);
         ImageStack imsRawInterpolated = new ImageStack(width * magnification, height * magnification);
 
         ImagePlus impTemp = new ImagePlus();
@@ -237,7 +239,7 @@ public class liveSRRF_optimised_ implements PlugIn {
 
         // Start looping trough SRRF frames --------------------------------------------
         for (int r = 1; r <= nSRRFframe; r++) {
-            liveSRRF.resetFramePosition();  // resets only the global SRRF counter
+            eSRRF.resetFramePosition();  // resets only the global SRRF counter
 
             IJ.log("--------");
             IJ.log("SRRF frame: " + r + "/" + nSRRFframe);
@@ -266,7 +268,7 @@ public class liveSRRF_optimised_ implements PlugIn {
 
             }
 
-            liveSRRF.loadShiftXYGPUbuffer(shiftX, shiftY);
+            eSRRF.loadShiftXYGPUbuffer(shiftX, shiftY);
 
             IJ.showProgress(r - 1, nSRRFframe);
 
@@ -282,11 +284,11 @@ public class liveSRRF_optimised_ implements PlugIn {
                     imsRawData.addSlice(imsAllRawData.getProcessor(indexStartSRRFframe + nFrameOnGPU * l + f));
                 }
 
-                userPressedEscape = liveSRRF.calculateSRRF(imsRawData); // resets the local GPU load frame counter
+                userPressedEscape = eSRRF.calculateSRRF(imsRawData); // resets the local GPU load frame counter
 
                 // Check if user is cancelling calculation
                 if (userPressedEscape) {
-                    liveSRRF.release();
+                    eSRRF.release();
                     IJ.log("-------------------------------------");
                     IJ.log("Reconstruction aborted by user.");
                     return;
@@ -299,8 +301,8 @@ public class liveSRRF_optimised_ implements PlugIn {
                 IJ.showStatus("LiveSRRF - Remaining time: " + timeToString(remainingTime));
             }
 
-            liveSRRF.readSRRFbuffer();
-            imsBuffer = liveSRRF.imsSRRF;
+            eSRRF.readSRRFbuffer();
+            imsBuffer = eSRRF.imsSRRF;
 
 //            impMPmap = new ImagePlus("MP map",liveSRRF.getMPmap());
 //            impMPmap.setCalibration(cal);
@@ -310,19 +312,24 @@ public class liveSRRF_optimised_ implements PlugIn {
             if (writeToDiskToUse) {
                 try {
                     if (calculateAVG) {
-                        impTemp = new ImagePlus("\"liveSRRF (AVG) - frame=" + r + ".tif", imsBuffer.getProcessor(1));
+                        impTemp = new ImagePlus("\"LiveSRRF (AVG) - frame=" + r + ".tif", imsBuffer.getProcessor(1));
                         impTemp.setCalibration(cal);
-                        saveFileInZip.addTiffImage("liveSRRF (AVG) - frame=" + r, impTemp);
+                        saveFileInZip.addTiffImage("LiveSRRF (AVG) - frame=" + r, impTemp);
                     }
-                    if (calculateSTD) {
-                        impTemp = new ImagePlus("\"liveSRRF (STD) - frame=" + r + ".tif", imsBuffer.getProcessor(2));
+                    if (calculateVAR) {
+                        impTemp = new ImagePlus("\"LiveSRRF (VAR) - frame=" + r + ".tif", imsBuffer.getProcessor(2));
                         impTemp.setCalibration(cal);
-                        saveFileInZip.addTiffImage("liveSRRF (STD) - frame=" + r, impTemp);
+                        saveFileInZip.addTiffImage("LiveSRRF (VAR) - frame=" + r, impTemp);
+                    }
+                    if (calculateTAC2) {
+                        impTemp = new ImagePlus("\"LiveSRRF (TAC2) - frame=" + r + ".tif", imsBuffer.getProcessor(3));
+                        impTemp.setCalibration(cal);
+                        saveFileInZip.addTiffImage("LiveSRRF (TAC2) - frame=" + r, impTemp);
                     }
                     if (getInterpolatedImage) {
-                        impTemp = new ImagePlus("\"liveSRRF (INT) - frame=" + r + ".tif", imsBuffer.getProcessor(3));
+                        impTemp = new ImagePlus("\"LiveSRRF (INT) - frame=" + r + ".tif", imsBuffer.getProcessor(4));
                         impTemp.setCalibration(cal);
-                        saveFileInZip.addTiffImage("liveSRRF (INT) - frame=" + r, impTemp);
+                        saveFileInZip.addTiffImage("LiveSRRF (INT) - frame=" + r, impTemp);
                     }
                 } catch (IOException e) {
                     IJ.error("Whoops, it seems that there was a problem with saving to disk... (insert sad face here).");
@@ -332,8 +339,9 @@ public class liveSRRF_optimised_ implements PlugIn {
 
             } else {
                 if (calculateAVG) imsSRRFavg.addSlice(imsBuffer.getProcessor(1));
-                if (calculateSTD) imsSRRFstd.addSlice(imsBuffer.getProcessor(2));
-                if (getInterpolatedImage) imsRawInterpolated.addSlice(imsBuffer.getProcessor(3));
+                if (calculateVAR) imsSRRFvar.addSlice(imsBuffer.getProcessor(2));
+                if (calculateTAC2) imsSRRFtac2.addSlice(imsBuffer.getProcessor(3));
+                if (getInterpolatedImage) imsRawInterpolated.addSlice(imsBuffer.getProcessor(4));
             }
             IJ.log("RAM used: " + IJ.freeMemory());
         }
@@ -341,7 +349,7 @@ public class liveSRRF_optimised_ implements PlugIn {
 
 
         // Release the GPU
-        liveSRRF.release();
+        eSRRF.release();
 
         IJ.log("-------------------------------------");
         // Close the ZipSaver & display stack as virtual stacks
@@ -362,22 +370,34 @@ public class liveSRRF_optimised_ implements PlugIn {
                         if (!vsimsSRRFavg.getSliceLabel(f).contains("AVG")) vsimsSRRFavg.deleteSlice(f);
                     }
 
-                    impSRRFavg = new ImagePlus(imp.getTitle() + " - liveSRRF (AVG)", vsimsSRRFavg);
+                    impSRRFavg = new ImagePlus(imp.getTitle() + " - LiveSRRF (AVG)", vsimsSRRFavg);
                     impSRRFavg.setCalibration(cal);
                     IJ.run(impSRRFavg, "Enhance Contrast", "saturated=0.5");
                     impSRRFavg.show();
                 }
 
-                if (calculateSTD) {
-                    FullFramesVirtualStack vsimsSRRFstd = new FullFramesVirtualStack(fileName, true);
-                    for (int f = vsimsSRRFstd.getSize(); f > 0; f--) {
-                        if (!vsimsSRRFstd.getSliceLabel(f).contains("STD")) vsimsSRRFstd.deleteSlice(f);
+                if (calculateVAR) {
+                    FullFramesVirtualStack vsimsSRRFvar = new FullFramesVirtualStack(fileName, true);
+                    for (int f = vsimsSRRFvar.getSize(); f > 0; f--) {
+                        if (!vsimsSRRFvar.getSliceLabel(f).contains("VAR")) vsimsSRRFvar.deleteSlice(f);
                     }
 
-                    impSRRFstd = new ImagePlus(imp.getTitle() + " - liveSRRF (STD)", vsimsSRRFstd);
-                    impSRRFstd.setCalibration(cal);
-                    IJ.run(impSRRFstd, "Enhance Contrast", "saturated=0.5");
-                    impSRRFstd.show();
+                    impSRRFvar = new ImagePlus(imp.getTitle() + " - LiveSRRF (VAR)", vsimsSRRFvar);
+                    impSRRFvar.setCalibration(cal);
+                    IJ.run(impSRRFvar, "Enhance Contrast", "saturated=0.5");
+                    impSRRFvar.show();
+                }
+
+                if (calculateTAC2) {
+                    FullFramesVirtualStack vsimsSRRFtac2 = new FullFramesVirtualStack(fileName, true);
+                    for (int f = vsimsSRRFtac2.getSize(); f > 0; f--) {
+                        if (!vsimsSRRFtac2.getSliceLabel(f).contains("TAC2")) vsimsSRRFtac2.deleteSlice(f);
+                    }
+
+                    impSRRFtac2 = new ImagePlus(imp.getTitle() + " - LiveSRRF (TAC2)", vsimsSRRFtac2);
+                    impSRRFtac2.setCalibration(cal);
+                    IJ.run(impSRRFtac2, "Enhance Contrast", "saturated=0.5");
+                    impSRRFtac2.show();
                 }
 
                 if (getInterpolatedImage) {
@@ -402,17 +422,24 @@ public class liveSRRF_optimised_ implements PlugIn {
 
             //Display results
             if (calculateAVG) {
-                impSRRFavg = new ImagePlus(imp.getTitle() + " - liveSRRF (AVG)", imsSRRFavg);
+                impSRRFavg = new ImagePlus(imp.getTitle() + " - LiveSRRF (AVG)", imsSRRFavg);
                 impSRRFavg.setCalibration(cal);
                 IJ.run(impSRRFavg, "Enhance Contrast", "saturated=0.5");
                 impSRRFavg.show();
             }
 
-            if (calculateSTD) {
-                impSRRFstd = new ImagePlus(imp.getTitle() + " - liveSRRF (STD)", imsSRRFstd);
-                impSRRFstd.setCalibration(cal);
-                IJ.run(impSRRFstd, "Enhance Contrast", "saturated=0.5");
-                impSRRFstd.show();
+            if (calculateVAR) {
+                impSRRFvar = new ImagePlus(imp.getTitle() + " - LiveSRRF (VAR)", imsSRRFvar);
+                impSRRFvar.setCalibration(cal);
+                IJ.run(impSRRFvar, "Enhance Contrast", "saturated=0.5");
+                impSRRFvar.show();
+            }
+
+            if (calculateTAC2) {
+                impSRRFtac2 = new ImagePlus(imp.getTitle() + " - LiveSRRF (TAC2)", imsSRRFtac2);
+                impSRRFtac2.setCalibration(cal);
+                IJ.run(impSRRFtac2, "Enhance Contrast", "saturated=0.5");
+                impSRRFtac2.show();
             }
 
             if (getInterpolatedImage) {
@@ -452,7 +479,7 @@ public class liveSRRF_optimised_ implements PlugIn {
     private boolean mainGUI() {
         // Build GUI
         Font headerFont = new Font("Arial", Font.BOLD, 16);
-        NonBlockingGenericDialog gd = new NonBlockingGenericDialog("liveSRRF " + LiveSRRFVersion);
+        NonBlockingGenericDialog gd = new NonBlockingGenericDialog("LiveSRRF " + eSRRFVersion);
         gd.addMessage("-=-= SRRF parameters =-=-\n", headerFont);
         gd.addNumericField("Magnification (default: 5)", prefs.get("magnification", 5), 0);
         gd.addNumericField("Radius (pixels, default: 1.5)", prefs.get("fwhm", (float) 1.5), 2);
@@ -461,9 +488,10 @@ public class liveSRRF_optimised_ implements PlugIn {
         gd.addCheckbox("Vibration correction", prefs.get("correctVibration", false));
 
         gd.addMessage("-=-= Reconstructions =-=-\n", headerFont);
-        gd.addChoice("Temporal analysis", temporalAnalysis, prefs.get("chosenTemporalAnalysis", temporalAnalysis[2]));
-//        gd.addCheckbox("AVG reconstruction (default: on)", prefs.get("calculateAVG", true));
-//        gd.addCheckbox("STD reconstruction (default: off)", prefs.get("calculateSTD", false));
+//        gd.addChoice("Temporal analysis", temporalAnalysis, prefs.get("chosenTemporalAnalysis", temporalAnalysis[2]));
+        gd.addCheckbox("AVG reconstruction (default: on)", prefs.get("calculateAVG", true));
+        gd.addCheckbox("VAR reconstruction (default: off)", prefs.get("calculateVAR", false));
+        gd.addCheckbox("TAC2 reconstruction (default: off)", prefs.get("calculateTAC2", false));
         gd.addCheckbox("Wide-field interpolation (default: off)", prefs.get("getInterpolatedImage", false));
 
         gd.addMessage("-=-= Rolling analysis =-=-\n", headerFont);
@@ -504,22 +532,23 @@ public class liveSRRF_optimised_ implements PlugIn {
 
         correctVibration = gd.getNextBoolean();
 
-        chosenTemporalAnalysis = gd.getNextChoice();
-        if (chosenTemporalAnalysis.equals(temporalAnalysis[0])){
-            calculateAVG = true;
-            calculateSTD = false;
-        }
-        else if(chosenTemporalAnalysis.equals(temporalAnalysis[1])){
-            calculateAVG = false;
-            calculateSTD = true;
-        }
-        else{
-            calculateAVG = true;
-            calculateSTD = true;
-        }
+//        chosenTemporalAnalysis = gd.getNextChoice();
+//        if (chosenTemporalAnalysis.equals(temporalAnalysis[0])){
+//            calculateAVG = true;
+//            calculateVAR = false;
+//        }
+//        else if(chosenTemporalAnalysis.equals(temporalAnalysis[1])){
+//            calculateAVG = false;
+//            calculateVAR = true;
+//        }
+//        else{
+//            calculateAVG = true;
+//            calculateVAR = true;
+//        }
 
-//        calculateAVG = gd.getNextBoolean();
-//        calculateSTD = gd.getNextBoolean();
+        calculateAVG = gd.getNextBoolean();
+        calculateVAR = gd.getNextBoolean();
+        calculateTAC2 = gd.getNextBoolean();
         getInterpolatedImage = gd.getNextBoolean();
 
         doRollingAnalysis = gd.getNextBoolean();
@@ -553,7 +582,7 @@ public class liveSRRF_optimised_ implements PlugIn {
 
         // Build GUI
         Font headerFont = new Font("Arial", Font.BOLD, 16);
-        GenericDialog gd = new GenericDialog("liveSRRF - Advanced settings");
+        GenericDialog gd = new GenericDialog("LiveSRRF - Advanced settings");
 
         gd.addMessage("-=-= GPU/CPU processing =-=-\n", headerFont);
         gd.addChoice("Processing device", deviceNames, prefs.get("chosenDeviceName", "Default device"));
@@ -678,9 +707,10 @@ public class liveSRRF_optimised_ implements PlugIn {
         prefs.set("sensitivity", sensitivity);
         prefs.set("correctVibration", correctVibration);
 
-        prefs.set("chosenTemporalAnalysis", chosenTemporalAnalysis);
-//        prefs.set("calculateAVG", calculateAVG);
-//        prefs.set("calculateSTD", calculateSTD);
+//        prefs.set("chosenTemporalAnalysis", chosenTemporalAnalysis);
+        prefs.set("calculateAVG", calculateAVG);
+        prefs.set("calculateSTD", calculateVAR);
+        prefs.set("calculateTAC2", calculateTAC2);
         prefs.set("getInterpolatedImage", getInterpolatedImage);
 
         prefs.set("doRollingAnalysis", doRollingAnalysis);
@@ -715,16 +745,16 @@ public class liveSRRF_optimised_ implements PlugIn {
             nFrameOnGPU = min(nFrameForSRRFtoUse, nFrameOnGPU);
             memUsed = predictMemoryUsed(nFrameOnGPU);
 
-            IJ.showStatus("liveSRRF - Number of frames on device: " + (nFrameOnGPU) + " (" + (float) Math.ceil(memUsed[0]*100)/100 + " MB)");
+            IJ.showStatus("LiveSRRF - Number of frames on device: " + (nFrameOnGPU) + " (" + (float) Math.ceil(memUsed[0]*100)/100 + " MB)");
         } else {
             memUsed = predictMemoryUsed(1);
-            IJ.showStatus("liveSRRF - Minimum device memory: " + (float) Math.ceil(memUsed[0]*100) / 100 + "MB");
+            IJ.showStatus("LiveSRRF - Minimum device memory: " + (float) Math.ceil(memUsed[0]*100) / 100 + "MB");
         }
 
         // Check for RAM on computer
         if ((float) memUsed[1] > maxMemoryRAMij) {
             goodToGo = false;
-            IJ.showStatus("liveSRRF - Max RAM available exceeded: (" + ( (float) Math.ceil(memUsed[1]*100) / 100) + "MB vs. " + ((float) Math.round(maxMemoryRAMij*100) / 100) + "MB)");
+            IJ.showStatus("LiveSRRF - Max RAM available exceeded: (" + ( (float) Math.ceil(memUsed[1]*100) / 100) + "MB vs. " + ((float) Math.round(maxMemoryRAMij*100) / 100) + "MB)");
             if (!writeSuggestOKeyed) IJ.showMessage("Results will likely exceed current RAM capacity. Consider increasing RAM for ImageJ or Write to disk (Advanced Settings) or else...");
             writeSuggestOKeyed = true;
         }
