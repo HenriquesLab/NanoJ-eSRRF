@@ -291,7 +291,8 @@ public class CalculateGainAndOffset_  implements PlugIn {
                 ys0[n] = (float) imsVar.getVoxel(x, y, n);
                 ys1[n] = gain[n]*xs[n];
             }
-            Plot p = new Plot("Var vs Mean X="+x+" Y="+y, "Mean", "Var", xs, ys1);
+            Plot p = new Plot("Var vs Mean X="+x+" Y="+y, "Mean", "Var");
+            p.addPoints(xs,ys1,Plot.LINE);
             p.addPoints(xs, ys0, Plot.CROSS);
             p.show();
         }

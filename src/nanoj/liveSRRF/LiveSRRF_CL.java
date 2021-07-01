@@ -44,7 +44,7 @@ public class LiveSRRF_CL {
             chosenROIsLocations3D;
 
     public final int gradientMag = 2;
-    public final int nReconstructions = 3; // Currently AVG, VAR (2nd order SOFI Tau=0) and 2nd order cumulants Tau=1
+    public final int nReconstructions = 3; // Currently AVG, VAR (2nd order SOFI Tau=0) and 2nd order cumulants Tau=1 (TAC2)
 
     private final float vxy_offset = 0.5f;
     private final int vxy_ArrayShift = 1;
@@ -388,7 +388,7 @@ public class LiveSRRF_CL {
         queue = chosenDevice.createCommandQueue();
 
         System.out.println("used device memory: " + (
-                        clBufferPx.getCLSize() +
+                clBufferPx.getCLSize() +
                         clBufferDriftXY.getCLSize() +
                         clBufferGx.getCLSize() +
                         clBufferGy.getCLSize() +
@@ -419,7 +419,7 @@ public class LiveSRRF_CL {
             fillBuffer(clBufferShiftXYTheta3D, shiftXYtheta3D);
             queue.putWriteBuffer(clBufferShiftXYTheta3D, false);
             prof.recordTime("Uploading ShiftXY3D array to GPU", prof.endTimer(id));
-    }
+        }
 
     }
 
@@ -466,7 +466,7 @@ public class LiveSRRF_CL {
 //        IJ.log("Calculating gradient...");
         id = prof.startTimer();
         queue.finish(); // Make sure everything is done
-        IJ.log("Number of frames loaded on GPU: "+nFrameToLoad);
+//        IJ.log("Number of frames loaded on GPU: "+nFrameToLoad);
         if(do3DSRRF) queue.put1DRangeKernel(kernelCalculateGradient, 0,  singleFrameSize * nFrameToLoad, 0);
         else         queue.put3DRangeKernel(kernelCalculateGradient, 0, 0, 0, widthS, heightS, nFrameToLoad, 0, 0, 0);
         prof.recordTime("kernelCalculateGradient", prof.endTimer(id));
@@ -553,14 +553,14 @@ public class LiveSRRF_CL {
         for (int nR = 0; nR < (nReconstructions + 1); nR++) {
             for (int p = 0; p < nPlanesM; p++) {
 //            IJ.log("Reading frame " + p);
-            float[] dataSRRF = new float[widthM * heightM];
+                float[] dataSRRF = new float[widthM * heightM];
                 for (int i = 0; i < widthM * heightM; i++) {
                     dataSRRF[i] = bufferSRRF.get(i + p * widthM * heightM + nR*nDimMag*singleFrameSize);
                     if (Float.isNaN(dataSRRF[i])) dataSRRF[i] = 0; // make sure we dont get any weirdness
+                }
+                imsSRRF.addSlice(new FloatProcessor(widthM, heightM, dataSRRF));
             }
-            imsSRRF.addSlice(new FloatProcessor(widthM, heightM, dataSRRF));
         }
-    }
     }
 
     // --- Read the gradient buffers ---

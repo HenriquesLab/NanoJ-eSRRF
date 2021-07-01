@@ -49,7 +49,7 @@ public class EstimateTimeConstant_ implements PlugIn {
         regularizationMethods[n++] = "image bit depth";
         regularizationMethods[n++] = "image dynamic range";
 
-        GenericDialog gd = new GenericDialog("liveSRRF - Time constant estimator");
+        GenericDialog gd = new GenericDialog("eSRRF - Time constant estimator");
         gd.addChoice("Estimation method", estimationMethods, estimationMethods[1]);
 
         gd.addMessage("---- SSIM method ----");
