@@ -718,6 +718,8 @@ public class ParametersSweep_ implements PlugIn {
         // Run garbage collector
         System.gc(); // twice is better than once !
 
+        IJ.run("Cascade", "");
+
         IJ.log("-------------------------------------");
         IJ.log("RAM used: " + IJ.freeMemory());
         IJ.log("Bye-bye !");
