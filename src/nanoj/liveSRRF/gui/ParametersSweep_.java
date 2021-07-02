@@ -538,7 +538,7 @@ public class ParametersSweep_ implements PlugIn {
 
         if (sensitivityArray.length > 1) {
             sweepMapCalib.pixelHeight = sensitivityArray[1]-sensitivityArray[0];
-            sweepMapCalib.yOrigin = -(float)sensitivityArray[0]/ (float)(sensitivityArray[1]-sensitivityArray[0]);
+            sweepMapCalib.yOrigin = -(float) sensitivityArray[0] / (float) (sensitivityArray[1]-sensitivityArray[0]);
         }
         else{
             sweepMapCalib.pixelHeight = sensitivityArray[0];
@@ -548,7 +548,7 @@ public class ParametersSweep_ implements PlugIn {
 
         if (nframeArray.length > 1){
             sweepMapCalib.pixelDepth = nframeArray[1]-nframeArray[0];
-            sweepMapCalib.zOrigin = -(float)nframeArray[0]/ (float)(nframeArray[1]-nframeArray[0]);
+            sweepMapCalib.zOrigin = -(float) nframeArray[0] / (float) (nframeArray[1]-nframeArray[0]);
         }
         else{
             sweepMapCalib.pixelDepth = nframeArray[0];
@@ -637,6 +637,7 @@ public class ParametersSweep_ implements PlugIn {
                 IJ.run(impRMSEavg, "Enhance Contrast", "saturated=0.5");
                 applyLUT_SQUIRREL_Errors(impRMSEavg);
                 impRMSEavg.show();
+                IJ.run("Maximize", "");
             }
             if (calculateVAR){
                 ImagePlus impRMSEvar = new ImagePlus(imp.getTitle() + " - RMSE sweep map (VAR)", imsRMSEvar);
@@ -644,6 +645,7 @@ public class ParametersSweep_ implements PlugIn {
                 IJ.run(impRMSEvar, "Enhance Contrast", "saturated=0.5");
                 applyLUT_SQUIRREL_Errors(impRMSEvar);
                 impRMSEvar.show();
+                IJ.run("Maximize", "");
             }
             if (calculateTAC2){
                 ImagePlus impRMSEtac2 = new ImagePlus(imp.getTitle() + " - RMSE sweep map (TAC2)", imsRMSEtac2);
@@ -651,6 +653,7 @@ public class ParametersSweep_ implements PlugIn {
                 IJ.run(impRMSEtac2, "Enhance Contrast", "saturated=0.5");
                 applyLUT_SQUIRREL_Errors(impRMSEtac2);
                 impRMSEtac2.show();
+                IJ.run("Maximize", "");
             }
         }
 
@@ -662,6 +665,7 @@ public class ParametersSweep_ implements PlugIn {
                 IJ.run(impPPMCCavg, "Enhance Contrast", "saturated=0.5");
                 applyLUT_SQUIRREL_Errors(impPPMCCavg);
                 impPPMCCavg.show();
+                IJ.run("Maximize", "");
             }
             if (calculateVAR){
                 ImagePlus impPPMCCvar = new ImagePlus(imp.getTitle() + " - RSP sweep map (VAR)", imsPPMCCvar);
@@ -669,6 +673,7 @@ public class ParametersSweep_ implements PlugIn {
                 IJ.run(impPPMCCvar, "Enhance Contrast", "saturated=0.5");
                 applyLUT_SQUIRREL_Errors(impPPMCCvar);
                 impPPMCCvar.show();
+                IJ.run("Maximize", "");
             }
             if (calculateTAC2){
                 ImagePlus impPPMCCtac2 = new ImagePlus(imp.getTitle() + " - RSP sweep map (TAC2)", imsPPMCCtac2);
@@ -676,6 +681,7 @@ public class ParametersSweep_ implements PlugIn {
                 IJ.run(impPPMCCtac2, "Enhance Contrast", "saturated=0.5");
                 applyLUT_SQUIRREL_Errors(impPPMCCtac2);
                 impPPMCCtac2.show();
+                IJ.run("Maximize", "");
             }
         }
 
@@ -687,6 +693,7 @@ public class ParametersSweep_ implements PlugIn {
                 IJ.run(impFRCresolutionAVG, "Enhance Contrast", "saturated=0.5");
                 applyLUT_SQUIRREL_FRC(impFRCresolutionAVG);
                 impFRCresolutionAVG.show();
+                IJ.run("Maximize", "");
             }
             if (calculateVAR){
                 ImagePlus impFRCresolutionVAR = new ImagePlus(imp.getTitle() + " - FRC resolution sweep map (VAR)", imsFRCresolutionVAR);
@@ -694,6 +701,7 @@ public class ParametersSweep_ implements PlugIn {
                 IJ.run(impFRCresolutionVAR, "Enhance Contrast", "saturated=0.5");
                 applyLUT_SQUIRREL_FRC(impFRCresolutionVAR);
                 impFRCresolutionVAR.show();
+                IJ.run("Maximize", "");
             }
             if (calculateTAC2){
                 ImagePlus impFRCresolutionTAC2 = new ImagePlus(imp.getTitle() + " - FRC resolution sweep map (TAC2)", imsFRCresolutionTAC2);
@@ -701,6 +709,7 @@ public class ParametersSweep_ implements PlugIn {
                 IJ.run(impFRCresolutionTAC2, "Enhance Contrast", "saturated=0.5");
                 applyLUT_SQUIRREL_FRC(impFRCresolutionTAC2);
                 impFRCresolutionTAC2.show();
+                IJ.run("Maximize", "");
             }
         }
 

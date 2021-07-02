@@ -4,10 +4,7 @@ import ij.IJ;
 import ij.gui.NonBlockingGenericDialog;
 import ij.plugin.PlugIn;
 
-
 public class CodeTester_ implements PlugIn {
-
-
 
     public void run(String arg) {
 
