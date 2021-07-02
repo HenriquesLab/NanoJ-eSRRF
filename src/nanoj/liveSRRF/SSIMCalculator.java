@@ -82,10 +82,7 @@ public class SSIMCalculator {
         FloatProcessor ssim = divide(multiply(A, B), multiply(C, D));
 
         return ssim;
-//        return ipRefSig2;
     }
-
-
 
 }
 

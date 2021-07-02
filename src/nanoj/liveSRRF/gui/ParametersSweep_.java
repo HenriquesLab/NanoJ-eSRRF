@@ -10,6 +10,7 @@ import ij.gui.NonBlockingGenericDialog;
 import ij.measure.Calibration;
 import ij.plugin.PlugIn;
 import ij.process.FloatProcessor;
+import jogamp.openal.Debug;
 import nanoj.core.java.image.analysis.FRC;
 import nanoj.core2.NanoJPrefs;
 import nanoj.core2.NanoJProfiler;
@@ -51,6 +52,8 @@ public class ParametersSweep_ implements PlugIn {
             cropBorder,
             previousAdvSettings = false;
 
+    private final boolean DEBUG = false;
+
     private float[] fwhmArray;
     private int[] sensitivityArray,
             nframeArray;
@@ -60,7 +63,6 @@ public class ParametersSweep_ implements PlugIn {
     private final String eSRRFVersion = "v1.4.0";
     private float[] shiftX, shiftY;
 
-//    private String chosenTemporalAnalysis;
 
     // Advanced formats
     private final NanoJPrefs prefs = new NanoJPrefs(this.getClass().getName());
@@ -88,7 +90,7 @@ public class ParametersSweep_ implements PlugIn {
         IJ.log(now.format(formatter));
 
         // Initialise the eSRRF engine (creates a context really)
-        LiveSRRF_CL eSRRF = new LiveSRRF_CL();
+        LiveSRRF_CL eSRRF = new LiveSRRF_CL(DEBUG);
 
         // Set advanced variables to default or preset values
         showErrorMaps = prefs.get("showErrorMaps", true);
@@ -104,14 +106,11 @@ public class ParametersSweep_ implements PlugIn {
 
         // Build GUI
         Font headerFont = new Font("Arial", Font.BOLD, 16);
-//        String[] temporalAnalysis = {"AVG","STD","Both AVG and STD"};
         NonBlockingGenericDialog gd = new NonBlockingGenericDialog("eSRRF - Parameters sweep " + eSRRFVersion);
         gd.addMessage("-=-= eSRRF reconstruction =-=-\n", headerFont);
         gd.addNumericField("Magnification (default: 5)", prefs.get("magnification", 5), 0);
 
-//        gd.addChoice("Temporal analysis", temporalAnalysis, prefs.get("chosenTemporalAnalysis", temporalAnalysis[2]));
         gd.addMessage("-=-= Reconstructions =-=-\n", headerFont);
-//        gd.addChoice("Temporal analysis", temporalAnalysis, prefs.get("chosenTemporalAnalysis", temporalAnalysis[2]));
         gd.addCheckbox("AVG reconstruction (default: on)", prefs.get("calculateAVG", true));
         gd.addCheckbox("VAR reconstruction (default: off)", prefs.get("calculateVAR", false));
         gd.addCheckbox("TAC2 reconstruction (default: off)", prefs.get("calculateTAC2", false));
@@ -146,41 +145,6 @@ public class ParametersSweep_ implements PlugIn {
         gd.addMessage("-=-= Advanced settings =-=-\n", headerFont);
         gd.addCheckbox("Show advanced settings", false);
 
-//        gd.addMessage("-=-= Error maps =-=-\n", headerFont);
-//        gd.addCheckbox("Show all error maps (default: on)", prefs.get("showErrorMaps", true));
-//        gd.addToSameRow();
-//        gd.addCheckbox("Show rescaled reconstructions (default: off)", prefs.get("showRSC", false));
-//
-//        gd.addCheckbox("Calculate RSE (default: off)", prefs.get("calculateRSE", false));
-//        gd.addToSameRow();
-//        gd.addCheckbox("Calculate RSP (default: off)", prefs.get("calculateRSP", false));
-//
-//        gd.addCheckbox("Fix sigma (default: off)", prefs.get("fixSigma", false));
-//        gd.addToSameRow();
-//        gd.addNumericField("Sigma (in pixels, used if fixed)", prefs.get("fixedSigma", 1), 2);
-//        gd.addMessage("Sigma can be evaluated by: (0.21 x Emission wavelength (in nm) / NA) / pixel size (in nm)\n"+
-//                "It should typically be around ~1 pixel.");
-//
-//        gd.addCheckbox("Crop border (default: on)", prefs.get("cropBorder", true));
-//        gd.addToSameRow();
-//        gd.addNumericField("Pixels to crop (in pixels, used if selected)", prefs.get("cropSize", 3), 0);
-//        gd.addMessage("Cropping the border of the images avoids biasing error mapping analysis if extrapolation\n"+
-//                " artefacts may occur.");
-//
-//        gd.addMessage("-=-= FRC resolution =-=-\n", headerFont);
-//        gd.addCheckbox("Calculate FRC (default: off)", prefs.get("calculateFRC", false));
-//
-//        gd.addMessage("Calculating FRC will split all dataset in two halves and therefore the maximum number\n" +
-//                "of frames will be half of the total frames available in the dataset.");
-//
-//        gd.addMessage("-=-= GPU processing =-=-\n", headerFont);
-//        gd.addNumericField("Analysis block size (default: 20000)", prefs.get("blockSize", 20000), 0);
-//        gd.addMessage("A large analysis block size will speed up the analysis but will use more resources and\n" +
-//                " may slow down your computer.");
-
-//        LiveSRRF_optimised_.MyDialogListenerMainGUI dl = new LiveSRRF_optimised_.MyDialogListenerMainGUI(); // this serves to estimate a few indicators such as RAM usage
-//        gd.addDialogListener(dl);
-
         MyDialogListenerMainGUI dl = new MyDialogListenerMainGUI(); // this serves to estimate a few indicators such as RAM usage
         gd.addDialogListener(dl);
 
@@ -200,7 +164,6 @@ public class ParametersSweep_ implements PlugIn {
             IJ.log("Aborted: Not enough frames in the stack for this analysis.");
             return;
         }
-
 
         // Log the settings used
         IJ.log("Magnification: " + magnification);
@@ -228,7 +191,6 @@ public class ParametersSweep_ implements PlugIn {
         cal.pixelHeight /= magnification;
         cal.setUnit(imp.getCalibration().getUnit());
 
-
         // Initialising the Main output variables
         ImageStack imsAllRawData = imp.getImageStack();
         ImageStack imsBuffer;
@@ -236,7 +198,6 @@ public class ParametersSweep_ implements PlugIn {
         ImageStack imsSRRFavg = new ImageStack(width * magnification, height * magnification);
         ImageStack imsSRRFvar = new ImageStack(width * magnification, height * magnification);
         ImageStack imsSRRFtac2 = new ImageStack(width * magnification, height * magnification);
-
 
         // Initialising the Error maps variables
         ErrorMapLiveSRRF errorMapCalculator = new ErrorMapLiveSRRF(imp, magnification, fixSigma, fixedSigma, cropBorder, cropSize);
@@ -268,8 +229,6 @@ public class ParametersSweep_ implements PlugIn {
         ImageStack imsRSCavg = new ImageStack(widthSquirrel, heightSquirrel);
         ImageStack imsRSCvar = new ImageStack(widthSquirrel, heightSquirrel);
         ImageStack imsRSCtac2 = new ImageStack(widthSquirrel, heightSquirrel);
-
-
 
         // These images are small so it doesn't matter if they are initialised in any case
         ImageStack imsRMSEavg = new ImageStack(fwhmArray.length, sensitivityArray.length, nframeArray.length);
@@ -358,24 +317,18 @@ public class ParametersSweep_ implements PlugIn {
 
                 for (int i = 0; i < nframeArray[nfi]; i++) {
                     shiftXtempOdd[i] = shiftX[2 * i + 1];
-//                IJ.log("ShiftX="+shiftXtemp[i]);
                     shiftYtempOdd[i] = shiftY[2 * i + 1];
-//                IJ.log("ShiftY="+shiftYtemp[i]);
                 }
 
                 for (int i = 0; i < nframeArray[nfi]; i++) {
                     shiftXtempEven[i] = shiftX[2 * i];
-//                IJ.log("ShiftX="+shiftXtemp[i]);
                     shiftYtempEven[i] = shiftY[2 * i];
-//                IJ.log("ShiftY="+shiftYtemp[i]);
                 }
 
             } else {
                 for (int i = 0; i < nframeArray[nfi]; i++) {
                     shiftXtemp[i] = shiftX[i];
-//                IJ.log("ShiftX="+shiftXtemp[i]);
                     shiftYtemp[i] = shiftY[i];
-//                IJ.log("ShiftY="+shiftYtemp[i]);
                 }
             }
 
@@ -425,7 +378,6 @@ public class ParametersSweep_ implements PlugIn {
                         fpOddVAR = imsBuffer.getProcessor(2).convertToFloatProcessor();
                         fpOddTAC2 = imsBuffer.getProcessor(3).convertToFloatProcessor();
 
-
                         // Calculate and get the reconstruction from the even frames // TODO: add options to do intensity weighting or MPcorrection
                         eSRRF.initialise(width, height, magnification, fwhmArray[fi], sensitivityArray[si], 1, nframeArray[nfi], blockSize, null, true, true, null, 0, 1);
                         eSRRF.resetFramePosition();
@@ -434,14 +386,6 @@ public class ParametersSweep_ implements PlugIn {
                         calculateLiveSRRFsingleframeLoad(imsAllRawData, nfi, 2, eSRRF);
                         imsBuffer = eSRRF.imsSRRF;
 
-//                        if (chosenTemporalAnalysis.equals(temporalAnalysis[0]) || chosenTemporalAnalysis.equals(temporalAnalysis[2])) {
-//                            fpEvenAVG = imsBuffer.getProcessor(1).convertToFloatProcessor();
-//                            pixelsFRCresolutionAVG[fwhmArray.length * si + fi] = (float) cal.pixelHeight * (float) frcCalculator.calculateFireNumber(fpOddAVG, fpEvenAVG, FRC.ThresholdMethod.FIXED_1_OVER_7);
-//                        }
-//                        if (chosenTemporalAnalysis.equals(temporalAnalysis[1]) || chosenTemporalAnalysis.equals(temporalAnalysis[2])) {
-//                            fpEvenVAR = imsBuffer.getProcessor(2).convertToFloatProcessor();
-//                            pixelsFRCresolutionVAR[fwhmArray.length * si + fi] = (float) cal.pixelHeight * (float) frcCalculator.calculateFireNumber(fpOddVAR, fpEvenVAR, FRC.ThresholdMethod.FIXED_1_OVER_7);
-//                        }
                         if (calculateAVG){
                             fpEvenAVG = imsBuffer.getProcessor(1).convertToFloatProcessor();
                             pixelsFRCresolutionAVG[fwhmArray.length * si + fi] = (float) cal.pixelHeight * (float) frcCalculator.calculateFireNumber(fpOddAVG, fpEvenAVG, FRC.ThresholdMethod.FIXED_1_OVER_7);
@@ -467,13 +411,6 @@ public class ParametersSweep_ implements PlugIn {
                         imsBuffer = eSRRF.imsSRRF;
                     }
 
-
-                    // Collate the reconstructions
-//                    if (chosenTemporalAnalysis.equals(temporalAnalysis[0]) || chosenTemporalAnalysis.equals(temporalAnalysis[2]))
-//                        imsSRRFavg.addSlice(label, imsBuffer.getProcessor(1));
-//                    if (chosenTemporalAnalysis.equals(temporalAnalysis[1]) || chosenTemporalAnalysis.equals(temporalAnalysis[2]))
-//                        imsSRRFvar.addSlice(label, imsBuffer.getProcessor(2));
-
                     if (calculateAVG) imsSRRFavg.addSlice(label, imsBuffer.getProcessor(1));
                     if (calculateVAR) imsSRRFvar.addSlice(label, imsBuffer.getProcessor(2));
                     if (calculateTAC2) imsSRRFtac2.addSlice(label, imsBuffer.getProcessor(3));
@@ -484,34 +421,6 @@ public class ParametersSweep_ implements PlugIn {
                     // Error mapping
                     if (doErrorMapping) {
 
-//                        if (chosenTemporalAnalysis.equals(temporalAnalysis[0]) || chosenTemporalAnalysis.equals(temporalAnalysis[2])) {
-//                            // Error maps for AVG
-//                            IJ.showStatus("Optimising Sigma...");
-//                            errorMapCalculator.optimise(imsBuffer.getProcessor(3), imsBuffer.getProcessor(1));
-//
-//                            IJ.showStatus("Calculating error map...");
-//                            errorMapCalculator.calculateErrorMap();
-//                            pixelsRMSEavg[fwhmArray.length * si + fi] = (float) errorMapCalculator.globalRMSE;
-//                            pixelsPPMCCavg[fwhmArray.length * si + fi] = (float) errorMapCalculator.globalPPMCC;
-//
-//                            if (showErrorMaps) imsErrorMapAVG.addSlice(label, errorMapCalculator.fpErrorMap);
-//                            if (showRSC) imsRSCavg.addSlice(label, errorMapCalculator.fpSRC);
-//
-//                        }
-//
-//                        if (chosenTemporalAnalysis.equals(temporalAnalysis[1]) || chosenTemporalAnalysis.equals(temporalAnalysis[2])) {
-//                            // Error maps for STD
-//                            IJ.showStatus("Optimising Sigma...");
-//                            errorMapCalculator.optimise(imsBuffer.getProcessor(3), imsBuffer.getProcessor(2));
-//
-//                            IJ.showStatus("Calculating error map...");
-//                            errorMapCalculator.calculateErrorMap();
-//                            pixelsRMSEvar[fwhmArray.length * si + fi] = (float) errorMapCalculator.globalRMSE;
-//                            pixelsPPMCCvar[fwhmArray.length * si + fi] = (float) errorMapCalculator.globalPPMCC;
-//
-//                            if (showErrorMaps) imsErrorMapVAR.addSlice(label, errorMapCalculator.fpErrorMap);
-//                            if (showRSC) imsRSCvar.addSlice(label, errorMapCalculator.fpSRC);
-//                        }
                         if (calculateAVG){
                             // Error maps for AVG
                             IJ.showStatus("Optimising Sigma...");
@@ -562,15 +471,7 @@ public class ParametersSweep_ implements PlugIn {
             }
 
             if (calculateRSE) {
-//                if (chosenTemporalAnalysis.equals(temporalAnalysis[0]) || chosenTemporalAnalysis.equals(temporalAnalysis[2])) {
-//                    imsRMSEavg.setProcessor(new FloatProcessor(fwhmArray.length, sensitivityArray.length, pixelsRMSEavg), nfi + 1);
-//                    imsRMSEavg.setSliceLabel("#fr=" + nframeArray[nfi], nfi + 1);
-//                }
-//
-//                if (chosenTemporalAnalysis.equals(temporalAnalysis[1]) || chosenTemporalAnalysis.equals(temporalAnalysis[2])) {
-//                    imsRMSEvar.setProcessor(new FloatProcessor(fwhmArray.length, sensitivityArray.length, pixelsRMSEvar), nfi + 1);
-//                    imsRMSEvar.setSliceLabel("#fr=" + nframeArray[nfi], nfi + 1);
-//                }
+
                 if (calculateAVG){
                     imsRMSEavg.setProcessor(new FloatProcessor(fwhmArray.length, sensitivityArray.length, pixelsRMSEavg), nfi + 1);
                     imsRMSEavg.setSliceLabel("#fr=" + nframeArray[nfi], nfi + 1);
@@ -586,14 +487,7 @@ public class ParametersSweep_ implements PlugIn {
             }
 
             if (calculateRSP) {
-//                if (chosenTemporalAnalysis.equals(temporalAnalysis[0]) || chosenTemporalAnalysis.equals(temporalAnalysis[2])) {
-//                    imsPPMCCavg.setProcessor(new FloatProcessor(fwhmArray.length, sensitivityArray.length, pixelsPPMCCavg), nfi + 1);
-//                    imsPPMCCavg.setSliceLabel("#fr=" + nframeArray[nfi], nfi + 1);
-//                }
-//                if (chosenTemporalAnalysis.equals(temporalAnalysis[1]) || chosenTemporalAnalysis.equals(temporalAnalysis[2])) {
-//                    imsPPMCCvar.setProcessor(new FloatProcessor(fwhmArray.length, sensitivityArray.length, pixelsPPMCCvar), nfi + 1);
-//                    imsPPMCCvar.setSliceLabel("#fr=" + nframeArray[nfi], nfi + 1);
-//                }
+
                 if (calculateAVG){
                     imsPPMCCavg.setProcessor(new FloatProcessor(fwhmArray.length, sensitivityArray.length, pixelsPPMCCavg), nfi + 1);
                     imsPPMCCavg.setSliceLabel("#fr=" + nframeArray[nfi], nfi + 1);
@@ -609,14 +503,7 @@ public class ParametersSweep_ implements PlugIn {
             }
 
             if (calculateFRC) {
-//                if (chosenTemporalAnalysis.equals(temporalAnalysis[0]) || chosenTemporalAnalysis.equals(temporalAnalysis[2])) {
-//                    imsFRCresolutionAVG.setProcessor(new FloatProcessor(fwhmArray.length, sensitivityArray.length, pixelsFRCresolutionAVG), nfi + 1);
-//                    imsFRCresolutionAVG.setSliceLabel("#fr=" + nframeArray[nfi], nfi + 1);
-//                }
-//                if (chosenTemporalAnalysis.equals(temporalAnalysis[1]) || chosenTemporalAnalysis.equals(temporalAnalysis[2])) {
-//                    imsFRCresolutionVAR.setProcessor(new FloatProcessor(fwhmArray.length, sensitivityArray.length, pixelsFRCresolutionVAR), nfi + 1);
-//                    imsFRCresolutionVAR.setSliceLabel("#fr=" + nframeArray[nfi], nfi + 1);
-//                }
+
                 if (calculateAVG){
                     imsFRCresolutionAVG.setProcessor(new FloatProcessor(fwhmArray.length, sensitivityArray.length, pixelsFRCresolutionAVG), nfi + 1);
                     imsFRCresolutionAVG.setSliceLabel("#fr=" + nframeArray[nfi], nfi + 1);
@@ -630,7 +517,6 @@ public class ParametersSweep_ implements PlugIn {
                     imsFRCresolutionTAC2.setSliceLabel("#fr=" + nframeArray[nfi], nfi + 1);
                 }
             }
-
         }
 
         // Release the GPU
@@ -670,21 +556,6 @@ public class ParametersSweep_ implements PlugIn {
         }
 
 
-        // eSRRF (AVG) reconstruction
-//        if (chosenTemporalAnalysis.equals(temporalAnalysis[0]) || chosenTemporalAnalysis.equals(temporalAnalysis[2])) {
-//            ImagePlus impSRRFavg = new ImagePlus(imp.getTitle() + " - eSRRF (AVG)", imsSRRFavg);
-//            impSRRFavg.setCalibration(cal);
-//            IJ.run(impSRRFavg, "Enhance Contrast", "saturated=0.5");
-//            impSRRFavg.show();
-//        }
-//
-//        // eSRRF (STD) reconstruction
-//        if (chosenTemporalAnalysis.equals(temporalAnalysis[1]) || chosenTemporalAnalysis.equals(temporalAnalysis[2])) {
-//            ImagePlus impSRRFstd = new ImagePlus(imp.getTitle() + " - eSRRF (STD)", imsSRRFvar);
-//            impSRRFstd.setCalibration(cal);
-//            IJ.run(impSRRFstd, "Enhance Contrast", "saturated=0.5");
-//            impSRRFstd.show();
-//        }
         if (calculateAVG){
             ImagePlus impSRRFavg = new ImagePlus(imp.getTitle() + " - eSRRF (AVG)", imsSRRFavg);
             impSRRFavg.setCalibration(cal);
@@ -712,20 +583,7 @@ public class ParametersSweep_ implements PlugIn {
 
         // Showing error maps
         if (showErrorMaps) {
-//            if (chosenTemporalAnalysis.equals(temporalAnalysis[0]) || chosenTemporalAnalysis.equals(temporalAnalysis[2])) {
-//                ImagePlus impErrorMapAVG = new ImagePlus(imp.getTitle() + " - ErrorMap (AVG)", imsErrorMapAVG);
-//                impErrorMapAVG.setCalibration(cal);
-//                IJ.run(impErrorMapAVG, "Enhance Contrast", "saturated=0.5");
-//                applyLUT_SQUIRREL_Errors(impErrorMapAVG);
-//                impErrorMapAVG.show();
-//            }
-//            if (chosenTemporalAnalysis.equals(temporalAnalysis[1]) || chosenTemporalAnalysis.equals(temporalAnalysis[2])) {
-//                ImagePlus impErrorMapSTD = new ImagePlus(imp.getTitle() + " - ErrorMap (STD)", imsErrorMapTAC2);
-//                impErrorMapSTD.setCalibration(cal);
-//                IJ.run(impErrorMapSTD, "Enhance Contrast", "saturated=0.5");
-//                applyLUT_SQUIRREL_Errors(impErrorMapSTD);
-//                impErrorMapSTD.show();
-//            }
+
             if (calculateAVG){
                 ImagePlus impErrorMapAVG = new ImagePlus(imp.getTitle() + " - ErrorMap (AVG)", imsErrorMapAVG);
                 impErrorMapAVG.setCalibration(cal);
@@ -750,18 +608,7 @@ public class ParametersSweep_ implements PlugIn {
         }
 
         if (showRSC) {
-//            if (chosenTemporalAnalysis.equals(temporalAnalysis[0]) || chosenTemporalAnalysis.equals(temporalAnalysis[2])) {
-//                ImagePlus impRSCavg = new ImagePlus(imp.getTitle() + " - rescaled eSRRF (AVG)", imsRSCavg);
-//                impRSCavg.setCalibration(cal);
-//                IJ.run(impRSCavg, "Enhance Contrast", "saturated=0.5");
-//                impRSCavg.show();
-//            }
-//            if (chosenTemporalAnalysis.equals(temporalAnalysis[1]) || chosenTemporalAnalysis.equals(temporalAnalysis[2])) {
-//                ImagePlus impRSCstd = new ImagePlus(imp.getTitle() + " - rescaled eSRRF (STD)", imsRSCvar);
-//                impRSCstd.setCalibration(cal);
-//                IJ.run(impRSCstd, "Enhance Contrast", "saturated=0.5");
-//                impRSCstd.show();
-//            }
+
             if (calculateAVG){
                 ImagePlus impRSCavg = new ImagePlus(imp.getTitle() + " - rescaled eSRRF (AVG)", imsRSCavg);
                 impRSCavg.setCalibration(cal);
@@ -783,20 +630,7 @@ public class ParametersSweep_ implements PlugIn {
         }
 
         if (calculateRSE) {
-//            if (chosenTemporalAnalysis.equals(temporalAnalysis[0]) || chosenTemporalAnalysis.equals(temporalAnalysis[2])) {
-//                ImagePlus impRMSEavg = new ImagePlus(imp.getTitle() + " - RMSE sweep map (AVG)", imsRMSEavg);
-//                impRMSEavg.setCalibration(sweepMapCalib.copy());
-//                IJ.run(impRMSEavg, "Enhance Contrast", "saturated=0.5");
-//                applyLUT_SQUIRREL_Errors(impRMSEavg);
-//                impRMSEavg.show();
-//            }
-//            if (chosenTemporalAnalysis.equals(temporalAnalysis[1]) || chosenTemporalAnalysis.equals(temporalAnalysis[2])) {
-//                ImagePlus impRMSEstd = new ImagePlus(imp.getTitle() + " - RMSE sweep map (STD)", imsRMSEvar);
-//                impRMSEstd.setCalibration(sweepMapCalib.copy());
-//                IJ.run(impRMSEstd, "Enhance Contrast", "saturated=0.5");
-//                applyLUT_SQUIRREL_Errors(impRMSEstd);
-//                impRMSEstd.show();
-//            }
+
             if (calculateAVG){
                 ImagePlus impRMSEavg = new ImagePlus(imp.getTitle() + " - RMSE sweep map (AVG)", imsRMSEavg);
                 impRMSEavg.setCalibration(sweepMapCalib.copy());
@@ -818,24 +652,9 @@ public class ParametersSweep_ implements PlugIn {
                 applyLUT_SQUIRREL_Errors(impRMSEtac2);
                 impRMSEtac2.show();
             }
-
         }
 
         if (calculateRSP) {
-//            if (chosenTemporalAnalysis.equals(temporalAnalysis[0]) || chosenTemporalAnalysis.equals(temporalAnalysis[2])) {
-//                ImagePlus impPPMCCavg = new ImagePlus(imp.getTitle() + " - RSP sweep map (AVG)", imsPPMCCavg);
-//                impPPMCCavg.setCalibration(sweepMapCalib.copy());
-//                IJ.run(impPPMCCavg, "Enhance Contrast", "saturated=0.5");
-//                applyLUT_SQUIRREL_Errors(impPPMCCavg);
-//                impPPMCCavg.show();
-//            }
-//            if (chosenTemporalAnalysis.equals(temporalAnalysis[1]) || chosenTemporalAnalysis.equals(temporalAnalysis[2])) {
-//                ImagePlus impPPMCCstd = new ImagePlus(imp.getTitle() + " - RSP sweep map (STD)", imsPPMCCvar);
-//                impPPMCCstd.setCalibration(sweepMapCalib.copy());
-//                IJ.run(impPPMCCstd, "Enhance Contrast", "saturated=0.5");
-//                applyLUT_SQUIRREL_Errors(impPPMCCstd);
-//                impPPMCCstd.show();
-//            }
 
             if (calculateAVG){
                 ImagePlus impPPMCCavg = new ImagePlus(imp.getTitle() + " - RSP sweep map (AVG)", imsPPMCCavg);
@@ -861,20 +680,7 @@ public class ParametersSweep_ implements PlugIn {
         }
 
         if (calculateFRC) {
-//            if (chosenTemporalAnalysis.equals(temporalAnalysis[0]) || chosenTemporalAnalysis.equals(temporalAnalysis[2])) {
-//                ImagePlus impFRCresolutionAVG = new ImagePlus(imp.getTitle() + " - FRC resolution sweep map (AVG)", imsFRCresolutionAVG);
-//                impFRCresolutionAVG.setCalibration(sweepMapCalib.copy());
-//                IJ.run(impFRCresolutionAVG, "Enhance Contrast", "saturated=0.5");
-//                applyLUT_SQUIRREL_FRC(impFRCresolutionAVG);
-//                impFRCresolutionAVG.show();
-//            }
-//            if (chosenTemporalAnalysis.equals(temporalAnalysis[1]) || chosenTemporalAnalysis.equals(temporalAnalysis[2])) {
-//                ImagePlus impFRCresolutionSTD = new ImagePlus(imp.getTitle() + " - FRC resolution sweep map (STD)", imsFRCresolutionVAR);
-//                impFRCresolutionSTD.setCalibration(sweepMapCalib.copy());
-//                IJ.run(impFRCresolutionSTD, "Enhance Contrast", "saturated=0.5");
-//                applyLUT_SQUIRREL_FRC(impFRCresolutionSTD);
-//                impFRCresolutionSTD.show();
-//            }
+
             if (calculateAVG){
                 ImagePlus impFRCresolutionAVG = new ImagePlus(imp.getTitle() + " - FRC resolution sweep map (AVG)", imsFRCresolutionAVG);
                 impFRCresolutionAVG.setCalibration(sweepMapCalib.copy());
@@ -906,8 +712,6 @@ public class ParametersSweep_ implements PlugIn {
         IJ.log("-------------------------------------");
         IJ.log("RAM used: " + IJ.freeMemory());
         IJ.log("Bye-bye !");
-
-
 
     }
 
@@ -943,26 +747,6 @@ public class ParametersSweep_ implements PlugIn {
         int deltanf = (int) gd.getNextNumber();
         int n_nf = (int) gd.getNextNumber();
 
-
-//        showErrorMaps = gd.getNextBoolean();
-//        showRSC = gd.getNextBoolean();
-//
-//        calculateRSE = gd.getNextBoolean();
-//        calculateRSP = gd.getNextBoolean();
-//
-//        // If any of these things is ticked then do the analysis
-//        doErrorMapping = (showErrorMaps || showRSC || calculateRSE || calculateRSP);
-//
-//        fixSigma = gd.getNextBoolean();
-//        fixedSigma = (float) gd.getNextNumber();
-//
-//        cropBorder = gd.getNextBoolean();
-//        cropSize = (int) gd.getNextNumber();
-//
-//        calculateFRC = gd.getNextBoolean();
-//
-//        blockSize = (int) gd.getNextNumber();
-
         // --- Prepare the variables ---
         fwhmArray = new float[n_fwhm];
         for (int i = 0; i < n_fwhm; i++) {
@@ -994,7 +778,6 @@ public class ParametersSweep_ implements PlugIn {
         previousAdvSettings = showAdvancedSettings;
 
         prefs.set("magnification", magnification);
-//        prefs.set("chosenTemporalAnalysis", chosenTemporalAnalysis);
         prefs.set("calculateAVG", calculateAVG);
         prefs.set("calculateVAR", calculateVAR);
         prefs.set("calculateTAC2", calculateTAC2);
@@ -1129,8 +912,6 @@ public class ParametersSweep_ implements PlugIn {
 
             blockSize = (int) gd.getNextNumber();
         }
-
-
     }
 
     // --- Main GUI Dialog listener ---

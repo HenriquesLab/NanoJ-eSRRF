@@ -11,7 +11,6 @@ public class CodeTester_ implements PlugIn {
 
     public void run(String arg) {
 
-
         NonBlockingGenericDialog gd = new NonBlockingGenericDialog("Fluorescence simulator");
         gd.addNumericField("Number of frames: ", 10, 0);
         gd.addNumericField("Exposure time (ms): ", 10.0, 1);
@@ -23,10 +22,6 @@ public class CodeTester_ implements PlugIn {
 
         double simDuration = (double) nFrames * exposure; // in seconds
         IJ.log("Acquisition time: "+simDuration+"s ("+nFrames+" frames at "+(exposure*1000)+"ms exposure)");
-
-
-
-
 
     }
 }

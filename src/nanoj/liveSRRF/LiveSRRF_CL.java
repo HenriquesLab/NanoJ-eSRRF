@@ -33,8 +33,9 @@ public class LiveSRRF_CL {
             heightM,
             nFrameForSRRF,
             blockLength,
-            magnification,
-            nSplits = 3; // TODO: currently hard-coded;
+            magnification;
+
+    private final int nSplits = 3; // TODO: currently hard-coded;
 
     public int widthS, heightS,
             nPlanes,
@@ -53,7 +54,8 @@ public class LiveSRRF_CL {
             backgroundLevel;
 
     private boolean doMPmapCorrection,
-            do3DSRRF;
+                    do3DSRRF,
+                    DEBUG;
 
     public ImageStack imsSRRF;
 
@@ -93,7 +95,8 @@ public class LiveSRRF_CL {
             clBufferCurrentFrame;
 
     // ---------------------------------- Constructor ----------------------------------
-    public LiveSRRF_CL() {
+    public LiveSRRF_CL(boolean DEBUG) {
+        this.DEBUG = DEBUG;
         // Nothing to see here. Keep calm and carry on.
     }
 
@@ -142,27 +145,31 @@ public class LiveSRRF_CL {
                 i++;
             }
         }
-
     }
 
 
     // ---------------------------------- Initialization method ----------------------------------
     public void initialise(int width, int height, int magnification, float fwhm, int sensitivity, int nFramesOnGPU, int nFrameForSRRF, int blockLength, CLDevice chosenDevice, boolean intWeighting, boolean doMPmapCorrection, String calibTablePath3DSRRF, float axialOffset, float pixelSize) {
 
-//        this.width = width;
-//        this.height = height;
         this.nFrameForSRRF = nFrameForSRRF;
         this.blockLength = blockLength;
         this.magnification = magnification;
         this.doMPmapCorrection = doMPmapCorrection;
 
         if (chosenDevice == null) {
-//            IJ.log("Looking for the fastest device...");
+            // ----- DEBUG -----
+            if (DEBUG) {
+                IJ.log("Looking for the fastest device...");
+            }
+
             System.out.println("Using the fastest device...");
             context = CLContext.create(clPlatformMaxFlop);
-//            context = CLContext.create();
             chosenDevice = context.getMaxFlopsDevice();
-//            IJ.log("Using "+chosenDevice.getName());
+
+            // ----- DEBUG -----
+            if (DEBUG) {
+                IJ.log("Using "+chosenDevice.getName());
+            }
         }
         else{
             context = CLContext.create(chosenDevice.getPlatform());
@@ -188,7 +195,6 @@ public class LiveSRRF_CL {
 
         if (do3DSRRF) {
             double[] axialPositions3D = null;
-//            double[] nominalPositions3D = null;
 
             Map<String, double[]> calibTable;
             try {
@@ -197,7 +203,6 @@ public class LiveSRRF_CL {
                 shiftY3D = calibTable.get("Y-shift (pixels)");
                 theta3D = calibTable.get("Theta (degrees)");
                 axialPositions3D = calibTable.get("Axial positions");
-//                nominalPositions3D = calibTable.get("Nominal positions");
                 chosenROIsLocations3D = calibTable.get("ROI #");
                 intCoeffs3D = calibTable.get("Intensity scaling");
                 double[] backgroundArray = calibTable.get("Background level (ADC)");
@@ -231,12 +236,14 @@ public class LiveSRRF_CL {
         singleFrameSize = nPlanes * widthS * heightS; // nPlanes = 1 in 2D case
         this.widthM = widthS * magnification;
         this.heightM = heightS * magnification;
-//        IJ.log("WidthM/HeightM: "+widthM+"/"+heightM);
 
-        System.out.println("using " + chosenDevice);
-        //IJ.log("Using " + chosenDevice.getName());
+        // ----- DEBUG -----
+        if (DEBUG) {
+            IJ.log("WidthM/HeightM: "+widthM+"/"+heightM);
+            IJ.log("Using " + chosenDevice.getName());
+        }
 
-        // initialise buffers
+        // Initialise buffers
         clBufferPx = context.createFloatBuffer(nFramesOnGPU * singleFrameSize, READ_ONLY);
         clBufferDriftXY = context.createFloatBuffer(2 * nFrameForSRRF, READ_ONLY);
         clBufferGx = context.createFloatBuffer(nFramesOnGPU * singleFrameSize, READ_WRITE); // all frames Gx
@@ -245,7 +252,7 @@ public class LiveSRRF_CL {
         clBufferGyInt = context.createFloatBuffer(nFramesOnGPU * gradientMag * gradientMag * singleFrameSize, READ_WRITE); // single frame Gy
 
 
-        // initialise buffers for 3D-SRRF
+        // Initialise buffers for 3D-SRRF
         if (do3DSRRF) {
             clBufferAlignedPx = context.createFloatBuffer(nFramesOnGPU * singleFrameSize, READ_WRITE);
             clBufferShiftXYTheta3D = context.createFloatBuffer(3 * nPlanes, READ_ONLY);
@@ -265,7 +272,7 @@ public class LiveSRRF_CL {
         }
 
         clBufferCurrentFrame = context.createIntBuffer(2, READ_WRITE);
-        // Current frame is a 2 element Int buffer:
+        // --- Current frame is a 2 element Int buffer ---
         // nCurrentFrame[0] is the global current frame in the current SRRF frame (reset every SRRF frame)
         // nCurrentFrame[1] is the local current frame in the current GPU-loaded dataset (reset every tun of the method calculateSRRF (within the gradient calculation))
         if (do3DSRRF) clBufferMPmap = context.createFloatBuffer(nReconstructions * magnification * magnification * magnification, READ_WRITE);
@@ -313,10 +320,15 @@ public class LiveSRRF_CL {
         else programString = replaceFirst(programString, "$INTWEIGHTING$", "" + 0);
 
         programLiveSRRF = context.createProgram(programString).build();
-//        IJ.log("Program executable? "+programLiveSRRF.isExecutable());
-        IJ.log("------------------------------------");
-        IJ.log(programLiveSRRF.getBuildLog());
-        IJ.log("------------------------------------");
+
+        // ----- DEBUG -----
+        if (DEBUG) {
+            IJ.log("------------------------------------");
+            IJ.log("Program executable? "+programLiveSRRF.isExecutable());
+            IJ.log(programLiveSRRF.getBuildLog());
+            IJ.log("------------------------------------");
+        }
+
 
         if (do3DSRRF) kernelAlignPixels = programLiveSRRF.createCLKernel("kernelAlignPixels");
         kernelCalculateGradient = programLiveSRRF.createCLKernel("calculateGradient_2point");
@@ -327,7 +339,6 @@ public class LiveSRRF_CL {
         kernelCalculateMPmap = programLiveSRRF.createCLKernel("kernelCalculateMPmap");
         kernelCalculateVar = programLiveSRRF.createCLKernel("kernelCalculateVar");
         kernelCorrectMPmap = programLiveSRRF.createCLKernel("kernelCorrectMPmap");
-
 
 
         int argn;
@@ -411,16 +422,18 @@ public class LiveSRRF_CL {
                 if (i/nPlanes == 2) shiftXYtheta3D[i] = (float) shiftY3D[i - 2*nPlanes];
             }
 
-//            for (int i = 0; i < nPlanes; i++) {
-//                IJ.log("Reg. params (X/Y/Theta): "+shiftXYtheta3D[i+nPlanes]+"/"+shiftXYtheta3D[i+2*nPlanes]+"/"+shiftXYtheta3D[i]);
-//            }
+            // ----- DEBUG -----
+            if (DEBUG) {
+                for (int i = 0; i < nPlanes; i++) {
+                    IJ.log("Reg. params (X/Y/Theta): "+shiftXYtheta3D[i+nPlanes]+"/"+shiftXYtheta3D[i+2*nPlanes]+"/"+shiftXYtheta3D[i]);
+                }
+            }
 
             int id = prof.startTimer();
             fillBuffer(clBufferShiftXYTheta3D, shiftXYtheta3D);
             queue.putWriteBuffer(clBufferShiftXYTheta3D, false);
             prof.recordTime("Uploading ShiftXY3D array to GPU", prof.endTimer(id));
         }
-
     }
 
 
@@ -444,7 +457,11 @@ public class LiveSRRF_CL {
         //assert (imsRawData.getWidth() == width && imsRawData.getHeight() == height); // TODO: put it back?
         int nFrameToLoad = imsRawData.getSize();
 
-//        IJ.log("Uploading raw data to GPU...");
+        // ----- DEBUG -----
+        if (DEBUG) {
+            IJ.log("Uploading raw data to GPU...");
+        }
+
         int id = prof.startTimer();
         if(do3DSRRF){
             ImageStack imsData3D = reshapeImageStack3D(imsRawData);
@@ -463,15 +480,24 @@ public class LiveSRRF_CL {
         }
 
         // Make kernelCalculateGradient assignment (this kernel also resets the local GPU load frame counter)
-//        IJ.log("Calculating gradient...");
+        // ----- DEBUG -----
+        if (DEBUG) {
+            IJ.log("Calculating gradient...");
+            IJ.log("Number of frames loaded on GPU: "+nFrameToLoad);
+        }
+
         id = prof.startTimer();
         queue.finish(); // Make sure everything is done
-//        IJ.log("Number of frames loaded on GPU: "+nFrameToLoad);
+
         if(do3DSRRF) queue.put1DRangeKernel(kernelCalculateGradient, 0,  singleFrameSize * nFrameToLoad, 0);
         else         queue.put3DRangeKernel(kernelCalculateGradient, 0, 0, 0, widthS, heightS, nFrameToLoad, 0, 0, 0);
         prof.recordTime("kernelCalculateGradient", prof.endTimer(id));
 
-//        IJ.log("Interpolating gradient...");
+        // ----- DEBUG -----
+        if (DEBUG) {
+            IJ.log("Interpolating gradient...");
+        }
+
         id = prof.startTimer();
         queue.finish(); // Make sure everything is done
         if(do3DSRRF) queue.put1DRangeKernel(kernelInterpolateGradient, 0,  gradientMag * gradientMag * singleFrameSize * nFrameToLoad, 0);
@@ -479,7 +505,10 @@ public class LiveSRRF_CL {
         prof.recordTime("kernelInterpolateGradient", prof.endTimer(id));
 
         // Make kernelCalculateSRRF assignment, in blocks as defined by user (blocksize from GUI)
-//        IJ.log("Calculating SRRF...");
+        // ----- DEBUG -----
+        if (DEBUG) {
+            IJ.log("Calculating SRRF...");
+        }
 
         int workSize;
 
@@ -505,7 +534,6 @@ public class LiveSRRF_CL {
                     IJ.resetEscape();
                     return true;
                 }
-
             }
 
             // This kernel needs to be done outside of the previous kernel because of concommitent execution (you never know when each pixel is executed)
@@ -545,14 +573,17 @@ public class LiveSRRF_CL {
         queue.finish(); // Make sure everything is done
         queue.putReadBuffer(clBufferOut, true);
         FloatBuffer bufferSRRF = clBufferOut.getBuffer();
-//        IJ.log("FloatBugger limit: "+bufferSRRF.limit());
-//        IJ.log("FloatBuffer string: "+bufferSRRF.toString());
+
+        // ----- DEBUG -----
+        if (DEBUG) {
+            IJ.log("FloatBugger limit: "+bufferSRRF.limit());
+            IJ.log("FloatBuffer string: "+bufferSRRF.toString());
+        }
 
         imsSRRF = new ImageStack(widthM, heightM);
 
         for (int nR = 0; nR < (nReconstructions + 1); nR++) {
             for (int p = 0; p < nPlanesM; p++) {
-//            IJ.log("Reading frame " + p);
                 float[] dataSRRF = new float[widthM * heightM];
                 for (int i = 0; i < widthM * heightM; i++) {
                     dataSRRF[i] = bufferSRRF.get(i + p * widthM * heightM + nR*nDimMag*singleFrameSize);
@@ -721,8 +752,6 @@ public class LiveSRRF_CL {
 
                 x = Math.round((float) ims.getWidth()/nSplits * i);
                 y = Math.round((float) ims.getHeight()/nSplits * j);
-//                IJ.log("x="+x);
-//                IJ.log("y="+y);
 
                 fp.setRoi(x,y,widthS, heightS);
                 FloatProcessor fpROI = fp.crop().convertToFloatProcessor();
@@ -731,7 +760,6 @@ public class LiveSRRF_CL {
                 for (int offset = 0; offset < widthS*heightS; offset++) {
                     pixelsReshaped[offset + widthS*heightS*idz] = (pixels[offset] - backgroundLevel) / (float) intCoeffs3D[idz];
                 }
-
             }
             FloatProcessor fpOut = new FloatProcessor(widthS*heightS, nPlanes, pixelsReshaped);
             reshapedIms.setProcessor(fpOut, f+1);
@@ -740,7 +768,7 @@ public class LiveSRRF_CL {
         return reshapedIms;
     }
 
-    public void print3Dglasses(){
+    public void print3Dglasses(){ // TODO: fix this
         IJ.log("                                                                                      \n" +
                 ",----. ,------.         ,--.   ,--.                 ,---.  ,------. ,------. ,------. \n" +
                 "'.-.     ||   .-.      \\ ,-----.|  |   `--',--.  ,--.,---. '   .-' |  .--. '|  .--. '|  .---' \n" +

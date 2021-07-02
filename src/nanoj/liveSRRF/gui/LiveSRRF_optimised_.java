@@ -46,8 +46,9 @@ public class LiveSRRF_optimised_ implements PlugIn {
             nPlanes,
             nPlanesM;
 
-    private float fwhm, maxMemoryGPU, axialOffset,
-            maxMemoryRAMij = (float) IJ.maxMemory()/1e6f; // maximum RAM set for Fiji in MB
+    private float fwhm, maxMemoryGPU, axialOffset;
+
+    private final float maxMemoryRAMij = (float) IJ.maxMemory()/1e6f; // maximum RAM set for Fiji in MB
 
     private boolean correctVibration,
             calculateAVG,
@@ -65,7 +66,8 @@ public class LiveSRRF_optimised_ implements PlugIn {
             intWeighting,
             showGradient,
             showIntGradient,
-            do3DSRRF;
+            do3DSRRF,
+            DEBUG = false;
 
     private final boolean enable3DSRRF = true;
     private final String eSRRFVersion = "v1.4.0";
@@ -87,17 +89,17 @@ public class LiveSRRF_optimised_ implements PlugIn {
 
 
     // Advanced formats
-    private NanoJPrefs prefs = new NanoJPrefs(this.getClass().getName());
-    private NanoJProfiler prof = new NanoJProfiler();
+    private final NanoJPrefs prefs = new NanoJPrefs(this.getClass().getName());
+    private final NanoJProfiler prof = new NanoJProfiler();
     private LiveSRRF_CL eSRRF;
 
     private SaveFileInZip saveFileInZip;
     private CLDevice chosenDevice = null;
 
     // Tracker
-    private String user = "FijiUpdater";
-    private String version = "20180809-" + user;
-    private NanoJUsageTracker tracker = new NanoJUsageTracker("NanoJ-LiveSRRF", version, "UA-61590656-4");
+    private final String user = "FijiUpdater";
+    private final String version = "20180809-" + user;
+    private final NanoJUsageTracker tracker = new NanoJUsageTracker("NanoJ-LiveSRRF", version, "UA-61590656-4");
 
 
     @Override
@@ -147,7 +149,7 @@ public class LiveSRRF_optimised_ implements PlugIn {
         IJ.log("Pixel size: "+pixelSize+" "+pixelSizeUnit);
 
         // Initialize the liveSRRF class and check the devices
-        eSRRF = new LiveSRRF_CL();
+        eSRRF = new LiveSRRF_CL(DEBUG);
         eSRRF.checkDevices();
         CLDevice[] allDevices = LiveSRRF_CL.allCLdevices;
         gradMag = eSRRF.gradientMag;
@@ -256,7 +258,7 @@ public class LiveSRRF_optimised_ implements PlugIn {
         cal.pixelHeight /= magnification;
         cal.setUnit(imp.getCalibration().getUnit());
 
-//        IJ.log("Distance units: "+cal.getUnit());
+        if (DEBUG) IJ.log("Distance units: "+cal.getUnit());
 
         boolean userPressedEscape;
         long loopStart = System.nanoTime();
@@ -294,7 +296,6 @@ public class LiveSRRF_optimised_ implements PlugIn {
                     scatterPlot.show();
                     scatterPlot.setLimitsToFit(true);
                 }
-
             }
 
             eSRRF.loadDriftXYGPUbuffer(shiftX, shiftY);
@@ -303,10 +304,12 @@ public class LiveSRRF_optimised_ implements PlugIn {
 
             for (int l = 0; l < nGPUloadPerSRRFframe; l++) {
 
-//                IJ.log("----------------------------");
                 nFrameToLoad = min(nFrameOnGPU, nFrameForSRRFtoUse - nFrameOnGPU * l);
-//                IJ.log("Number of frames to load: " + nFrameToLoad);
-//                IJ.log("Index start: " + (indexStartSRRFframe + nFrameOnGPU * l));
+                if (DEBUG) {
+                    IJ.log("----------------------------");
+                    IJ.log("Number of frames to load: " + nFrameToLoad);
+                    IJ.log("Index start: " + (indexStartSRRFframe + nFrameOnGPU * l));
+                }
 
                 imsRawData = new ImageStack(width, height);
                 for (int f = 0; f < nFrameToLoad; f++) {
@@ -393,17 +396,19 @@ public class LiveSRRF_optimised_ implements PlugIn {
             impGradientsInt.show();
         }
 
-//        if (doMPmapCorrection) {
-//            ImageStack imsMPmap = eSRRF.readMPmaps();
-//            ImagePlus impMPmap = new ImagePlus("MP map", imsMPmap);
-//            impMPmap.show();
-//        }
-
-//        if (do3DSRRF){
-//            ImageStack imsAlignedPixels = eSRRF.readAlignedPixels();
-//            ImagePlus impAlignedPixels = new ImagePlus("Aligned pixels", imsAlignedPixels);
-//            impAlignedPixels.show();
-//        }
+        // ----- DEBUG -----
+        if (DEBUG) {
+            if (doMPmapCorrection) {
+                ImageStack imsMPmap = eSRRF.readMPmaps();
+                ImagePlus impMPmap = new ImagePlus("MP map", imsMPmap);
+                impMPmap.show();
+            }
+            if (do3DSRRF) {
+                ImageStack imsAlignedPixels = eSRRF.readAlignedPixels();
+                ImagePlus impAlignedPixels = new ImagePlus("Aligned pixels", imsAlignedPixels);
+                impAlignedPixels.show();
+            }
+        }
 
         // Release the GPU
         eSRRF.release();
@@ -520,10 +525,13 @@ public class LiveSRRF_optimised_ implements PlugIn {
 
         // Run garbage collector
         System.gc();
+        IJ.run("Cascade", "");
 
-
-//        IJ.log("-------------------------------------");
-//        IJ.log(prof.report());
+        // ----- DEBUG -----
+        if (DEBUG) {
+            IJ.log("-------------------------------------");
+            IJ.log(prof.report());
+        }
     }
 
 
@@ -545,7 +553,6 @@ public class LiveSRRF_optimised_ implements PlugIn {
         gd.addCheckbox("Vibration correction", prefs.get("correctVibration", false));
 
         gd.addMessage("-=-= Reconstructions =-=-\n", headerFont);
-//        gd.addChoice("Temporal analysis", temporalAnalysis, prefs.get("chosenTemporalAnalysis", temporalAnalysis[2]));
         gd.addCheckbox("AVG reconstruction (default: on)", prefs.get("calculateAVG", true));
         gd.addCheckbox("VAR reconstruction (default: off)", prefs.get("calculateVAR", false));
         gd.addCheckbox("TAC2 reconstruction (default: off)", prefs.get("calculateTAC2", false));
@@ -572,8 +579,6 @@ public class LiveSRRF_optimised_ implements PlugIn {
 
         // If the GUI was cancelled
         return gd.wasCanceled();
-
-
     }
 
     // --- Main GUI Dialog listener ---
@@ -782,7 +787,6 @@ public class LiveSRRF_optimised_ implements PlugIn {
         prefs.set("nFrameForSRRFfromUser", nFrameForSRRFfromUser);
         prefs.set("correctVibration", correctVibration);
 
-//        prefs.set("chosenTemporalAnalysis", chosenTemporalAnalysis);
         prefs.set("calculateAVG", calculateAVG);
         prefs.set("calculateVAR", calculateVAR);
         prefs.set("calculateTAC2", calculateTAC2);
