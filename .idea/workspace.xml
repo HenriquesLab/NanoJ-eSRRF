@@ -2,8 +2,13 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="f3c8ed8a-af08-41cd-871f-04b718898254" name="Default Changelist" comment="">
-      <change afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/NanoJ-LiveSRRF.iml" beforeDir="false" afterPath="$PROJECT_DIR$/LiveSRRF.iml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/out/production/LiveSRRF/nanoj/liveSRRF/gui/CalculateGainAndOffset_.class" beforeDir="false" afterPath="$PROJECT_DIR$/out/production/LiveSRRF/nanoj/liveSRRF/gui/CalculateGainAndOffset_.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/out/production/LiveSRRF/plugins.config" beforeDir="false" afterPath="$PROJECT_DIR$/out/production/LiveSRRF/plugins.config" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/nanoj/liveSRRF/SSIMCalculator.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/nanoj/liveSRRF/SSIMCalculator.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/nanoj/liveSRRF/XYShiftCalculator.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/nanoj/liveSRRF/XYShiftCalculator.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/nanoj/liveSRRF/gui/SSIMtrace_.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/nanoj/liveSRRF/gui/SSIMtrace_.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/plugins.config" beforeDir="false" afterPath="$PROJECT_DIR$/src/plugins.config" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -17,19 +22,6 @@
     <property name="project.structure.last.edited" value="Artifacts" />
     <property name="project.structure.proportion" value="0.15" />
     <property name="project.structure.side.proportion" value="0.2" />
-  </component>
-  <component name="RunManager">
-    <configuration default="true" type="ArquillianJUnit" factoryName="" nameIsGenerated="true">
-      <option name="arquillianRunConfiguration">
-        <value>
-          <option name="containerStateName" value="" />
-        </value>
-      </option>
-      <option name="TEST_OBJECT" value="class" />
-      <method v="2">
-        <option name="Make" enabled="true" />
-      </method>
-    </configuration>
   </component>
   <component name="TaskManager">
     <servers />

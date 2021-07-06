@@ -7,20 +7,15 @@ import ij.WindowManager;
 import ij.gui.GenericDialog;
 import ij.gui.Plot;
 import ij.plugin.PlugIn;
-import ij.plugin.ZAxisProfiler;
-import ij.process.ImageProcessor;
 import nanoj.liveSRRF.SSIMCalculator;
 import nanoj.core2.NanoJPrefs;
 
-import static nanoj.core.java.image.calculator.FloatProcessorCalculator.add;
 import static nanoj.liveSRRF.SSIMCalculator.getRegularizationFactors;
-import static org.apache.commons.math.stat.inference.TestUtils.tTest;
 
 
 public class SSIMtrace_ implements PlugIn {
 
     private NanoJPrefs prefs = new NanoJPrefs(this.getClass().getName());
-//    private ZAxisProfiler zProfiler = new ZAxisProfiler();
 
 
     public void run(String arg) {

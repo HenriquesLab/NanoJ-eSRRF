@@ -18,7 +18,7 @@ public class XYShiftCalculator {
     public float[] shiftX, shiftY;
 
     // -- Constructor --
-    public XYShiftCalculator(ImagePlus imp){
+    public XYShiftCalculator(ImagePlus imp, NanoJProfiler prof){
         this.ims = imp.getImageStack(); // This is the entire raw data
     }
 
