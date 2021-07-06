@@ -11,12 +11,10 @@ import ij.plugin.PlugIn;
 import ij.process.FloatProcessor;
 
 import static nanoj.core.java.tools.NJ_LUT.applyLUT_SQUIRREL_Errors;
-import static nanoj.core.java.tools.NJ_LUT.applyLUT_SQUIRREL_FRC;
-
 
 public class GetF1map_ implements PlugIn {
 
-    private final boolean DEBUG = true;
+    private final boolean DEBUG = false;
 
     @Override
     public void run(String arg) {
@@ -30,9 +28,10 @@ public class GetF1map_ implements PlugIn {
         gd.addChoice("RSP map: ", imageTitles, getIndexWithSubstring(imageTitles,"RSP"));
         gd.addChoice("FRC map: ", imageTitles, getIndexWithSubstring(imageTitles,"FRC"));
 
-        gd.addNumericField("FRC resolution min (nm) (default: 50)", 0.7, 1);
-        gd.addNumericField("FRC resolution max (nm) (default: 200)", 1.3, 1);
+        gd.addNumericField("FRC resolution min (in um) (default: 0.05)", 0.05, 3);
+        gd.addNumericField("FRC resolution max (in um) (default: 0.2)", 0.20, 3);
         gd.addCheckbox("Remove NaNs",true);
+        gd.addCheckbox("Display rescaled FRC map",false);
         gd.showDialog();
 
         if (DEBUG) {
@@ -45,10 +44,13 @@ public class GetF1map_ implements PlugIn {
         // Get the parameters from the GUI
         String RSPmapTitle = gd.getNextChoice();
         String FRCmapTitle = gd.getNextChoice();
+        IJ.log("RSP map: "+RSPmapTitle);
+        IJ.log("FRC map: "+FRCmapTitle);
 
         float Res_min = (float) gd.getNextNumber();
         float Res_max = (float) gd.getNextNumber();
         boolean removeNaNs = gd.getNextBoolean();
+        boolean displayFRCrescaled = gd.getNextBoolean();
 
         // Get the images and prepare
         ImagePlus impRSPmap = WindowManager.getImage(RSPmapTitle);
@@ -71,13 +73,15 @@ public class GetF1map_ implements PlugIn {
         ImageStack imsRSPmap = impRSPmap.getImageStack();
 
         // Convert FRC resolution maps via logistic conversion
+        IJ.log("Logistic conversion using Min = "+Res_min+" um and Max = "+Res_max+" um...");
         ImageStack imsFRCmapConverted = logisticImageConversion(imsFRCmap, Res_min, Res_max);
-        ImagePlus impFRCmapConverted = new ImagePlus("FRC map Converted", imsFRCmapConverted);
-        applyLUT_SQUIRREL_FRC(impFRCmapConverted);
-        impFRCmapConverted.copyScale(impFRCmap);
-        impFRCmapConverted.show();
-        IJ.run("Maximize", "");
-
+        if (displayFRCrescaled) {
+            ImagePlus impFRCmapConverted = new ImagePlus("FRC map Converted", imsFRCmapConverted);
+            applyLUT_SQUIRREL_Errors(impFRCmapConverted);
+            impFRCmapConverted.copyScale(impFRCmap);
+            impFRCmapConverted.show();
+            IJ.run("Maximize", "");
+        }
 
         ImageStack imsF1map = calculateF1map(imsFRCmapConverted, imsRSPmap);
         ImagePlus impF1map = new ImagePlus("F1 map", imsF1map);
@@ -96,24 +100,26 @@ public class GetF1map_ implements PlugIn {
         IJ.log("-------------------");
         float[][] resultsMax = findMaximum(imsF1map, cal);
         for (int s = 0; s < imsF1map.getSize(); s++) {
-            IJ.log("Results when using "+resultsMax[5][s]+" frames:");
-            IJ.log("Max value: "+resultsMax[0][s]+ " at ("+(int) resultsMax[1][s]+","+(int) resultsMax[2][s]+")");
+            if (imsF1map.getSize() > 1) IJ.log("Results when using " + resultsMax[5][s] + " frames:");
+            IJ.log("Max F1 value: "+resultsMax[0][s]+ " at ("+(int) resultsMax[1][s]+","+(int) resultsMax[2][s]+")");
             IJ.log("Best Radius: "+resultsMax[3][s]);
             IJ.log("Best Sensitivity: "+resultsMax[4][s]);
             IJ.log("-------------------");
         }
 
-        Plot plotF1vsFrameNumber = new Plot("F1 score vs. # frames", "# of frames", "F1 score");
-        plotF1vsFrameNumber.addPoints(resultsMax[5], resultsMax[0], Plot.LINE);
-        plotF1vsFrameNumber.show();
+        if (imsF1map.getSize() > 1) {
+            Plot plotF1vsFrameNumber = new Plot("F1 score vs. # frames", "# of frames", "F1 score");
+            plotF1vsFrameNumber.addPoints(resultsMax[5], resultsMax[0], Plot.LINE);
+            plotF1vsFrameNumber.show();
 
-        Plot plotBestRadiusVsFrameNumber = new Plot("Best radius score vs. # frames", "# of frames", "Best radius");
-        plotBestRadiusVsFrameNumber.addPoints(resultsMax[5], resultsMax[3], Plot.LINE);
-        plotBestRadiusVsFrameNumber.show();
+            Plot plotBestRadiusVsFrameNumber = new Plot("Best radius score vs. # frames", "# of frames", "Best radius");
+            plotBestRadiusVsFrameNumber.addPoints(resultsMax[5], resultsMax[3], Plot.LINE);
+            plotBestRadiusVsFrameNumber.show();
 
-        Plot plotBestSensitivityVsFrameNumber = new Plot("Best sensitivity score vs. # frames", "# of frames", "Best sensitivity");
-        plotBestSensitivityVsFrameNumber.addPoints(resultsMax[5], resultsMax[4], Plot.LINE);
-        plotBestSensitivityVsFrameNumber.show();
+            Plot plotBestSensitivityVsFrameNumber = new Plot("Best sensitivity score vs. # frames", "# of frames", "Best sensitivity");
+            plotBestSensitivityVsFrameNumber.addPoints(resultsMax[5], resultsMax[4], Plot.LINE);
+            plotBestSensitivityVsFrameNumber.show();
+        }
 
         IJ.run("Cascade", "");
 

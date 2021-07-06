@@ -13,8 +13,8 @@ import static nanoj.liveSRRF.FHT3D_Utilities.*;
 
 public class Get3DFHT_ implements PlugIn {
 
-    private static boolean DEBUG = true;
-    private static boolean PROFILINGMSG = true;
+    private final boolean DEBUG = true;
+    private final boolean PROFILINGMSG = true;
 
 
     @Override

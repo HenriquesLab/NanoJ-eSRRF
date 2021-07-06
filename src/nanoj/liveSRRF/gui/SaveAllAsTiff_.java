@@ -11,15 +11,14 @@ public class SaveAllAsTiff_ implements PlugIn {
     public void run(String s) {
 
         IJ.log("------------------------");
-        IJ.log("------------------------");
-        IJ.log("Getting F1 map...");
         String[] imageTitles = WindowManager.getImageTitles();
 
         String pathToDisk = IJ.getDirectory("Choose where to save the images...");
+        IJ.log("Saving all open images as Tiff...");
 
-        for (int i = 0; i < imageTitles.length; i++) {
-            ImagePlus imp = WindowManager.getImage(imageTitles[i]);
-            IJ.saveAs(imp, "Tiff", pathToDisk+imageTitles[i]);
+        for (String imageTitle : imageTitles) {
+            ImagePlus imp = WindowManager.getImage(imageTitle);
+            IJ.saveAs(imp, "Tiff", pathToDisk + imageTitle);
         }
 
         IJ.log("All done.");
