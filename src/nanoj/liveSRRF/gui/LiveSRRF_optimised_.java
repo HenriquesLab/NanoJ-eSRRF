@@ -827,13 +827,6 @@ public class LiveSRRF_optimised_ implements PlugIn {
         prefs.set("doRollingAnalysis", doRollingAnalysis);
         prefs.set("frameGapFromUser", frameGapFromUser);
 
-//        prefs.set("chosenDeviceName", chosenDeviceName);
-//        prefs.set("maxMemoryGPU", maxMemoryGPU);
-//        prefs.set("blockSize", blockSize);
-
-//        prefs.set("showGradient", showGradient);
-//        prefs.set("showIntGradient", showIntGradient);
-
         prefs.set("do3DSRRF", do3DSRRF);
 
         prefs.save();

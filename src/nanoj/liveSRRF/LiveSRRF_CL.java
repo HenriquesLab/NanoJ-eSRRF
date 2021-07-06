@@ -582,22 +582,17 @@ public class LiveSRRF_CL {
     // --- Load Drift array on GPU ---
     public void loadDriftXYGPUbuffer(float[] driftX, float[] driftY) {
 
-        float[] driftXY = new float[2 * nFrameForSRRF]; // TODO: change to do manually
-        System.arraycopy(driftX, 0, driftXY, 0, nFrameForSRRF);
-        System.arraycopy(driftY, 0, driftXY, nFrameForSRRF, nFrameForSRRF);
-
-//        float[] driftXYarray = new float[2 * nFrameForSRRF];
-//        for (int i = 0; i < nFrameForSRRF; i++) {
-//            driftXYarray[i] = magnification*driftXY[i][0]; // loaded as drift in pixels in the magnified pixel space
-//            driftXYarray[i + nFrameForSRRF] = magnification*driftXY[i][1];
-//        }
+        float[] driftXY = new float[2 * nFrameForSRRF];
+        for (int i = 0; i < nFrameForSRRF; i++) {
+            driftXY[i] = magnification*driftX[i]; // loaded as drift in pixels in the magnified pixel space
+            driftXY[i + nFrameForSRRF] = magnification*driftY[i];
+        }
 
         int id = prof.startTimer();
         fillBuffer(clBufferDriftXY, driftXY);
         queue.putWriteBuffer(clBufferDriftXY, false);
         prof.recordTime("Uploading drift array to GPU", prof.endTimer(id));
     }
-
 
     // --- FHT interpolation images ---
     public void prepareDataFHT_SRRF(ImageStack imsRawData) {

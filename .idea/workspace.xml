@@ -3,7 +3,6 @@
   <component name="ChangeListManager">
     <list default="true" id="f3c8ed8a-af08-41cd-871f-04b718898254" name="Default Changelist" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/out/production/LiveSRRF/nanoj/liveSRRF/LiveSRRF_CL.class" beforeDir="false" afterPath="$PROJECT_DIR$/out/production/LiveSRRF/nanoj/liveSRRF/LiveSRRF_CL.class" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/out/production/LiveSRRF/nanoj/liveSRRF/gui/ParametersSweep_.class" beforeDir="false" afterPath="$PROJECT_DIR$/out/production/LiveSRRF/nanoj/liveSRRF/gui/ParametersSweep_.class" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/nanoj/liveSRRF/LiveSRRF_CL.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/nanoj/liveSRRF/LiveSRRF_CL.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/nanoj/liveSRRF/gui/ParametersSweep_.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/nanoj/liveSRRF/gui/ParametersSweep_.java" afterDir="false" />
