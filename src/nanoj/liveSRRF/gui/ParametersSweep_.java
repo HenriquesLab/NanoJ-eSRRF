@@ -50,6 +50,7 @@ public class ParametersSweep_ implements PlugIn {
             correctVibration,
             cropBorder,
             singleFrameLoad,
+            doFHTinterpolation,
             previousAdvSettings = false;
 
     private final boolean DEBUG = false;
@@ -102,11 +103,15 @@ public class ParametersSweep_ implements PlugIn {
         calculateRSE = prefs.get("calculateRSE", false);
         calculateRSP = prefs.get("calculateRSP", false);
         fixSigma = prefs.get("fixSigma", false);
-        fixedSigma = (float) prefs.get("fixedSigma", 1);
+        fixedSigma = prefs.get("fixedSigma", 1);
         cropBorder = prefs.get("cropBorder", true);
         cropSize = (int) prefs.get("cropSize", 3);
         calculateFRC = prefs.get("calculateFRC", false);
+        doFHTinterpolation = prefs.get("doFHTinterpolation", true);
+
         blockSize = (int) prefs.get("blockSize", 20000);
+        singleFrameLoad = prefs.get("singleFrameLoad", true);
+
 
         // Build GUI
         Font headerFont = new Font("Arial", Font.BOLD, 16);
@@ -366,8 +371,12 @@ public class ParametersSweep_ implements PlugIn {
                     // FRC resolution estimation
                     if (calculateFRC) {
 
-                        // Calculate and get the reconstruction from the odd frames // TODO: add options to do intensity weighting or MPcorrection
-                        eSRRF.initialise(width, height, magnification, fwhmArray[fi], sensitivityArray[si], nFramesOnGPU, nframeArray[nfi], blockSize, null, true, true, true,null, 0,1);
+                        // Calculate and get the reconstruction from the odd frames //
+                        //
+                        // TODO: add options to do intensity weighting or MPcorrection
+                        // TODO: consider only doing the initialisation and data preparation once, currently repeated for every parameter --> speed improvement possible
+
+                        eSRRF.initialise(width, height, magnification, fwhmArray[fi], sensitivityArray[si], nFramesOnGPU, nframeArray[nfi], blockSize, null, true, true, doFHTinterpolation, null, 0,1);
                         eSRRF.resetFramePosition();
                         eSRRF.loadDriftXYGPUbuffer(shiftXtempOdd, shiftYtempOdd);
 
@@ -386,7 +395,7 @@ public class ParametersSweep_ implements PlugIn {
                         fpOddTAC2 = imsBuffer.getProcessor(3).convertToFloatProcessor();
 
                         // Calculate and get the reconstruction from the even frames // TODO: add options to do intensity weighting or MPcorrection
-                        eSRRF.initialise(width, height, magnification, fwhmArray[fi], sensitivityArray[si], nFramesOnGPU, nframeArray[nfi], blockSize, null, true, true, true, null, 0, 1);
+                        eSRRF.initialise(width, height, magnification, fwhmArray[fi], sensitivityArray[si], nFramesOnGPU, nframeArray[nfi], blockSize, null, true, true, doFHTinterpolation, null, 0, 1);
                         eSRRF.resetFramePosition();
                         eSRRF.loadDriftXYGPUbuffer(shiftXtempEven, shiftYtempEven);
 
@@ -406,11 +415,10 @@ public class ParametersSweep_ implements PlugIn {
                             pixelsFRCresolutionTAC2[fwhmArray.length * si + fi] = (float) cal.pixelHeight * (float) frcCalculator.calculateFireNumber(fpOddTAC2, fpEvenTAC2, FRC.ThresholdMethod.FIXED_1_OVER_7);
                         }
 
-
-
+                        
                     } else {
                         // TODO: add options to do intensity weighting or MPcorrection
-                        eSRRF.initialise(width, height, magnification, fwhmArray[fi], sensitivityArray[si], nFramesOnGPU, nframeArray[nfi], blockSize, null, true, true, true, null, 0, 1);
+                        eSRRF.initialise(width, height, magnification, fwhmArray[fi], sensitivityArray[si], nFramesOnGPU, nframeArray[nfi], blockSize, null, true, true, doFHTinterpolation, null, 0, 1);
                         eSRRF.resetFramePosition();
                         eSRRF.loadDriftXYGPUbuffer(shiftXtemp, shiftYtemp);
 
@@ -819,7 +827,6 @@ public class ParametersSweep_ implements PlugIn {
         int n_nfToUse;
         if (calculateFRC) n_nfToUse = Math.min((nSlices / 2 - nf0) / deltanf + 1, n_nf);
         else n_nfToUse = Math.min((nSlices - nf0) / deltanf + 1, n_nf);
-        // TODO: ABORT IF NOT enough frames in original stack for even 1 analysis
 
         if (n_nfToUse < 0){
             return false;
@@ -868,6 +875,7 @@ public class ParametersSweep_ implements PlugIn {
         prefs.set("cropSize", cropSize);
 
         prefs.set("calculateFRC", calculateFRC);
+        prefs.set("doFHTinterpolation", doFHTinterpolation);
 
         prefs.set("blockSize", blockSize);
         prefs.set("singleFrameLoad", singleFrameLoad);
@@ -953,15 +961,17 @@ public class ParametersSweep_ implements PlugIn {
 
         gd.addMessage("-=-= FRC resolution =-=-\n", headerFont);
         gd.addCheckbox("Calculate FRC (default: off)", prefs.get("calculateFRC", false));
-
         gd.addMessage("Calculating FRC will split all dataset in two halves and therefore the maximum number\n" +
                 "of frames will be half of the total frames available in the dataset.");
+
+        gd.addMessage("-=-= Reconstruction settings =-=-\n", headerFont);
+        gd.addCheckbox("Use FHT interpolation", prefs.get("doFHTinterpolation",true));
 
         gd.addMessage("-=-= GPU processing =-=-\n", headerFont);
         gd.addNumericField("Analysis block size (default: 20000)", prefs.get("blockSize", 20000), 0);
         gd.addMessage("A large analysis block size will speed up the analysis but will use more resources and\n" +
                 " may slow down your computer.");
-        gd.addCheckbox("Single frame load", prefs.get("singleFrameLoad",true));
+        gd.addCheckbox("Enable single frame loading", prefs.get("singleFrameLoad",true));
         gd.addMessage("Single frame loading is slower but is more stable due to lower GPU memory requirements.");
 
 
@@ -984,6 +994,7 @@ public class ParametersSweep_ implements PlugIn {
             cropSize = (int) gd.getNextNumber();
 
             calculateFRC = gd.getNextBoolean();
+            doFHTinterpolation = gd.getNextBoolean();
 
             blockSize = (int) gd.getNextNumber();
             singleFrameLoad = gd.getNextBoolean();

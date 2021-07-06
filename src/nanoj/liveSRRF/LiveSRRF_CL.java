@@ -47,6 +47,7 @@ public class LiveSRRF_CL {
             chosenROIsLocations3D;
 
     public final int nReconstructions = 3; // Currently AVG, VAR (2nd order SOFI Tau=0) and 2nd order cumulants Tau=1 (TAC2)
+//    public final String[] reconNames = new String[]{"AVG", "VAR", "TAC2"}; // TODO: use this list to generate labels in main GUI
 
     private final float vxy_offset = 0.5f;
     private final int vxy_ArrayShift = 1;
@@ -780,7 +781,7 @@ public class LiveSRRF_CL {
         // ----- DEBUG -----
         if (DEBUG) {
             IJ.log("FloatBugger limit: "+bufferSRRF.limit());
-            IJ.log("FloatBuffer string: "+bufferSRRF.toString());
+            IJ.log("FloatBuffer string: "+bufferSRRF);
         }
 
         imsSRRF = new ImageStack(widthM, heightM);
