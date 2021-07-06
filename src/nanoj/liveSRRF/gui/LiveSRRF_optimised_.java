@@ -55,6 +55,7 @@ public class LiveSRRF_optimised_ implements PlugIn {
             calculateVAR,
             calculateTAC2,
             getInterpolatedImage,
+            doFHTinterpolation,
             writeToDiskToUse,
             writeToDiskTemp,
             doRollingAnalysis,
@@ -67,10 +68,10 @@ public class LiveSRRF_optimised_ implements PlugIn {
             showGradient,
             showIntGradient,
             do3DSRRF,
-            DEBUG = false;
+            DEBUG = true;
 
     private final boolean enable3DSRRF = true;
-    private final String eSRRFVersion = "v1.4.0";
+    private final String eSRRFVersion = "v1.5.0";
 
     private String pathToDisk = "",
             fileName,
@@ -129,6 +130,7 @@ public class LiveSRRF_optimised_ implements PlugIn {
         writeToDiskToUse = false;
         intWeighting = prefs.get("intWeighting", true);
         doMPmapCorrection = prefs.get("doMPmapCorrection", true);
+        doFHTinterpolation = prefs.get("doFHTinterpolation", true);
 
 //        // Close the log: //TODO: this seems to sometimes make a different whether OpenCL runs or not (observation from Nvidia 1050, not repeatable)
         // TODO: but this causes the GUI to pop up when using liveSRRF in a macro
@@ -231,7 +233,7 @@ public class LiveSRRF_optimised_ implements PlugIn {
 
         ImageStack imsAllRawData = imp.getImageStack();
 
-        eSRRF.initialise(width, height, magnification, fwhm, sensitivity, nFrameOnGPU, nFrameForSRRFtoUse, blockSize, chosenDevice, intWeighting, doMPmapCorrection, calibTablePath3DSRRF, axialOffset, (float) pixelSize);
+        eSRRF.initialise(width, height, magnification, fwhm, sensitivity, nFrameOnGPU, nFrameForSRRFtoUse, blockSize, chosenDevice, intWeighting, doMPmapCorrection, doFHTinterpolation, calibTablePath3DSRRF, axialOffset, (float) pixelSize);
         widthS = eSRRF.widthS;
         heightS = eSRRF.heightS;
         nPlanes = eSRRF.nPlanes;
@@ -399,10 +401,13 @@ public class LiveSRRF_optimised_ implements PlugIn {
         // ----- DEBUG -----
         if (DEBUG) {
             if (doMPmapCorrection) {
-                ImageStack imsMPmap = eSRRF.readMPmaps();
-                ImagePlus impMPmap = new ImagePlus("MP map", imsMPmap);
-                impMPmap.show();
+                if (!doFHTinterpolation || do3DSRRF) { // selecting cases where bicubic interpolation is performed
+                    ImageStack imsMPmap = eSRRF.readMPmaps();
+                    ImagePlus impMPmap = new ImagePlus("MP map", imsMPmap);
+                    impMPmap.show();
+                }
             }
+
             if (do3DSRRF) {
                 ImageStack imsAlignedPixels = eSRRF.readAlignedPixels();
                 ImagePlus impAlignedPixels = new ImagePlus("Aligned pixels", imsAlignedPixels);
@@ -661,13 +666,14 @@ public class LiveSRRF_optimised_ implements PlugIn {
                 "exceeding RAM capacity.");
 
         gd.addMessage("-=-= Advanced reconstruction settings (for testing) =-=-\n", headerFont);
-        gd.addCheckbox("Intensity weighting", prefs.get("intWeighting", true));
-        gd.addCheckbox("Macro-pixel patterning correction", prefs.get("doMPmapCorrection", true));
-        gd.addCheckbox("Show image stabilisation scatter plot", prefs.get("showImStabPlot", false));
+        gd.addCheckbox("Intensity weighting (default: true)", prefs.get("intWeighting", true));
+        gd.addCheckbox("Macro-pixel patterning correction (default: true)", prefs.get("doMPmapCorrection", true));
+        gd.addCheckbox("Use FHT for interpolation (default: true)", prefs.get("doFHTinterpolation", true));
 
         gd.addMessage("-=-= Advanced display settings =-=-\n", headerFont);
         gd.addCheckbox("Show gradients", prefs.get("showGradient", true));
         gd.addCheckbox("Show interpolated gradients", prefs.get("showIntGradient", true));
+        gd.addCheckbox("Show image stabilisation scatter plot", prefs.get("showImStabPlot", false));
 
         gd.addHelp("https://www.youtube.com/watch?v=otCpCn0l4Wo"); // it's Hammer time
 
@@ -680,11 +686,14 @@ public class LiveSRRF_optimised_ implements PlugIn {
             chosenDeviceName = prefs.get("chosenDeviceName", "Default device");
             maxMemoryGPU = prefs.get("maxMemoryGPU", 500);
             blockSize = (int) prefs.get("blockSize", 20000);
+
             intWeighting = prefs.get("intWeighting", true);
             doMPmapCorrection = prefs.get("doMPmapCorrection", true);
-            showImStabPlot = prefs.get("showImStabPlot", false);
+            doFHTinterpolation = prefs.get("doFHTinterpolation", true);
+
             showGradient = prefs.get("showGradient", true);
             showIntGradient = prefs.get("showIntGradient", true);
+            showImStabPlot = prefs.get("showImStabPlot", false);
 
             // re-initialises to how it was before entering advanced GUI
             writeToDiskToUse = writeToDiskTemp;
@@ -694,11 +703,14 @@ public class LiveSRRF_optimised_ implements PlugIn {
             prefs.set("chosenDeviceName", chosenDeviceName);
             prefs.set("maxMemoryGPU", maxMemoryGPU);
             prefs.set("blockSize", blockSize);
+
             prefs.set("intWeighting", intWeighting);
             prefs.set("doMPmapCorrection", doMPmapCorrection);
-            prefs.set("showImStabPlot", showImStabPlot);
+            prefs.set("doFHTinterpolation", doFHTinterpolation);
+
             prefs.set("showGradient", showGradient);
             prefs.set("showIntGradient", showIntGradient);
+            prefs.set("showImStabPlot", showImStabPlot);
             prefs.save();
         }
 
@@ -723,11 +735,14 @@ public class LiveSRRF_optimised_ implements PlugIn {
         boolean goodToGo = calculatenFrameOnGPU();
 
         writeToDiskTemp = gd.getNextBoolean();
+
         intWeighting = gd.getNextBoolean();
         doMPmapCorrection = gd.getNextBoolean();
-        showImStabPlot = gd.getNextBoolean();
+        doFHTinterpolation = gd.getNextBoolean();
+
         showGradient = gd.getNextBoolean();
         showIntGradient = gd.getNextBoolean();
+        showImStabPlot = gd.getNextBoolean();
 
         if (writeToDiskTemp && !previousWriteToDisk) {
             pathToDisk = IJ.getDirectory("");
@@ -744,31 +759,48 @@ public class LiveSRRF_optimised_ implements PlugIn {
 
         double[] memUsed = new double[2];
 
-        // Memory on GPU ---- (estimated roughly, especially in teh case of 3D)
+        // Memory on GPU ---- (estimated roughly, especially in the case of 3D)
         memUsed[0] = 0;
-        memUsed[0] += width * height * nFrameOnGPU; // clBufferPx
-        memUsed[0] += nFrameOnGPU; // clBufferShiftX
-        memUsed[0] += nFrameOnGPU; // clBufferShiftY
-        memUsed[0] += width * height * nFrameOnGPU; // clBufferGx
-        memUsed[0] += width * height * nFrameOnGPU; // clBufferGy
-        if (do3DSRRF) memUsed[0] += width * height * nFrameOnGPU; // clBufferGz
-        memUsed[0] += gradMag * gradMag * width * height * nFrameOnGPU; // clBufferGxInt
-        memUsed[0] += gradMag * gradMag * width * height * nFrameOnGPU; // clBufferGyInt
-        if (do3DSRRF) memUsed[0] += gradMag * gradMag * width * height * nFrameOnGPU; // clBufferGzInt
+        memUsed[0] += 2*nFrameOnGPU; // clBufferShiftXY
 
-        memUsed[0] += nRecons * width * height * magnification * magnification; // clBufferRGC
-        memUsed[0] += width * height * magnification * magnification; // clBufferInt
+        if(doFHTinterpolation){
+            memUsed[0] += width * height * magnification * magnification * nFrameOnGPU; // clBufferPx
+            memUsed[0] += width * height * magnification * magnification * nFrameOnGPU; // clBufferGx
+            memUsed[0] += width * height * magnification * magnification * nFrameOnGPU; // clBufferGy
+            memUsed[0] += width * height * magnification * magnification; // clBufferPreviousFrame
+            memUsed[0] += (nRecons+1) * width * height * magnification * magnification; // clBufferOut
+            memUsed[0] += 2; // clBufferCurrentFrame
+        }
+        else {
+            memUsed[0] += width * height * nFrameOnGPU; // clBufferPx
+            memUsed[0] += width * height * nFrameOnGPU; // clBufferGx
+            memUsed[0] += width * height * nFrameOnGPU; // clBufferGy
+
+            memUsed[0] += gradMag * gradMag * width * height * nFrameOnGPU; // clBufferGxInt
+            memUsed[0] += gradMag * gradMag * width * height * nFrameOnGPU; // clBufferGyInt
+
+            if (do3DSRRF) {
+                memUsed[0] += width * height * nFrameOnGPU; // clBufferAlignedPx
+                memUsed[0] += width * height * nFrameOnGPU; // clBufferGz
+                memUsed[0] += gradMag * gradMag * width * height * nFrameOnGPU; // clBufferGzInt
+                memUsed[0] += (nRecons+1)* width * height * magnification * magnification * magnification; // clBufferOut
+                memUsed[0] += width * height * magnification * magnification * magnification; // clBufferPreviousFrame
+                memUsed[0] += nRecons * magnification * magnification * magnification; // clBufferMPmap
+            }
+            else{
+                memUsed[0] += (nRecons+1)* width * height * magnification * magnification; // clBufferOut
+                memUsed[0] += width * height * magnification * magnification * magnification; // clBufferPreviousFrame
+                memUsed[0] += nRecons * magnification * magnification; // clBufferMPmap
+            }
+        }
 
         // Memory on CPU ---- (largely underestimated)
         memUsed[1] = 0;
         memUsed[1] += width * height * nSlices; // RAM raw data
-        if (do3DSRRF){
-            memUsed[1] += nRecons * nSRRFframe * width * height * magnification * magnification * magnification; // clBufferSRRF
-            memUsed[1] += nSRRFframe * width * height * magnification * magnification * magnification; // clBufferInt
-        }
-        else{
-            memUsed[1] += nRecons * nSRRFframe * width * height * magnification * magnification; // clBufferSRRF
-            memUsed[1] += nSRRFframe * width * height * magnification * magnification; // clBufferInt
+        if (do3DSRRF) {
+            memUsed[1] += (nRecons+1) * nSRRFframe * width * height * magnification * magnification * magnification; // clBufferOut
+        } else {
+            memUsed[1] += (nRecons+1) * nSRRFframe * width * height * magnification * magnification; // clBufferOut
         }
 
         memUsed[0] *= Float.SIZE / 8000000d; // convert to MB
@@ -795,12 +827,12 @@ public class LiveSRRF_optimised_ implements PlugIn {
         prefs.set("doRollingAnalysis", doRollingAnalysis);
         prefs.set("frameGapFromUser", frameGapFromUser);
 
-        prefs.set("chosenDeviceName", chosenDeviceName);
-        prefs.set("maxMemoryGPU", maxMemoryGPU);
-        prefs.set("blockSize", blockSize);
+//        prefs.set("chosenDeviceName", chosenDeviceName);
+//        prefs.set("maxMemoryGPU", maxMemoryGPU);
+//        prefs.set("blockSize", blockSize);
 
-        prefs.set("showGradient", showGradient);
-        prefs.set("showIntGradient", showIntGradient);
+//        prefs.set("showGradient", showGradient);
+//        prefs.set("showIntGradient", showIntGradient);
 
         prefs.set("do3DSRRF", do3DSRRF);
 
