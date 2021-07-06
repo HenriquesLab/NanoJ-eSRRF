@@ -6,10 +6,7 @@ import ij.ImageStack;
 import ij.plugin.filter.GaussianBlur;
 import ij.process.FloatProcessor;
 import ij.process.ImageProcessor;
-import nanoj.core.java.threading.NanoJThreadExecutor;
 
-
-import java.util.Arrays;
 
 import static nanoj.core.java.image.calculator.FloatProcessorCalculator.multiply;
 import static nanoj.core.java.image.calculator.FloatProcessorCalculator.subtract;
@@ -161,43 +158,8 @@ public class SSIMCalculator {
 //        return ipRefSig2;
     }
 
-    // ------------------ Functions ------------------
-    public static float[] getRegularizationFactors(ImageStack ims, String regMethod){
 
-        float[] C = new float[2];
-        // Regularization factors
-        if (regMethod.equals("image bit depth")) {
-            int bitDepth = ims.getBitDepth();
-            C[0] = (float) Math.pow(0.01f * (float) (Math.pow(2.0f, bitDepth) - 1), 2);
-            IJ.log("Bit depth: "+bitDepth);
-        }
-        else{
-            float[] percentiles = new float[2];
-            percentiles[0] = getPercentileFromImageStack(ims, 0.01f);
-            percentiles[1] = getPercentileFromImageStack(ims, 0.99f);
-            IJ.log("1% percentile: "+percentiles[0]);
-            IJ.log("99% percentile: "+percentiles[1]);
-            C[0] = (float) Math.pow(0.01f * (percentiles[1] - percentiles[0]), 2);
-        }
-        C[1] = 9 * C[0];
 
-        IJ.log("Regularization factors: "+regMethod);
-        IJ.log("C1: "+C[0]);
-        IJ.log("C2: "+C[1]);
-
-        return C;
-
-    }
-
-    public static float getPercentileFromImageStack(ImageStack ims, float percentile){
-
-        float[] pixelValues = ImageStackToFloatArray(ims);
-        Arrays.sort(pixelValues);
-        int nPixels = ims.getWidth()*ims.getHeight()*ims.getSize();
-        int id = (int) ((float) nPixels*percentile);
-
-        return pixelValues[id];
-    }
 
     public static double[] getMeanStdofImage(ImageProcessor ip){
 
@@ -214,7 +176,6 @@ public class SSIMCalculator {
 
         return new double[]{m, s};
     }
-
 //    class ThreadedSSIM extends Thread {
 //        private final ImageProcessor ip;
 //        private final double[] ssim;

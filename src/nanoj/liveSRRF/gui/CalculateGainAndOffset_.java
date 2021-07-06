@@ -292,7 +292,7 @@ public class CalculateGainAndOffset_  implements PlugIn {
                 ys1[n] = gain[n]*xs[n];
             }
             Plot p = new Plot("Var vs Mean X="+x+" Y="+y, "Mean", "Var");
-            p.add("line", xs, ys1);
+            p.addPoints(xs,ys1,Plot.LINE);
             p.addPoints(xs, ys0, Plot.CROSS);
             p.show();
         }
