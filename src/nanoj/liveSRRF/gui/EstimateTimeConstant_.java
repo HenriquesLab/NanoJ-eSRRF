@@ -134,6 +134,10 @@ public class EstimateTimeConstant_ implements PlugIn {
         IJ.log("All done.");
     }
 
+    //    -------------------------------------------------------------------------------------
+    //    -------------------------- Here lies dragons and functions --------------------------
+    //    -------------------------------------------------------------------------------------
+
     private static float[] getRegularizationFactors(ImageStack ims, String regMethod){
         float[] C = new float[2];
         // Regularization factors
