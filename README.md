@@ -31,8 +31,19 @@ Some of the new features available in eSRRF are as follows:
 ## Getting eSRRF plugin on Fiji
 
 The latest stable version of eSRRF can be directrly obtained from our Fiji update site: **https://sites.imagej.net/NanoJ-LiveSRRF/**
+
 Information about update sites can be found [here](https://imagej.net/update-sites/).
 
+
+## Tools coming with eSRRF plugin
+
+eSRRF comes packed with useful Tools plugins to perform a range of things, such as (but not limited to):
+* fluorescence fluctuation simulator
+* rescale individual slices within a stack and convert it to RGB (useful to visualise the parameter sweep output)
+* Save all current open images as Tiff files
+* perform linear rescaling on stack
+* etc.
+* 
 
 ## People involved
 
