@@ -28,10 +28,13 @@ public class GetF1map_ implements PlugIn {
         gd.addChoice("RSP map: ", imageTitles, getIndexWithSubstring(imageTitles,"RSP"));
         gd.addChoice("FRC map: ", imageTitles, getIndexWithSubstring(imageTitles,"FRC"));
 
+        gd.addCheckbox("Automatically set min and max",true);
         gd.addNumericField("FRC resolution min (in um) (default: 0.05)", 0.05, 3);
         gd.addNumericField("FRC resolution max (in um) (default: 0.2)", 0.20, 3);
+
         gd.addCheckbox("Remove NaNs",true);
         gd.addCheckbox("Display rescaled FRC map",false);
+        gd.addCheckbox("Show logistic conversion curve",false);
         gd.showDialog();
 
         if (DEBUG) {
@@ -47,10 +50,12 @@ public class GetF1map_ implements PlugIn {
         IJ.log("RSP map: "+RSPmapTitle);
         IJ.log("FRC map: "+FRCmapTitle);
 
+        boolean autoResMinMax = gd.getNextBoolean();
         float Res_min = (float) gd.getNextNumber();
         float Res_max = (float) gd.getNextNumber();
         boolean removeNaNs = gd.getNextBoolean();
         boolean displayFRCrescaled = gd.getNextBoolean();
+        boolean showLogisticConversionCurve = gd.getNextBoolean();
 
         // Get the images and prepare
         ImagePlus impRSPmap = WindowManager.getImage(RSPmapTitle);
@@ -71,6 +76,13 @@ public class GetF1map_ implements PlugIn {
 
         ImageStack imsFRCmap = impFRCmap.getImageStack();
         ImageStack imsRSPmap = impRSPmap.getImageStack();
+
+        if (autoResMinMax) {
+            IJ.log("Getting min and max resolution from data...");
+            float[] minmaxRes = getMinMaxfromImageStack(imsFRCmap);
+            Res_min = minmaxRes[0];
+            Res_max = minmaxRes[1];
+        }
 
         // Convert FRC resolution maps via logistic conversion
         IJ.log("Logistic conversion using Min = "+Res_min+" um and Max = "+Res_max+" um...");
@@ -96,6 +108,8 @@ public class GetF1map_ implements PlugIn {
             IJ.log("Calibration xOrigin: "+cal.xOrigin);
             IJ.log("Calibration yOrigin: "+cal.yOrigin);
         }
+
+        if (showLogisticConversionCurve) displayLogisticCurve(Res_min, Res_max);
 
         IJ.log("-------------------");
         float[][] resultsMax = findMaximum(imsF1map, cal);
@@ -158,6 +172,35 @@ public class GetF1map_ implements PlugIn {
             imsOut.addSlice(new FloatProcessor(ims.getWidth(), ims.getHeight(), pixels_out));
         }
         return imsOut;
+    }
+
+
+    public void displayLogisticCurve(float min, float max){
+
+        double M1 = 0.075;
+        double M2 = 0.925;
+        double A1 = Math.log((1-M1)/M1);
+        double A2 = Math.log((1-M2)/M2);
+        double x0 = (A2*(double) max - A1*(double) min)/(A2-A1);
+        double k = 1/(x0-(double) max)*A1;
+
+        int n_sample = 1000;
+        float[] x = new float[n_sample];
+        float[] y = new float[n_sample];
+
+        float min_display = min * (float) 0.7;
+        float max_display = max * (float) 1.3;
+        float delta_step = (max_display - min_display)/n_sample;
+
+        for (int i = 0; i < n_sample; i++) {
+            x[i] = min_display + delta_step*i;
+            y[i] = (float) (1 / (Math.exp(-k * (x[i] - x0)) + 1));
+        }
+
+        Plot logisticCurvePlot = new Plot("Logistic curve", "Resolution", "Calibrated output (AU)");
+        logisticCurvePlot.addPoints(x, y, Plot.LINE);
+        logisticCurvePlot.show();
+
     }
 
     public ImageStack calculateF1map(ImageStack ims1, ImageStack ims2){
@@ -236,6 +279,25 @@ public class GetF1map_ implements PlugIn {
         }
 
         return entryWithSubstring;
+    }
+
+    public float[] getMinMaxfromImageStack(ImageStack ims){
+        float[] minmax = new float[2];
+        minmax[0] = Float.MAX_VALUE;
+        minmax[1] = -Float.MAX_VALUE;
+
+        double min, max;
+        for (int i = 0; i < ims.getSize(); i++) {
+            min = ims.getProcessor(i+1).convertToFloatProcessor().getMin();
+            max = ims.getProcessor(i+1).convertToFloatProcessor().getMax();
+            IJ.log("Min: "+min);
+            IJ.log("Max: "+max);
+
+            if ((float) min < minmax[0]) minmax[0] = (float) min;
+            if ((float) max > minmax[1]) minmax[1] = (float) max;
+        }
+
+        return minmax;
     }
 
 

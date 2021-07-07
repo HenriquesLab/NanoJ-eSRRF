@@ -192,6 +192,7 @@ public class LiveSRRF_optimised_ implements PlugIn {
             IJ.log("Getting 3D-SRRF calibration file...");
             calibTablePath3DSRRF = IJ.getFilePath("Choose 3D-SRRF calibration table to load...");
             if (calibTablePath3DSRRF == null) return;
+            writeToDiskToUse = false; //disable write to disk when doing 3D
         }
 
         // Save last user entries
