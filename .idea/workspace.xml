@@ -1,16 +1,23 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="ChangeListManager">
-    <list default="true" id="f3c8ed8a-af08-41cd-871f-04b718898254" name="Default Changelist" comment="">
+    <list default="true" id="60a902d6-3733-48ef-8cfc-249d2add7820" name="Default Changelist" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/out/production/LiveSRRF/nanoj/liveSRRF/RadialGradientConvergenceCL.class" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/out/production/LiveSRRF/nanoj/liveSRRF/gui/ParametersSweep_.class" beforeDir="false" afterPath="$PROJECT_DIR$/out/production/LiveSRRF/nanoj/liveSRRF/gui/ParametersSweep_.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/out/production/LiveSRRF/plugins.config" beforeDir="false" afterPath="$PROJECT_DIR$/out/production/LiveSRRF/plugins.config" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/nanoj/liveSRRF/LiveSRRF_CL.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/nanoj/liveSRRF/LiveSRRF_CL.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/nanoj/liveSRRF/gui/LiveSRRF_optimised_.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/nanoj/liveSRRF/gui/LiveSRRF_optimised_.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/nanoj/liveSRRF/gui/ParametersSweep_.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/nanoj/liveSRRF/gui/ParametersSweep_.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/nanoj/liveSRRF/gui/SSIMtrace_.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/nanoj/liveSRRF/gui/SSIMtrace_.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/plugins.config" beforeDir="false" afterPath="$PROJECT_DIR$/src/plugins.config" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
     <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="Git.Merge.Settings">
+    <option name="BRANCH" value="LiveSRRF-NoInterpolation" />
   </component>
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />

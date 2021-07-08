@@ -54,15 +54,13 @@ public class ParametersSweep_ implements PlugIn {
             doFHTinterpolation,
             previousAdvSettings = false;
 
-    private final boolean DEBUG = false;
-
     private float[] fwhmArray;
     private int[] sensitivityArray,
             nframeArray;
 
     private float fixedSigma;
 
-    private final String eSRRFVersion = "v1.5.0";
+    private final String eSRRFSweepVersion = "v1.0";
     private float[] shiftX, shiftY;
 
     private String imageTitle;
@@ -71,6 +69,9 @@ public class ParametersSweep_ implements PlugIn {
     // Advanced formats
     private final NanoJPrefs prefs = new NanoJPrefs(this.getClass().getName());
     private final NanoJProfiler prof = new NanoJProfiler();
+
+    // DEBUG mode
+    private final boolean DEBUG = false;
 
     public void run(String arg) {
 
@@ -90,7 +91,7 @@ public class ParametersSweep_ implements PlugIn {
         IJ.log("\\Clear");  // Clear the log window
         IJ.log("-------------------------------------");
         IJ.log("-------------------------------------");
-        IJ.log("eSRRF - Parameters sweep " + eSRRFVersion);
+        IJ.log("eSRRF - Parameters sweep " + eSRRFSweepVersion);
         LocalDateTime now = LocalDateTime.now();
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
         IJ.log(now.format(formatter));
@@ -116,7 +117,7 @@ public class ParametersSweep_ implements PlugIn {
 
         // Build GUI
         Font headerFont = new Font("Arial", Font.BOLD, 16);
-        NonBlockingGenericDialog gd = new NonBlockingGenericDialog("eSRRF - Parameters sweep " + eSRRFVersion);
+        NonBlockingGenericDialog gd = new NonBlockingGenericDialog("eSRRF - Parameters sweep " + eSRRFSweepVersion);
         gd.addMessage("-=-= eSRRF reconstruction =-=-\n", headerFont);
         gd.addNumericField("Magnification (default: 5)", prefs.get("magnification", 5), 0);
 
@@ -297,6 +298,7 @@ public class ParametersSweep_ implements PlugIn {
 
         int r = 0;
         boolean userPressedEscape;
+        double remainingTime;
 
         for (int nfi = 0; nfi < nframeArray.length; nfi++) {
 
@@ -483,9 +485,11 @@ public class ParametersSweep_ implements PlugIn {
                         }
                     }
 
-
                     // Increment the reconstruction counter
                     r++;
+
+                    remainingTime = (((System.nanoTime() - loopStart)/1e9) /r)*(n_calculation-r);
+                    IJ.log("Estimated remaining time: " + timeToString(remainingTime));
                 }
             }
 
@@ -645,9 +649,8 @@ public class ParametersSweep_ implements PlugIn {
 
         IJ.run("Cascade", "");
 
-        long executionEndTime = System.nanoTime();
-        double executionTime = (executionEndTime - loopStart)/1e9;
-        IJ.log("Execution time: " + timeToString(executionTime));
+        double executionTime = (System.nanoTime() - loopStart)/1e9;
+        IJ.log("Total execution time: " + timeToString(executionTime));
 
         IJ.log("-------------------------------------");
         if (DEBUG) {
@@ -665,6 +668,7 @@ public class ParametersSweep_ implements PlugIn {
     //    --- Grab settings ---
     private boolean grabSettings(GenericDialog gd) {
 
+        boolean goodToGo = true;
         magnification = (int) gd.getNextNumber();
 
         calculateAVG = gd.getNextBoolean();
@@ -704,61 +708,66 @@ public class ParametersSweep_ implements PlugIn {
         if (calculateFRC) n_nfToUse = Math.min((nSlices / 2 - nf0) / deltanf + 1, n_nf);
         else n_nfToUse = Math.min((nSlices - nf0) / deltanf + 1, n_nf);
 
-        if (n_nfToUse < 0){
-            return false;
+        if (DEBUG){
+            IJ.log("n_nfToUse = "+n_nfToUse);
+        }
+        if (n_nfToUse <= 0){
+//            IJ.log("Not enough frames to compute this sweep.");
+            goodToGo = false;
+        }
+        else {
+            nframeArray = new int[n_nfToUse];
+            for (int i = 0; i < n_nfToUse; i++) {
+                nframeArray[i] = nf0 + i * deltanf;
+            }
+
+            boolean showAdvancedSettings = gd.getNextBoolean();
+            if (showAdvancedSettings && !previousAdvSettings) advancedSettingsGUI();
+            previousAdvSettings = showAdvancedSettings;
+
+            prefs.set("magnification", magnification);
+            prefs.set("calculateAVG", calculateAVG);
+            prefs.set("calculateVAR", calculateVAR);
+            prefs.set("calculateTAC2", calculateTAC2);
+            prefs.set("getInterpolatedImage", getInterpolatedImage);
+
+            prefs.set("correctVibration", correctVibration);
+
+            prefs.set("fwhm0", fwhm0);
+            prefs.set("deltafwhm", deltafwhm);
+            prefs.set("n_fwhm", n_fwhm);
+
+            prefs.set("S0", S0);
+            prefs.set("deltaS", deltaS);
+            prefs.set("n_S", n_S);
+
+            prefs.set("nf0", nf0);
+            prefs.set("deltanf", deltanf);
+            prefs.set("n_nf", n_nf); // save the one set by the user, not the calculated one
+
+            prefs.set("showRecons", showRecons);
+            prefs.set("showErrorMaps", showErrorMaps);
+            prefs.set("showRSC", showRSC);
+
+            prefs.set("calculateRSE", calculateRSE);
+            prefs.set("calculateRSP", calculateRSP);
+
+            prefs.set("fixSigma", fixSigma);
+            prefs.set("fixedSigma", fixedSigma);
+
+            prefs.set("cropBorder", cropBorder);
+            prefs.set("cropSize", cropSize);
+
+            prefs.set("calculateFRC", calculateFRC);
+            prefs.set("doFHTinterpolation", doFHTinterpolation);
+
+            prefs.set("blockSize", blockSize);
+            prefs.set("singleFrameLoad", singleFrameLoad);
+
+            prefs.save();
         }
 
-        nframeArray = new int[n_nfToUse];
-        for (int i = 0; i < n_nfToUse; i++) {
-            nframeArray[i] = nf0 + i * deltanf;
-        }
-
-        boolean showAdvancedSettings = gd.getNextBoolean();
-        if (showAdvancedSettings && !previousAdvSettings) advancedSettingsGUI();
-        previousAdvSettings = showAdvancedSettings;
-
-        prefs.set("magnification", magnification);
-        prefs.set("calculateAVG", calculateAVG);
-        prefs.set("calculateVAR", calculateVAR);
-        prefs.set("calculateTAC2", calculateTAC2);
-        prefs.set("getInterpolatedImage", getInterpolatedImage);
-
-        prefs.set("correctVibration", correctVibration);
-
-        prefs.set("fwhm0", fwhm0);
-        prefs.set("deltafwhm", deltafwhm);
-        prefs.set("n_fwhm", n_fwhm);
-
-        prefs.set("S0", S0);
-        prefs.set("deltaS", deltaS);
-        prefs.set("n_S", n_S);
-
-        prefs.set("nf0", nf0);
-        prefs.set("deltanf", deltanf);
-        prefs.set("n_nf", n_nf); // save the one set by the user, not the calculated one
-
-        prefs.set("showRecons", showRecons);
-        prefs.set("showErrorMaps", showErrorMaps);
-        prefs.set("showRSC", showRSC);
-
-        prefs.set("calculateRSE", calculateRSE);
-        prefs.set("calculateRSP", calculateRSP);
-
-        prefs.set("fixSigma", fixSigma);
-        prefs.set("fixedSigma", fixedSigma);
-
-        prefs.set("cropBorder", cropBorder);
-        prefs.set("cropSize", cropSize);
-
-        prefs.set("calculateFRC", calculateFRC);
-        prefs.set("doFHTinterpolation", doFHTinterpolation);
-
-        prefs.set("blockSize", blockSize);
-        prefs.set("singleFrameLoad", singleFrameLoad);
-
-        prefs.save();
-
-        return true;
+        return goodToGo;
     }
 
 
