@@ -10,13 +10,13 @@ import ij.plugin.PlugIn;
 import nanoj.liveSRRF.SSIMCalculator;
 import nanoj.core2.NanoJPrefs;
 
+import static nanoj.liveSRRF.HelperUtils.timeToString;
 import static nanoj.liveSRRF.SSIMCalculator.getRegularizationFactors;
 
 
 public class SSIMtrace_ implements PlugIn {
 
-    private NanoJPrefs prefs = new NanoJPrefs(this.getClass().getName());
-
+    private final NanoJPrefs prefs = new NanoJPrefs(this.getClass().getName());
 
     public void run(String arg) {
 
@@ -26,8 +26,10 @@ public class SSIMtrace_ implements PlugIn {
         if (imp == null) return;
         imp.show();
 
-
         IJ.log("\\Clear");  // Clear the log window
+        IJ.log("-------------------------------------");
+        IJ.log("-------------------------------------");
+        IJ.log("eSRRF - Estimate number of frame"); //TODO: what's taking so long on Wolverine?
 
         ImageStack ims = imp.getStack();
 
@@ -45,12 +47,14 @@ public class SSIMtrace_ implements PlugIn {
 //        gd.addNumericField("Radius (in pixels)", prefs.get("radius", 2), 2);
         gd.addNumericField("Block size (frames, 0 = auto)", prefs.get("blockSize", 200), 0);
 //        gd.addCheckbox("Show trace", prefs.get("showTrace", true));
-        gd.addNumericField("Smoothing factor", prefs.get("smoothingFactor", 0.15f),2);
-        gd.addNumericField("Sigma cut-off", prefs.get("sigmaCutOff", 2),1);
-        gd.addCheckbox("Calculate Cut-off over time", prefs.get("calculateCutoffVStime", true));
+        gd.addNumericField("Sigma cut-off (default: 3)", prefs.get("sigmaCutOff", 2),1);
+        gd.addCheckbox("Calculate Cut-off over time (default: Disabled)", prefs.get("calculateCutoffVStime", true));
+        gd.addNumericField("Smoothing factor (default: 0.15)", prefs.get("smoothingFactor", 0.15f),2);
+        gd.addMessage("The smoothing factor only applies to determine the cut-off when no block size is defined (block size = 0) or when the Calculate cut-off over time is enabled.");
         gd.showDialog();
 
         if (gd.wasCanceled()) {
+            IJ.log("Cancelled by user.");
             return;
         }
 
@@ -71,6 +75,7 @@ public class SSIMtrace_ implements PlugIn {
         prefs.set("calculateCutoffVStime", calculateCutoffVStime);
 
 
+        long loopStart = System.nanoTime();
 
         // Get the regularization factors from the stack
         float[] regFactors = getRegularizationFactors(ims, regMethod);
@@ -99,6 +104,8 @@ public class SSIMtrace_ implements PlugIn {
             blockSize = nFrames-1;
         }
 
+        IJ.log("-------------------------------------");
+        IJ.log("Parameters:");
         IJ.log("Block size: "+blockSize);
         IJ.log("Number of blocks: "+nBlocks);
         IJ.log("Sigma cut-off: "+sigmaCutOff);
@@ -126,6 +133,11 @@ public class SSIMtrace_ implements PlugIn {
 
         displaySSIMtraces(ssimTraces, imageTitle, sigmaCutOff);
         if (calculateCutoffVStime) getTimeConstantOverTime(ssimTraces, smoothingFactor, sigmaCutOff);
+
+        IJ.log("-----------------------");
+        long executionEndTime = System.nanoTime();
+        double executionTime = (executionEndTime - loopStart)/1e9;
+        IJ.log("Execution time: " + timeToString(executionTime));
 
     }
 
@@ -210,8 +222,9 @@ public class SSIMtrace_ implements PlugIn {
             cutOffPosition ++;
         }
         cutOffPosition ++; // adjust for the fact that frame numbers start at 1
-        IJ.log("Sigma: "+meanSTD);
-        IJ.log("Cut-off position: "+cutOffPosition);
+//        IJ.log("Sigma: "+meanSTD);
+        IJ.log("-------------------------");
+        IJ.log("Cut-off position: "+cutOffPosition+" frames.");
         return cutOffPosition;
     }
 
@@ -220,15 +233,15 @@ public class SSIMtrace_ implements PlugIn {
 
         Plot ssimTracePlot = new Plot(title + " - SSIM metric", "Number of frames", "SSIM metric");
         int traceLength = ssimTraces[0].length;
-        int nTraces = ssimTraces.length;
+//        int nTraces = ssimTraces.length;
 
         double[] frames = new double[traceLength];
         for (int f = 0; f < traceLength; f++) {
             frames[f] = f+1;
         }
 
-        for (int i = 0; i < nTraces; i++) {
-            ssimTracePlot.add("line", frames, ssimTraces[i]);
+        for (double[] ssimTrace : ssimTraces) {
+            ssimTracePlot.add("line", frames, ssimTrace);
         }
 
         ssimTracePlot.setAxisXLog(true);
@@ -268,9 +281,9 @@ public class SSIMtrace_ implements PlugIn {
 
 //        double[] sampleT = new double[nTraces];
         for (int i = 0; i < traceLength; i++) {
-            for (int j = 0; j < nTraces; j++) {
-                meanSTDPvalTraces[0][i] += traces[j][i]/nTraces;
-                meanSTDPvalTraces[1][i] += traces[j][i]*traces[j][i]/nTraces;
+            for (double[] trace : traces) {
+                meanSTDPvalTraces[0][i] += trace[i] / nTraces;
+                meanSTDPvalTraces[1][i] += trace[i] * trace[i] / nTraces;
 //                sampleT[j] = traces[j][i];
             }
 //            try{

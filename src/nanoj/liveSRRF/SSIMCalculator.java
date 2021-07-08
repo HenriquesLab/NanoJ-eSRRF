@@ -1,12 +1,10 @@
 package nanoj.liveSRRF;
 
-import gnu.trove.procedure.TFloatProcedure;
 import ij.IJ;
 import ij.ImageStack;
 import ij.plugin.filter.GaussianBlur;
 import ij.process.FloatProcessor;
 import ij.process.ImageProcessor;
-import nanoj.core.java.threading.NanoJThreadExecutor;
 
 
 import java.util.Arrays;
@@ -24,10 +22,12 @@ public class SSIMCalculator {
     private GaussianBlur gaussBlurringMachine;
     private double radius;
     private final double accuracy = 0.01;
-    private double C1, C2;
-    private double mu_ref, sig_ref;
+    private final double C1, C2;
+//    private double mu_ref, sig_ref;
     private double[][] musig;
     private ImageStack ims;
+
+    private static boolean DEBUG = false;
 
 
     // Constructor #1
@@ -40,7 +40,9 @@ public class SSIMCalculator {
 
         if (radius < Float.MAX_VALUE) {
             //Get mu_ref
-            IJ.log("Initialising SSIM calculator...");
+            if (DEBUG) {
+                IJ.log("Initialising SSIM calculator...");
+            }
             this.gaussBlurringMachine = new GaussianBlur();
             ipRefGauss = ipRef.duplicate().convertToFloatProcessor();
             gaussBlurringMachine.blurFloat(ipRefGauss, radius, radius, accuracy);
@@ -54,9 +56,9 @@ public class SSIMCalculator {
             ipRefSig2 = subtract(ipRef2Gauss, multiply(ipRefGauss, ipRefGauss));
         }
 
-        double[] musig_ref = getMeanStdofImage(ipRef);
-        mu_ref = musig_ref[0];
-        sig_ref = musig_ref[1];
+//        double[] musig_ref = getMeanStdofImage(ipRef);
+//        mu_ref = musig_ref[0];
+//        sig_ref = musig_ref[1];
     }
 
 
@@ -75,15 +77,15 @@ public class SSIMCalculator {
     }
 
 
-    public double CalculateMetric(ImageProcessor ip){
-        double[] musig = getMeanStdofImage(ip);
-        double[] musigCC = getMeanStdofImage(multiply(ip.duplicate().convertToFloatProcessor(), ipRef));
-        double CC = musigCC[0]-musig[0]*mu_ref;
-
-        double ssim = ((2.0f*mu_ref*musig[0] + C1)*(2.0f*CC + C2)/((mu_ref*mu_ref + musig[0]*musig[0] + C1)*(sig_ref*sig_ref + musig[1]*musig[1] + C2)));
-
-        return ssim;
-    }
+//    public double CalculateMetric(ImageProcessor ip){
+//        double[] musig = getMeanStdofImage(ip);
+//        double[] musigCC = getMeanStdofImage(multiply(ip.duplicate().convertToFloatProcessor(), ipRef));
+//        double CC = musigCC[0]-musig[0]*mu_ref;
+//
+//        double ssim = ((2.0f*mu_ref*musig[0] + C1)*(2.0f*CC + C2)/((mu_ref*mu_ref + musig[0]*musig[0] + C1)*(sig_ref*sig_ref + musig[1]*musig[1] + C2)));
+//
+//        return ssim;
+//    }
 
     public double[] rollingSSIM(int refindex, int traceLength){
 
@@ -158,7 +160,6 @@ public class SSIMCalculator {
         FloatProcessor ssim = divide(multiply(A, B), multiply(C, D));
 
         return ssim;
-//        return ipRefSig2;
     }
 
     // ------------------ Functions ------------------
@@ -169,21 +170,27 @@ public class SSIMCalculator {
         if (regMethod.equals("image bit depth")) {
             int bitDepth = ims.getBitDepth();
             C[0] = (float) Math.pow(0.01f * (float) (Math.pow(2.0f, bitDepth) - 1), 2);
-            IJ.log("Bit depth: "+bitDepth);
+            if (DEBUG) {
+                IJ.log("Bit depth: " + bitDepth);
+            }
         }
         else{
             float[] percentiles = new float[2];
             percentiles[0] = getPercentileFromImageStack(ims, 0.01f);
             percentiles[1] = getPercentileFromImageStack(ims, 0.99f);
-            IJ.log("1% percentile: "+percentiles[0]);
-            IJ.log("99% percentile: "+percentiles[1]);
+            if (DEBUG) {
+                IJ.log("1% percentile: " + percentiles[0]);
+                IJ.log("99% percentile: " + percentiles[1]);
+            }
             C[0] = (float) Math.pow(0.01f * (percentiles[1] - percentiles[0]), 2);
         }
         C[1] = 9 * C[0];
 
-        IJ.log("Regularization factors: "+regMethod);
-        IJ.log("C1: "+C[0]);
-        IJ.log("C2: "+C[1]);
+        if (DEBUG) {
+            IJ.log("Regularization factors: " + regMethod);
+            IJ.log("C1: " + C[0]);
+            IJ.log("C2: " + C[1]);
+        }
 
         return C;
 
@@ -204,9 +211,9 @@ public class SSIMCalculator {
         float[] values = (float[]) ip.duplicate().getPixels();
         double m = 0;
         double s = 0;
-        for (int i = 0; i < values.length; i++) {
-            m += values[i];
-            s += values[i]*values[i];
+        for (float value : values) {
+            m += value;
+            s += value * value;
         }
         m /= values.length;
         s /= values.length;

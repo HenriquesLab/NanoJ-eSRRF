@@ -356,4 +356,21 @@ public class HelperUtils {
         }
     }
 
+    // -- Convert time to string --
+    public static String timeToString(double time){
+
+        String timeString;
+        int _h = (int) (time / 3600);
+        int _m = (int) (((time % 86400) % 3600) / 60);
+        int _s = (int) (((time % 86400) % 3600) % 60);
+        if (_h > 0) timeString = _h+"h "+_m+"m "+_s+"s";
+        else {
+            if (_m > 0) timeString = _m+"m "+_s+"s";
+            else timeString = _s+"s";
+        }
+
+        return timeString;
+
+    }
+
 }

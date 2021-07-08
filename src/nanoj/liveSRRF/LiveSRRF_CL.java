@@ -794,61 +794,84 @@ public class LiveSRRF_CL {
     }
 
     // --- Read the gradient buffers ---
-    public ImageStack readGradientBuffers(boolean interpolated) {
+    public ImageStack readGradientBuffers() {
 
         queue.finish(); // Make sure everything is done
-
-        int imageWidth = widthS;
-        int imageHeight = heightS;
 
         FloatBuffer bufferGx;
         FloatBuffer bufferGy;
         FloatBuffer bufferGz = null;
 
-        if (!interpolated){
+        int imageGradientWidth = widthS;
+        int imageGradientHeight = heightS;
+
+        if (doFHTinterpolation){
+            imageGradientWidth *= magnification;
+            imageGradientHeight *= magnification;
+
             queue.putReadBuffer(clBufferGx, true);
             queue.putReadBuffer(clBufferGy, true);
-            if (do3DSRRF) queue.putReadBuffer(clBufferGz, true);
-
             bufferGx = clBufferGx.getBuffer();
             bufferGy = clBufferGy.getBuffer();
-            if(do3DSRRF) bufferGz = clBufferGz.getBuffer();
         }
         else {
-            imageWidth *= gradientMag;
-            imageHeight *= gradientMag;
+            imageGradientWidth *= gradientMag;
+            imageGradientHeight *= gradientMag;
 
             queue.putReadBuffer(clBufferGxInt, true);
             queue.putReadBuffer(clBufferGyInt, true);
-            if (do3DSRRF) queue.putReadBuffer(clBufferGzInt, true);
-
             bufferGx = clBufferGxInt.getBuffer();
             bufferGy = clBufferGyInt.getBuffer();
             if (do3DSRRF) bufferGz = clBufferGzInt.getBuffer();
         }
 
-        ImageStack imsGradient = new ImageStack(imageWidth, imageHeight);
+
+
+//        if (!interpolated){
+//            queue.putReadBuffer(clBufferGx, true);
+//            queue.putReadBuffer(clBufferGy, true);
+//            if (do3DSRRF) queue.putReadBuffer(clBufferGz, true);
+//
+//            bufferGx = clBufferGx.getBuffer();
+//            bufferGy = clBufferGy.getBuffer();
+//            if(do3DSRRF) bufferGz = clBufferGz.getBuffer();
+//        }
+//        else {
+//            imageGradientWidth *= gradientMag;
+//            imageGradientHeight *= gradientMag;
+//
+//            queue.putReadBuffer(clBufferGxInt, true);
+//            queue.putReadBuffer(clBufferGyInt, true);
+//            if (do3DSRRF) queue.putReadBuffer(clBufferGzInt, true);
+//
+//            bufferGx = clBufferGxInt.getBuffer();
+//            bufferGy = clBufferGyInt.getBuffer();
+//            if (do3DSRRF) bufferGz = clBufferGzInt.getBuffer();
+//        }
+
+
+        ImageStack imsGradient = new ImageStack(imageGradientWidth, imageGradientHeight);
         // Load data // TODO: this currently only outputs the first time frame but all the planes
         for (int i = 0; i < nPlanes; i++) {
 
-            float[] dataGx = new float[imageWidth * imageHeight];
-            float[] dataGy = new float[imageWidth * imageHeight];
-            float[] dataGz = new float[imageWidth * imageHeight];
+            float[] dataGx = new float[imageGradientWidth * imageGradientHeight];
+            float[] dataGy = new float[imageGradientWidth * imageGradientHeight];
+            float[] dataGz = new float[imageGradientWidth * imageGradientHeight];
 
-            for (int n = 0; n < imageWidth * imageHeight; n++) {
-                dataGx[n] = bufferGx.get(n + i*imageWidth*imageHeight);
+            for (int n = 0; n < imageGradientWidth * imageGradientHeight; n++) {
+                dataGx[n] = bufferGx.get(n + i*imageGradientWidth*imageGradientHeight);
                 if (Float.isNaN(dataGx[n])) dataGx[n] = 0; // make sure we dont get any weirdness
-                dataGy[n] = bufferGy.get(n + i*imageWidth*imageHeight);
+                dataGy[n] = bufferGy.get(n + i*imageGradientWidth*imageGradientHeight);
                 if (Float.isNaN(dataGy[n])) dataGy[n] = 0; // make sure we dont get any weirdness
                 if (do3DSRRF) {
-                    dataGz[n] = bufferGz.get(n + i * imageWidth * imageHeight);
+                    dataGz[n] = bufferGz.get(n + i * imageGradientWidth * imageGradientHeight);
                     if (Float.isNaN(dataGz[n])) dataGz[n] = 0; // make sure we dont get any weirdness
                 }
             }
 
-            imsGradient.addSlice(new FloatProcessor(imageWidth, imageHeight, dataGx));
-            imsGradient.addSlice(new FloatProcessor(imageWidth, imageHeight, dataGy));
-            if (do3DSRRF) imsGradient.addSlice(new FloatProcessor(imageWidth, imageHeight, dataGz));
+            imsGradient.addSlice(new FloatProcessor(imageGradientWidth, imageGradientHeight, dataGx));
+            imsGradient.addSlice(new FloatProcessor(imageGradientWidth, imageGradientHeight, dataGy));
+            if (do3DSRRF) imsGradient.addSlice(new FloatProcessor(imageGradientWidth, imageGradientHeight, dataGz));
         }
 
         return imsGradient;

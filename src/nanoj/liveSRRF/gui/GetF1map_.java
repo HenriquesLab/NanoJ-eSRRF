@@ -37,6 +37,10 @@ public class GetF1map_ implements PlugIn {
         gd.addCheckbox("Show logistic conversion curve",false);
         gd.showDialog();
 
+        if (gd.wasCanceled()) {
+            return;
+        }
+
         if (DEBUG) {
             IJ.log("Listing current images...");
             for (String imageTitle : imageTitles) {
@@ -47,8 +51,8 @@ public class GetF1map_ implements PlugIn {
         // Get the parameters from the GUI
         String RSPmapTitle = gd.getNextChoice();
         String FRCmapTitle = gd.getNextChoice();
-        IJ.log("RSP map: "+RSPmapTitle);
-        IJ.log("FRC map: "+FRCmapTitle);
+        IJ.log("RSP map: " + RSPmapTitle);
+        IJ.log("FRC map: " + FRCmapTitle);
 
         boolean autoResMinMax = gd.getNextBoolean();
         float Res_min = (float) gd.getNextNumber();
@@ -85,7 +89,7 @@ public class GetF1map_ implements PlugIn {
         }
 
         // Convert FRC resolution maps via logistic conversion
-        IJ.log("Logistic conversion using Min = "+Res_min+" um and Max = "+Res_max+" um...");
+        IJ.log("Logistic conversion using Min = " + Res_min + " um and Max = " + Res_max + " um...");
         ImageStack imsFRCmapConverted = logisticImageConversion(imsFRCmap, Res_min, Res_max);
         if (displayFRCrescaled) {
             ImagePlus impFRCmapConverted = new ImagePlus("FRC map Converted", imsFRCmapConverted);
@@ -102,11 +106,11 @@ public class GetF1map_ implements PlugIn {
         impF1map.show();
         IJ.run("Maximize", "");
 
-        if (DEBUG){
-            IJ.log("Calibration pixel width: "+cal.pixelWidth);
-            IJ.log("Calibration pixel height: "+cal.pixelHeight);
-            IJ.log("Calibration xOrigin: "+cal.xOrigin);
-            IJ.log("Calibration yOrigin: "+cal.yOrigin);
+        if (DEBUG) {
+            IJ.log("Calibration pixel width: " + cal.pixelWidth);
+            IJ.log("Calibration pixel height: " + cal.pixelHeight);
+            IJ.log("Calibration xOrigin: " + cal.xOrigin);
+            IJ.log("Calibration yOrigin: " + cal.yOrigin);
         }
 
         if (showLogisticConversionCurve) displayLogisticCurve(Res_min, Res_max);
@@ -115,9 +119,9 @@ public class GetF1map_ implements PlugIn {
         float[][] resultsMax = findMaximum(imsF1map, cal);
         for (int s = 0; s < imsF1map.getSize(); s++) {
             if (imsF1map.getSize() > 1) IJ.log("Results when using " + resultsMax[5][s] + " frames:");
-            IJ.log("Max F1 value: "+resultsMax[0][s]+ " at ("+(int) resultsMax[1][s]+","+(int) resultsMax[2][s]+")");
-            IJ.log("Best Radius: "+resultsMax[3][s]);
-            IJ.log("Best Sensitivity: "+resultsMax[4][s]);
+            IJ.log("Max F1 value: " + resultsMax[0][s] + " at (" + (int) resultsMax[1][s] + "," + (int) resultsMax[2][s] + ")");
+            IJ.log("Best Radius: " + resultsMax[3][s]);
+            IJ.log("Best Sensitivity: " + resultsMax[4][s]);
             IJ.log("-------------------");
         }
 
@@ -139,6 +143,7 @@ public class GetF1map_ implements PlugIn {
 
         IJ.log("-------------------");
         IJ.log("All done.");
+
 
     }
 
@@ -281,7 +286,7 @@ public class GetF1map_ implements PlugIn {
         return entryWithSubstring;
     }
 
-    public float[] getMinMaxfromImageStack(ImageStack ims){
+    public static float[] getMinMaxfromImageStack(ImageStack ims){
         float[] minmax = new float[2];
         minmax[0] = Float.MAX_VALUE;
         minmax[1] = -Float.MAX_VALUE;

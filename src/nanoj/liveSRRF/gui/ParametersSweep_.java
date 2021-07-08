@@ -23,6 +23,7 @@ import java.time.format.DateTimeFormatter;
 
 import static nanoj.core.java.tools.NJ_LUT.applyLUT_SQUIRREL_Errors;
 import static nanoj.core.java.tools.NJ_LUT.applyLUT_SQUIRREL_FRC;
+import static nanoj.liveSRRF.HelperUtils.timeToString;
 
 
 public class ParametersSweep_ implements PlugIn {
@@ -128,7 +129,6 @@ public class ParametersSweep_ implements PlugIn {
         gd.addCheckbox("Correct vibration (default: off)", prefs.get("correctVibration", false));
         gd.addCheckbox("Show all reconstructions (default: on)", prefs.get("showRecons", true));
 
-
         gd.addMessage("-=-= Sweeping eSRRF parameters =-=-\n", headerFont);
         gd.addMessage("Radius\n", headerFont);
         gd.addNumericField("Start", prefs.get("fwhm0", 2), 2);
@@ -163,6 +163,7 @@ public class ParametersSweep_ implements PlugIn {
         // If the GUI was cancelled
         if (gd.wasCanceled()) {
             eSRRF.release();
+            IJ.log("Cancelled by user.");
             return;
         }
 
@@ -290,7 +291,10 @@ public class ParametersSweep_ implements PlugIn {
         ImageStack imsFRCresolutionVAR = new ImageStack(fwhmArray.length, sensitivityArray.length, nframeArray.length);
         ImageStack imsFRCresolutionTAC2 = new ImageStack(fwhmArray.length, sensitivityArray.length, nframeArray.length);
 
-        // Set the number of reconstuctions
+        // Set the number of reconstructions
+
+        long loopStart = System.nanoTime();
+
         int r = 0;
         boolean userPressedEscape;
 
@@ -591,47 +595,45 @@ public class ParametersSweep_ implements PlugIn {
 
         if (calculateRSE) {
             if (calculateAVG){
-                displayImagePlus(imsRMSEavg, " - RMSE sweep map (AVG)", cal, "ErrorMap-LUT");
+                displayImagePlus(imsRMSEavg, " - RMSE sweep map (AVG)", sweepMapCalib, "ErrorMap-LUT");
                 IJ.run("Maximize", "");
             }
             if (calculateVAR){
-                displayImagePlus(imsRMSEvar, " - RMSE sweep map (VAR)", cal, "ErrorMap-LUT");
+                displayImagePlus(imsRMSEvar, " - RMSE sweep map (VAR)", sweepMapCalib, "ErrorMap-LUT");
                 IJ.run("Maximize", "");
             }
             if (calculateTAC2){
-                displayImagePlus(imsRMSEtac2, " - RMSE sweep map (TAC2)", cal, "ErrorMap-LUT");
+                displayImagePlus(imsRMSEtac2, " - RMSE sweep map (TAC2)", sweepMapCalib, "ErrorMap-LUT");
                 IJ.run("Maximize", "");
             }
         }
 
         if (calculateRSP) {
-
             if (calculateAVG){
-                displayImagePlus(imsPPMCCavg, " - RSP sweep map (AVG)", cal, "ErrorMap-LUT");
+                displayImagePlus(imsPPMCCavg, " - RSP sweep map (AVG)", sweepMapCalib, "ErrorMap-LUT");
                 IJ.run("Maximize", "");
             }
             if (calculateVAR){
-                displayImagePlus(imsPPMCCvar, " - RSP sweep map (VAR)", cal, "ErrorMap-LUT");
+                displayImagePlus(imsPPMCCvar, " - RSP sweep map (VAR)", sweepMapCalib, "ErrorMap-LUT");
                 IJ.run("Maximize", "");
             }
             if (calculateTAC2){
-                displayImagePlus(imsPPMCCtac2, " - RSP sweep map (TAC2)", cal, "ErrorMap-LUT");
+                displayImagePlus(imsPPMCCtac2, " - RSP sweep map (TAC2)", sweepMapCalib, "ErrorMap-LUT");
                 IJ.run("Maximize", "");
             }
         }
 
         if (calculateFRC) {
-
             if (calculateAVG){
-                displayImagePlus(imsFRCresolutionAVG, " - FRC resolution sweep map (AVG)", cal, "FRC-LUT");
+                displayImagePlus(imsFRCresolutionAVG, " - FRC resolution sweep map (AVG)", sweepMapCalib, "FRC-LUT");
                 IJ.run("Maximize", "");
             }
             if (calculateVAR){
-                displayImagePlus(imsFRCresolutionVAR, " - FRC resolution sweep map (VAR)", cal, "FRC-LUT");
+                displayImagePlus(imsFRCresolutionVAR, " - FRC resolution sweep map (VAR)", sweepMapCalib, "FRC-LUT");
                 IJ.run("Maximize", "");
             }
             if (calculateTAC2){
-                displayImagePlus(imsFRCresolutionTAC2, " - FRC resolution sweep map (TAC2)", cal, "FRC-LUT");
+                displayImagePlus(imsFRCresolutionTAC2, " - FRC resolution sweep map (TAC2)", sweepMapCalib, "FRC-LUT");
                 IJ.run("Maximize", "");
             }
         }
@@ -643,8 +645,14 @@ public class ParametersSweep_ implements PlugIn {
 
         IJ.run("Cascade", "");
 
+        long executionEndTime = System.nanoTime();
+        double executionTime = (executionEndTime - loopStart)/1e9;
+        IJ.log("Execution time: " + timeToString(executionTime));
+
         IJ.log("-------------------------------------");
-        IJ.log("RAM used: " + IJ.freeMemory());
+        if (DEBUG) {
+            IJ.log("RAM used: " + IJ.freeMemory());
+        }
         IJ.log("Bye-bye !");
 
     }
@@ -885,7 +893,6 @@ public class ParametersSweep_ implements PlugIn {
         IJ.run(imp, "Enhance Contrast", "saturated=0.5");
         if (nameLUT.equals("ErrorMap-LUT")) applyLUT_SQUIRREL_Errors(imp);
         else if (nameLUT.equals("FRC-LUT")) applyLUT_SQUIRREL_FRC(imp);
-
         imp.show();
     }
 

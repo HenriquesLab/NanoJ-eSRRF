@@ -24,6 +24,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
 import static java.lang.Math.min;
+import static nanoj.liveSRRF.HelperUtils.timeToString;
 
 public class LiveSRRF_optimised_ implements PlugIn {
 
@@ -66,9 +67,9 @@ public class LiveSRRF_optimised_ implements PlugIn {
             showImStabPlot,
             intWeighting,
             showGradient,
-            showIntGradient,
+//            showIntGradient,
             do3DSRRF,
-            DEBUG = true;
+            DEBUG = false;
 
     private final boolean enable3DSRRF = true;
     private final String eSRRFVersion = "v1.5.0";
@@ -382,22 +383,24 @@ public class LiveSRRF_optimised_ implements PlugIn {
                     }
                 }
 
-            IJ.log("RAM used: " + IJ.freeMemory());
+            if (DEBUG) {
+                IJ.log("RAM used: " + IJ.freeMemory());
+            }
         }
         // End looping trough SRRF frames --------------------------------------------
 
         if (showGradient) { // TODO: small bug leading to not remembering choices of showGradient
             // Read off the gradient (single frame, which one needs to be checked)
-            ImageStack imsGradient = eSRRF.readGradientBuffers(false);
-            ImagePlus impGradients = new ImagePlus("Gradients", imsGradient);
+            ImageStack imsGradient = eSRRF.readGradientBuffers();
+            ImagePlus impGradients = new ImagePlus("Interpolated gradients", imsGradient);
             impGradients.show();
         }
 
-        if (showIntGradient) {
-            ImageStack imsGradientInt = eSRRF.readGradientBuffers(true);
-            ImagePlus impGradientsInt = new ImagePlus("Interpolated gradients", imsGradientInt);
-            impGradientsInt.show();
-        }
+//        if (showIntGradient) {
+//            ImageStack imsGradientInt = eSRRF.readGradientBuffers(true);
+//            ImagePlus impGradientsInt = new ImagePlus("Interpolated gradients", imsGradientInt);
+//            impGradientsInt.show();
+//        }
 
         // ----- DEBUG -----
         if (DEBUG) {
@@ -545,13 +548,12 @@ public class LiveSRRF_optimised_ implements PlugIn {
     //    -------------------------- Here lies dragons and functions --------------------------
     //    -------------------------------------------------------------------------------------
 
-
     // -- Main GUI --
     private boolean mainGUI() {
         // Build GUI
         Font headerFont = new Font("Arial", Font.BOLD, 16);
         NonBlockingGenericDialog gd = new NonBlockingGenericDialog("eSRRF " + eSRRFVersion);
-        gd.addMessage("-=-= SRRF parameters =-=-\n", headerFont);
+        gd.addMessage("-=-= eSRRF parameters =-=-\n", headerFont);
         gd.addNumericField("Magnification (default: 5)", prefs.get("magnification", 5), 0);
         gd.addNumericField("Radius (pixels, default: 1.5)", prefs.get("fwhm", (float) 1.5), 2);
         gd.addNumericField("Sensitivity (default: 1)", prefs.get("sensitivity", 1), 0);
@@ -568,12 +570,14 @@ public class LiveSRRF_optimised_ implements PlugIn {
         gd.addCheckbox("Perform rolling analysis (default: off)", prefs.get("doRollingAnalysis", false));
         gd.addNumericField("# frame gap between SR frame (0 = auto)", prefs.get("frameGapFromUser", 0), 0);
 
-        gd.addMessage("-=-= Advanced settings =-=-\n", headerFont);
-        gd.addCheckbox("Show advanced settings", false);
         if (enable3DSRRF) {
-            gd.addCheckbox("3D-SRRF from MFM data", prefs.get("do3DSRRF", false));
+            gd.addMessage("-=-= 3D eSRRF =-=-\n", headerFont);
+            gd.addCheckbox("Perform 3D-eSRRF from MFM data", prefs.get("do3DSRRF", false));
             gd.addNumericField("Axial offset (in nm): ",400, 2);
         }
+
+        gd.addMessage("-=-= Advanced settings =-=-\n", headerFont);
+        gd.addCheckbox("Show advanced settings", false);
 
         gd.addHelp("https://www.youtube.com/watch?v=PJQVlVHsFF8"); // If you're hooked on a feeling
 
@@ -624,10 +628,6 @@ public class LiveSRRF_optimised_ implements PlugIn {
 
         boolean goodToGo = calculatenFrameOnGPU();
 
-        boolean showAdvancedSettings = gd.getNextBoolean();
-        if (showAdvancedSettings && !previousAdvSettings) advancedSettingsGUI();
-        previousAdvSettings = showAdvancedSettings;
-
         if (enable3DSRRF) {
             do3DSRRF = gd.getNextBoolean();
             axialOffset = (float) gd.getNextNumber();
@@ -636,6 +636,10 @@ public class LiveSRRF_optimised_ implements PlugIn {
             do3DSRRF = false;
             axialOffset = 0; // this doesn't matter if 3D is not performed
         }
+
+        boolean showAdvancedSettings = gd.getNextBoolean();
+        if (showAdvancedSettings && !previousAdvSettings) advancedSettingsGUI();
+        previousAdvSettings = showAdvancedSettings;
 
         nGPUloadPerSRRFframe = (int) math.ceil((float) nFrameForSRRFtoUse / (float) nFrameOnGPU);
 
@@ -651,7 +655,7 @@ public class LiveSRRF_optimised_ implements PlugIn {
         Font headerFont = new Font("Arial", Font.BOLD, 16);
         GenericDialog gd = new GenericDialog("eSRRF - Advanced settings");
 
-        gd.addMessage("-=-= GPU/CPU processing =-=-\n", headerFont);
+        gd.addMessage("-=-= GPU processing =-=-\n", headerFont);
         gd.addChoice("Processing device", deviceNames, prefs.get("chosenDeviceName", "Default device"));
         gd.addNumericField("Maximum amount of memory on device (MB, default: 1000)", prefs.get("maxMemoryGPU", 500), 2);
         gd.addMessage("Minimum device memory necessary: " + (float) Math.ceil(memUsed[0] * 100) / 100 + "MB\n");
@@ -668,12 +672,12 @@ public class LiveSRRF_optimised_ implements PlugIn {
 
         gd.addMessage("-=-= Advanced reconstruction settings (for testing) =-=-\n", headerFont);
         gd.addCheckbox("Intensity weighting (default: true)", prefs.get("intWeighting", true));
-        gd.addCheckbox("Macro-pixel patterning correction (default: true)", prefs.get("doMPmapCorrection", true));
         gd.addCheckbox("Use FHT for interpolation (default: true)", prefs.get("doFHTinterpolation", true));
+        gd.addCheckbox("Macro-pixel patterning correction (default: true)", prefs.get("doMPmapCorrection", true));
 
         gd.addMessage("-=-= Advanced display settings =-=-\n", headerFont);
-        gd.addCheckbox("Show gradients", prefs.get("showGradient", true));
-        gd.addCheckbox("Show interpolated gradients", prefs.get("showIntGradient", true));
+        gd.addCheckbox("Show interpolated gradients", prefs.get("showGradient", true));
+//        gd.addCheckbox("Show interpolated gradients", prefs.get("showIntGradient", true));
         gd.addCheckbox("Show image stabilisation scatter plot", prefs.get("showImStabPlot", false));
 
         gd.addHelp("https://www.youtube.com/watch?v=otCpCn0l4Wo"); // it's Hammer time
@@ -693,7 +697,7 @@ public class LiveSRRF_optimised_ implements PlugIn {
             doFHTinterpolation = prefs.get("doFHTinterpolation", true);
 
             showGradient = prefs.get("showGradient", true);
-            showIntGradient = prefs.get("showIntGradient", true);
+//            showIntGradient = prefs.get("showIntGradient", true);
             showImStabPlot = prefs.get("showImStabPlot", false);
 
             // re-initialises to how it was before entering advanced GUI
@@ -706,11 +710,11 @@ public class LiveSRRF_optimised_ implements PlugIn {
             prefs.set("blockSize", blockSize);
 
             prefs.set("intWeighting", intWeighting);
-            prefs.set("doMPmapCorrection", doMPmapCorrection);
             prefs.set("doFHTinterpolation", doFHTinterpolation);
+            prefs.set("doMPmapCorrection", doMPmapCorrection);
 
             prefs.set("showGradient", showGradient);
-            prefs.set("showIntGradient", showIntGradient);
+//            prefs.set("showIntGradient", showIntGradient);
             prefs.set("showImStabPlot", showImStabPlot);
             prefs.save();
         }
@@ -738,11 +742,11 @@ public class LiveSRRF_optimised_ implements PlugIn {
         writeToDiskTemp = gd.getNextBoolean();
 
         intWeighting = gd.getNextBoolean();
-        doMPmapCorrection = gd.getNextBoolean();
         doFHTinterpolation = gd.getNextBoolean();
+        doMPmapCorrection = gd.getNextBoolean();
 
         showGradient = gd.getNextBoolean();
-        showIntGradient = gd.getNextBoolean();
+//        showIntGradient = gd.getNextBoolean();
         showImStabPlot = gd.getNextBoolean();
 
         if (writeToDiskTemp && !previousWriteToDisk) {
@@ -870,24 +874,6 @@ public class LiveSRRF_optimised_ implements PlugIn {
         }
 
         return goodToGo;
-    }
-
-
-    // -- Convert time to string --
-    private String timeToString(double time){
-
-        String timeString;
-        int _h = (int) (time / 3600);
-        int _m = (int) (((time % 86400) % 3600) / 60);
-        int _s = (int) (((time % 86400) % 3600) % 60);
-        if (_h > 0) timeString = _h+"h "+_m+"m "+_s+"s";
-        else {
-            if (_m > 0) timeString = _m+"m "+_s+"s";
-            else timeString = _s+"s";
-        }
-
-        return timeString;
-
     }
 
 }
