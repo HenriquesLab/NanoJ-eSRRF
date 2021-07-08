@@ -847,7 +847,7 @@ public class ParametersSweep_ implements PlugIn {
         gd.addNumericField("Analysis block size (default: 20000)", prefs.get("blockSize", 20000), 0);
         gd.addMessage("A large analysis block size will speed up the analysis but will use more resources and\n" +
                 " may slow down your computer.");
-        gd.addCheckbox("Enable single frame loading", prefs.get("singleFrameLoad",true));
+        gd.addCheckbox("Enable single frame loading (default: Enabled)", prefs.get("singleFrameLoad",true));
         gd.addMessage("Single frame loading is slower but is more stable due to lower GPU memory requirements.");
 
 

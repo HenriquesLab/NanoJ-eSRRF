@@ -3,11 +3,6 @@
   <component name="ChangeListManager">
     <list default="true" id="f3c8ed8a-af08-41cd-871f-04b718898254" name="Default Changelist" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/nanoj/liveSRRF/HelperUtils.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/nanoj/liveSRRF/HelperUtils.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/nanoj/liveSRRF/LiveSRRF_CL.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/nanoj/liveSRRF/LiveSRRF_CL.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/nanoj/liveSRRF/SSIMCalculator.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/nanoj/liveSRRF/SSIMCalculator.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/nanoj/liveSRRF/gui/GetF1map_.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/nanoj/liveSRRF/gui/GetF1map_.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/nanoj/liveSRRF/gui/LiveSRRF_optimised_.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/nanoj/liveSRRF/gui/LiveSRRF_optimised_.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/nanoj/liveSRRF/gui/ParametersSweep_.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/nanoj/liveSRRF/gui/ParametersSweep_.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/nanoj/liveSRRF/gui/SSIMtrace_.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/nanoj/liveSRRF/gui/SSIMtrace_.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/plugins.config" beforeDir="false" afterPath="$PROJECT_DIR$/src/plugins.config" afterDir="false" />
@@ -42,7 +37,7 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1625724614179</updated>
-      <workItem from="1625724628013" duration="7702000" />
+      <workItem from="1625724628013" duration="8829000" />
     </task>
     <servers />
   </component>

@@ -50,7 +50,9 @@ public class SSIMtrace_ implements PlugIn {
         gd.addNumericField("Sigma cut-off (default: 3)", prefs.get("sigmaCutOff", 2),1);
         gd.addCheckbox("Calculate Cut-off over time (default: Disabled)", prefs.get("calculateCutoffVStime", true));
         gd.addNumericField("Smoothing factor (default: 0.15)", prefs.get("smoothingFactor", 0.15f),2);
-        gd.addMessage("The smoothing factor only applies to determine the cut-off when no block size is defined (block size = 0) or when the Calculate cut-off over time is enabled.");
+        gd.addMessage("The smoothing factor only applies to determine the cut-off \n"+
+                "when no block size is defined (block size = 0) or when the \n"+
+                "Calculate cut-off over time is enabled.");
         gd.showDialog();
 
         if (gd.wasCanceled()) {
