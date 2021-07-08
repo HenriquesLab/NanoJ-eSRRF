@@ -280,10 +280,10 @@ public class CalculateGainAndOffset_  implements PlugIn {
             int x = r.nextInt(w);
             int y = r.nextInt(h);
 
-            float[] xs = new float[ns];
-            float[] ys0 = new float[ns];
-            float[] ys1 = new float[ns];
-            float[] gain = (float[]) fpGain.getPixels();
+            double[] xs = new double[ns];
+            double[] ys0 = new double[ns];
+            double[] ys1 = new double[ns];
+            double[] gain = (double[]) fpGain.getPixels();
 
 
             for (int n=0; n<ns; n++) {
@@ -291,7 +291,8 @@ public class CalculateGainAndOffset_  implements PlugIn {
                 ys0[n] = (float) imsVar.getVoxel(x, y, n);
                 ys1[n] = gain[n]*xs[n];
             }
-            Plot p = new Plot("Var vs Mean X="+x+" Y="+y, "Mean", "Var", xs, ys1);
+            Plot p = new Plot("Var vs Mean X="+x+" Y="+y, "Mean", "Var");
+            p.addPoints(xs,ys1,Plot.LINE);
             p.addPoints(xs, ys0, Plot.CROSS);
             p.show();
         }

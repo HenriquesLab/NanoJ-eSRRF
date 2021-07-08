@@ -11,7 +11,7 @@ import nanoj.core.java.image.calculator.FloatProcessorCalculator;
 import scala.Int;
 
 
-public class CodeTester_ implements PlugIn {
+public class SOFIcalculator_ implements PlugIn {
 
     public void run(String arg) {
 

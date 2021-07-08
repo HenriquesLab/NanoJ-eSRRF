@@ -47,7 +47,7 @@ public class GetOpenCLinfo_ implements PlugIn {
                 IJ.log("Device type: " + allCLdevice[i].getType());
                 IJ.log("Max clock: " + allCLdevice[i].getMaxClockFrequency() + " MHz");
                 IJ.log("Number of compute units: " + allCLdevice[i].getMaxComputeUnits());
-                IJ.log("Max work group size:: " + allCLdevice[i].getMaxWorkGroupSize());
+                IJ.log("Max work group size: " + allCLdevice[i].getMaxWorkGroupSize());
                 IJ.log("Max work item dimensions: " + allCLdevice[i].getMaxWorkItemDimensions());
                 IJ.log("Max work item sizes: " + allCLdevice[i].getMaxWorkItemSizes()[0]+"/"+allCLdevice[i].getMaxWorkItemSizes()[1]+"/"+allCLdevice[i].getMaxWorkItemSizes()[2]);
                 IJ.log("Global memory size: " + (allCLdevice[i].getGlobalMemSize()/1000000)+" MB");

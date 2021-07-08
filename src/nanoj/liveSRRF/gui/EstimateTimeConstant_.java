@@ -13,13 +13,14 @@ import nanoj.liveSRRF.SSIMCalculator;
 
 import java.util.Arrays;
 
-import static java.lang.Float.NaN;
 import static java.lang.Float.isNaN;
 import static nanoj.core.java.image.calculator.FloatProcessorCalculator.add;
 import static nanoj.core2.NanoJImageStackArrayConvertion.ImageStackToFloatArray;
 
 
 public class EstimateTimeConstant_ implements PlugIn {
+
+    private final boolean DEBUG = false;
 
     public void run(String arg) {
 
@@ -49,7 +50,7 @@ public class EstimateTimeConstant_ implements PlugIn {
         regularizationMethods[n++] = "image bit depth";
         regularizationMethods[n++] = "image dynamic range";
 
-        GenericDialog gd = new GenericDialog("liveSRRF - Time constant estimator");
+        GenericDialog gd = new GenericDialog("eSRRF - Time constant estimator");
         gd.addChoice("Estimation method", estimationMethods, estimationMethods[1]);
 
         gd.addMessage("---- SSIM method ----");
@@ -105,7 +106,7 @@ public class EstimateTimeConstant_ implements PlugIn {
                 for (int i = 1; i <= blockSize; i++) {
                     IJ.showProgress(i, blockSize);
                     ImageProcessor ip = ims.getProcessor(i + b*blockSize);
-                    imsMotion.setProcessor(ssimCalculator.Calculate(ip), i);
+                    imsMotion.setProcessor(ssimCalculator.CalculateSSIMmap(ip), i);
                 }
             }
 
@@ -132,6 +133,10 @@ public class EstimateTimeConstant_ implements PlugIn {
         IJ.log("-------------------");
         IJ.log("All done.");
     }
+
+    //    -------------------------------------------------------------------------------------
+    //    -------------------------- Here lies dragons and functions --------------------------
+    //    -------------------------------------------------------------------------------------
 
     private static float[] getRegularizationFactors(ImageStack ims, String regMethod){
         float[] C = new float[2];
@@ -173,6 +178,7 @@ public class EstimateTimeConstant_ implements PlugIn {
             double[] prctileArray = new double[ims.getSize()];
             for (int i = 0; i < ims.getSize(); i++) {
                 float[] pixelValues = (float[]) ims.getProcessor(i+1).duplicate().convertToFloatProcessor().getPixels();
+
 //                IJ.log("Size: "+pixelValues.length);
                 Arrays.sort(pixelValues);
                 int nPixels = ims.getWidth()*ims.getHeight();

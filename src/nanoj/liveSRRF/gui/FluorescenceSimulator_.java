@@ -51,7 +51,7 @@ public class FluorescenceSimulator_ implements PlugIn {
         Calibration cal = imp.getCalibration();
         if (cal.pixelHeight != cal.pixelWidth) return;
         float simPixelSize = (float) cal.pixelHeight;
-        if ((cal.getUnit().equals("micron")) || (cal.getUnit().equals("um"))) simPixelSize *= 1000; // convert to nm // TODO: this doesnt work for some reason
+        if ((cal.getUnit().equals("micron")) || (cal.getUnit().equals("um")) || (cal.getUnit().equals("µm"))) simPixelSize *= 1000; // convert to nm // TODO: this doesnt work for some reason
         IJ.log("Ground truth pixel size: "+simPixelSize+" nm");
 
         ImageStack imsGT = imp.getStack();
@@ -59,7 +59,7 @@ public class FluorescenceSimulator_ implements PlugIn {
 
         NonBlockingGenericDialog gd = new NonBlockingGenericDialog("Fluorescence simulator - v1.0");
         gd.addMessage("Microscope parameters");
-        gd.addNumericField("Emission wavelength (nm):", prefs.get("lambda", 700), 2); // TODO: save prefs
+        gd.addNumericField("Emission wavelength (nm):", prefs.get("lambda", 700), 2);
         gd.addNumericField("NA:", prefs.get("NA", 1.15f), 2);
         gd.addNumericField("Number of frames: ", prefs.get("nFrames", 100), 0);
         gd.addNumericField("Exposure time (ms): ", prefs.get("exposure",10.0f), 1);
@@ -83,6 +83,11 @@ public class FluorescenceSimulator_ implements PlugIn {
         gd.addCheckbox("Show individual traces (!)", prefs.get("showTraces", false));
 
         gd.showDialog();
+        // If the GUI was cancelled
+        if (gd.wasCanceled()) {
+            IJ.log("Cancelled by user.");
+            return;
+        }
 
         float lambda = (float) gd.getNextNumber();
         float NA = (float) gd.getNextNumber();
@@ -171,6 +176,7 @@ public class FluorescenceSimulator_ implements PlugIn {
             }
         }
 
+
         ImageStack imsSim = new ImageStack();
         ImageStack imsFullSim = new ImageStack();
         ImageStack imsBg = new ImageStack();
@@ -192,7 +198,7 @@ public class FluorescenceSimulator_ implements PlugIn {
             pixels = new float[wSim*hSim];
 
             for (int m = 0; m < nMolecules; m++) {
-                pixels[xy[m][0]*wSim + xy[m][1]] += (float) intensityTraces[m][f] * photonsPerTimeDivision; // in photons
+                pixels[xy[m][1]*wSim + xy[m][0]] += (float) intensityTraces[m][f] * photonsPerTimeDivision; // in photons
             }
 
             fpSim = new FloatProcessor(wSim, hSim, pixels);
@@ -258,11 +264,12 @@ public class FluorescenceSimulator_ implements PlugIn {
         int[][] xy = new int[nMolecules][2];
         double[] xArray = new double[nMolecules];
         double[] yArray = new double[nMolecules];
+//        IJ.log("w/h: "+ imsGT.getWidth() + "/" + imsGT.getHeight());
 
         int moleculeID = 0;
-        for (int xi = 0; xi < imsGT.getWidth(); xi++) {
-            for (int yi = 0; yi < imsGT.getHeight(); yi++) {
-                int nMoleculeInPixel = (int) pixels[xi*imsGT.getWidth() + yi];
+        for (int yi = 0; yi < imsGT.getHeight(); yi++) {
+            for (int xi = 0; xi < imsGT.getWidth(); xi++) {
+                int nMoleculeInPixel = (int) pixels[yi*imsGT.getWidth() + xi];
                 for (int i = 0; i < nMoleculeInPixel; i++) {
                     xy[moleculeID][0] = xi;
                     xy[moleculeID][1] = yi;
@@ -273,7 +280,11 @@ public class FluorescenceSimulator_ implements PlugIn {
             }
         }
 
-        // ---- Creating the NanoJ table and save it ----
+//        for (int i = 0; i < nMolecules; i++) {
+//            IJ.log("x/y: "+xy[i][0]+"/"+xy[i][1]);
+//        }
+
+        // ---- Creating the NanoJ table and display it ----
         Map<String, double[]> data = new LinkedHashMap<>();
         data.put("X-position (pixels)", xArray);
         data.put("Y-position (pixels)", yArray);
