@@ -48,8 +48,10 @@ eSRRF comes packed with useful Tools plugins to perform a range of things, such 
 ## People involved
 
 Many people are involved in developping and testing this method, here are some of the key players:
-* Ricardo Henriques
-* Guillaume Jacquemet
-* Christophe Leterrier
-* Sian Culley
+* Romain F. Laine ([@LaineBioImaging](https://twitter.com/LaineBioImaging))
+* Ricardo Henriques ([@HenriquesLab](https://twitter.com/HenriquesLab))
+* Guillaume Jacquemet ([@guijacquemet](https://twitter.com/guijacquemet))
+* Christophe Leterrier ([@christlet](https://twitter.com/christlet))
+* Siân Culley ([@SuperResoluSian](https://twitter.com/SuperResoluSian))
+* Bassam Hajj ([@Bassam_A_HAJJ](https://twitter.com/Bassam_A_HAJJ))
 * ...
