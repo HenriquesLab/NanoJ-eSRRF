@@ -1,5 +1,6 @@
 package nanoj.liveSRRF.gui;
 
+import com.jogamp.opencl.CLDevice;
 import ij.IJ;
 import ij.ImagePlus;
 import ij.ImageStack;
@@ -63,7 +64,11 @@ public class ParametersSweep_ implements PlugIn {
     private final String eSRRFSweepVersion = "v1.0";
     private float[] shiftX, shiftY;
 
-    private String imageTitle;
+    private String imageTitle,
+            chosenDeviceName;
+
+    private String[] deviceNames;
+    private CLDevice chosenDevice = null;
 
 
     // Advanced formats
@@ -111,8 +116,18 @@ public class ParametersSweep_ implements PlugIn {
         calculateFRC = prefs.get("calculateFRC", false);
         doFHTinterpolation = prefs.get("doFHTinterpolation", true);
 
+        chosenDeviceName = prefs.get("chosenDeviceName", "Default device");
         blockSize = (int) prefs.get("blockSize", 20000);
         singleFrameLoad = prefs.get("singleFrameLoad", true);
+
+        CLDevice[] allDevices = LiveSRRF_CL.allCLdevices;
+        // Initializing string for device choice
+        deviceNames = new String[allDevices.length + 1];
+        deviceNames[0] = "Default device";
+
+        for (int i = 1; i <= allDevices.length; i++) {
+            deviceNames[i] = allDevices[i - 1].getName();
+        }
 
 
         // Build GUI
@@ -174,6 +189,12 @@ public class ParametersSweep_ implements PlugIn {
             IJ.log("-------------------------------------");
             IJ.log("Aborted: Not enough frames in the stack for this analysis.");
             return;
+        }
+
+        // Get chosen device
+        if (chosenDeviceName == null) chosenDeviceName = "Default device";
+        for (CLDevice thisDevice : allDevices) {
+            if (chosenDeviceName.equals(thisDevice.getName())) chosenDevice = thisDevice;
         }
 
         // Log the settings used
@@ -382,7 +403,7 @@ public class ParametersSweep_ implements PlugIn {
                         // TODO: add options to do intensity weighting or MPcorrection
                         // TODO: consider only doing the initialisation and data preparation once, currently repeated for every parameter --> speed improvement possible
 
-                        eSRRF.initialise(width, height, magnification, fwhmArray[fi], sensitivityArray[si], nFramesOnGPU, nframeArray[nfi], blockSize, null, true, true, doFHTinterpolation, null, 0,1);
+                        eSRRF.initialise(width, height, magnification, fwhmArray[fi], sensitivityArray[si], nFramesOnGPU, nframeArray[nfi], blockSize, chosenDevice, true, true, doFHTinterpolation, null, 0,1);
                         eSRRF.resetFramePosition();
                         eSRRF.loadDriftXYGPUbuffer(shiftXtempOdd, shiftYtempOdd);
 
@@ -401,7 +422,7 @@ public class ParametersSweep_ implements PlugIn {
                         fpOddTAC2 = imsBuffer.getProcessor(3).convertToFloatProcessor();
 
                         // Calculate and get the reconstruction from the even frames // TODO: add options to do intensity weighting or MPcorrection
-                        eSRRF.initialise(width, height, magnification, fwhmArray[fi], sensitivityArray[si], nFramesOnGPU, nframeArray[nfi], blockSize, null, true, true, doFHTinterpolation, null, 0, 1);
+                        eSRRF.initialise(width, height, magnification, fwhmArray[fi], sensitivityArray[si], nFramesOnGPU, nframeArray[nfi], blockSize, chosenDevice, true, true, doFHTinterpolation, null, 0, 1);
                         eSRRF.resetFramePosition();
                         eSRRF.loadDriftXYGPUbuffer(shiftXtempEven, shiftYtempEven);
 
@@ -424,7 +445,7 @@ public class ParametersSweep_ implements PlugIn {
 
                     } else {
                         // TODO: add options to do intensity weighting or MPcorrection
-                        eSRRF.initialise(width, height, magnification, fwhmArray[fi], sensitivityArray[si], nFramesOnGPU, nframeArray[nfi], blockSize, null, true, true, doFHTinterpolation, null, 0, 1);
+                        eSRRF.initialise(width, height, magnification, fwhmArray[fi], sensitivityArray[si], nFramesOnGPU, nframeArray[nfi], blockSize, chosenDevice, true, true, doFHTinterpolation, null, 0, 1);
                         eSRRF.resetFramePosition();
                         eSRRF.loadDriftXYGPUbuffer(shiftXtemp, shiftYtemp);
 
@@ -761,6 +782,7 @@ public class ParametersSweep_ implements PlugIn {
             prefs.set("calculateFRC", calculateFRC);
             prefs.set("doFHTinterpolation", doFHTinterpolation);
 
+            prefs.set("chosenDeviceName", chosenDeviceName);
             prefs.set("blockSize", blockSize);
             prefs.set("singleFrameLoad", singleFrameLoad);
 
@@ -853,6 +875,7 @@ public class ParametersSweep_ implements PlugIn {
         gd.addCheckbox("Use FHT interpolation", prefs.get("doFHTinterpolation",true));
 
         gd.addMessage("-=-= GPU processing =-=-\n", headerFont);
+        gd.addChoice("Processing device", deviceNames, prefs.get("chosenDeviceName", "Default device"));
         gd.addNumericField("Analysis block size (default: 20000)", prefs.get("blockSize", 20000), 0);
         gd.addMessage("A large analysis block size will speed up the analysis but will use more resources and\n" +
                 " may slow down your computer.");
@@ -881,6 +904,7 @@ public class ParametersSweep_ implements PlugIn {
             calculateFRC = gd.getNextBoolean();
             doFHTinterpolation = gd.getNextBoolean();
 
+            chosenDeviceName = gd.getNextChoice();
             blockSize = (int) gd.getNextNumber();
             singleFrameLoad = gd.getNextBoolean();
         }
