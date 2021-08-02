@@ -83,6 +83,8 @@ public class LiveSRRF_CL {
     static private CLDevice clDeviceMaxFlop;
     static public CLDevice[] allCLdevices;
 
+    static private CLDevice chosenDevice_CL;
+
     static private CLCommandQueue queue = null;
 
     private CLBuffer<FloatBuffer>
@@ -98,7 +100,6 @@ public class LiveSRRF_CL {
     private CLBuffer<IntBuffer>
             clBufferCurrentFrame;
 
-    private CLDevice chosenDevice;
 
     // ---------------------------------- Constructor ----------------------------------
     public LiveSRRF_CL(boolean DEBUG) {
@@ -176,11 +177,11 @@ public class LiveSRRF_CL {
 
             System.out.println("Using the fastest device...");
             context = CLContext.create(clPlatformMaxFlop);
-            this.chosenDevice = context.getMaxFlopsDevice();
+            chosenDevice_CL = context.getMaxFlopsDevice();
 
             // ----- DEBUG -----
             if (DEBUG) {
-                IJ.log("Using " + this.chosenDevice.getName());
+                IJ.log("Using " + chosenDevice_CL.getName());
             }
         } else {
             context = CLContext.create(chosenDevice.getPlatform());
@@ -190,7 +191,7 @@ public class LiveSRRF_CL {
             while (!allCLdevicesOnThisPlatform[i].getName().equals(chosenDevice.getName())) {
                 i++;
             }
-            this.chosenDevice = allCLdevicesOnThisPlatform[i];
+            chosenDevice_CL = allCLdevicesOnThisPlatform[i];
         }
 
 
@@ -248,8 +249,8 @@ public class LiveSRRF_CL {
         this.heightM = heightS * magnification;
 
         if (DEBUG) {
-            System.out.println("using " + this.chosenDevice);
-            IJ.log("Using " + this.chosenDevice.getName());
+            System.out.println("using " + chosenDevice_CL);
+            IJ.log("Using " + chosenDevice_CL.getName());
             IJ.log("widthM/heightM: "+widthM+"/"+heightM);
             IJ.log("Number of frames on GPU: "+nFramesOnGPU);
         }
@@ -417,7 +418,7 @@ public class LiveSRRF_CL {
         kernelCorrectMPmap.setArg(argn++, clBufferMPmap); // make sure type is the same !!
 
 
-        queue = chosenDevice.createCommandQueue();
+        queue = chosenDevice_CL.createCommandQueue();
 
         System.out.println("used device memory: " + (
                 clBufferPx.getCLSize() +
@@ -561,7 +562,7 @@ public class LiveSRRF_CL {
 
         argn = 0;
         kernelCalculateVar.setArg(argn++, clBufferOut);
-        queue = chosenDevice.createCommandQueue();
+        queue = chosenDevice_CL.createCommandQueue();
 
         if (DEBUG) {
             System.out.println("used device memory: " + (

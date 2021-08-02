@@ -355,7 +355,7 @@ __kernel void calculateRadialGradientConvergence(
     }
 
     CGLH /= distanceWeightSum;
-    if (CGLH >= 0) CGLH = pow(CGLH, sensitivity);
+    if (CGLH >= 0) CGLH = pow((float)CGLH, (float)sensitivity);
     else CGLH = 0;
 
     float v = getInterpolatedValue(pixels, ((float) xM)/magnification + shiftX - 0.5f, ((float) yM)/magnification + shiftY - 0.5f, nCurrentFrame[1]);

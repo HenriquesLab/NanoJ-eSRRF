@@ -854,7 +854,7 @@ public class ParametersSweep_ implements PlugIn {
         gd.addToSameRow();
         gd.addCheckbox("Calculate RSP (default: off)", prefs.get("calculateRSP", false));
 
-        gd.addCheckbox("Fix sigma (default: off)", prefs.get("fixSigma", false));
+        gd.addCheckbox("Fix sigma (default: on)", prefs.get("fixSigma", true));
         gd.addToSameRow();
         gd.addNumericField("Sigma (in pixels, used if fixed)", prefs.get("fixedSigma", 1), 2);
         gd.addMessage("Sigma can be evaluated by: (0.21 x Emission wavelength (in nm) / NA) / pixel size (in nm)\n"+

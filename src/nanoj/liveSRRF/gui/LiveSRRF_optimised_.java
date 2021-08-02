@@ -67,11 +67,12 @@ public class LiveSRRF_optimised_ implements PlugIn {
             showImStabPlot,
             intWeighting,
             showGradient,
-            do3DSRRF,
-            DEBUG = false;
+            do3DSRRF;
+
+    private final boolean DEBUG = false;
 
     private final boolean enable3DSRRF = true;
-    private final String eSRRFVersion = "v1.0";
+    private final String eSRRFVersion = "v1.0.1";
 
     private String pathToDisk = "",
             fileName,
