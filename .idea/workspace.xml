@@ -3,9 +3,6 @@
   <component name="ChangeListManager">
     <list default="true" id="18912476-2ccf-40fc-a5c9-7e47bb6f7ab2" name="Default Changelist" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/resources/live3DSRRF.cl" beforeDir="false" afterPath="$PROJECT_DIR$/resources/live3DSRRF.cl" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/resources/liveSRRF.cl" beforeDir="false" afterPath="$PROJECT_DIR$/resources/liveSRRF.cl" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/resources/liveSRRF_noInterpolation.cl" beforeDir="false" afterPath="$PROJECT_DIR$/resources/liveSRRF_noInterpolation.cl" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/nanoj/liveSRRF/LiveSRRF_CL.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/nanoj/liveSRRF/LiveSRRF_CL.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/nanoj/liveSRRF/gui/LiveSRRF_optimised_.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/nanoj/liveSRRF/gui/LiveSRRF_optimised_.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/nanoj/liveSRRF/gui/ParametersSweep_.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/nanoj/liveSRRF/gui/ParametersSweep_.java" afterDir="false" />
@@ -43,12 +40,13 @@
   <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="application-level" UseSingleDictionary="true" transferred="true" />
   <component name="TaskManager">
     <task active="true" id="Default" summary="Default task">
-      <changelist id="f3c8ed8a-af08-41cd-871f-04b718898254" name="Default Changelist" comment="" />
+      <changelist id="18912476-2ccf-40fc-a5c9-7e47bb6f7ab2" name="Default Changelist" comment="" />
       <created>1625724614179</created>
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1625724614179</updated>
       <workItem from="1625724628013" duration="8829000" />
+      <workItem from="1628009144181" duration="1075000" />
     </task>
     <servers />
   </component>

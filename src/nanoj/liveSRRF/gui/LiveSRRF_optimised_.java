@@ -72,7 +72,7 @@ public class LiveSRRF_optimised_ implements PlugIn {
     private final boolean DEBUG = false;
 
     private final boolean enable3DSRRF = true;
-    private final String eSRRFVersion = "v1.0.1";
+    private final String eSRRFVersion = "v1.0.2";
 
     private String pathToDisk = "",
             fileName,
@@ -154,7 +154,7 @@ public class LiveSRRF_optimised_ implements PlugIn {
         // Initialize the liveSRRF class and check the devices
         eSRRF = new LiveSRRF_CL(DEBUG);
         eSRRF.checkDevices();
-        CLDevice[] allDevices = LiveSRRF_CL.allCLdevices;
+        CLDevice[] allDevices = eSRRF.allCLdevices;
         gradMag = eSRRF.gradientMag;
         nRecons = eSRRF.nReconstructions;
 

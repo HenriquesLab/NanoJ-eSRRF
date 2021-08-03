@@ -81,7 +81,7 @@ public class LiveSRRF_CL {
 
     static private CLPlatform clPlatformMaxFlop;
     static private CLDevice clDeviceMaxFlop;
-    static public CLDevice[] allCLdevices;
+    public CLDevice[] allCLdevices;
 
     static private CLDevice chosenDevice_CL;
 

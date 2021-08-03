@@ -61,7 +61,7 @@ public class ParametersSweep_ implements PlugIn {
 
     private float fixedSigma;
 
-    private final String eSRRFSweepVersion = "v1.0";
+    private final String eSRRFSweepVersion = "v1.0.2";
     private float[] shiftX, shiftY;
 
     private String imageTitle,
@@ -120,7 +120,8 @@ public class ParametersSweep_ implements PlugIn {
         blockSize = (int) prefs.get("blockSize", 20000);
         singleFrameLoad = prefs.get("singleFrameLoad", true);
 
-        CLDevice[] allDevices = LiveSRRF_CL.allCLdevices;
+        eSRRF.checkDevices();
+        CLDevice[] allDevices = eSRRF.allCLdevices;
         // Initializing string for device choice
         deviceNames = new String[allDevices.length + 1];
         deviceNames[0] = "Default device";
