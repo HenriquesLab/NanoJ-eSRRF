@@ -61,7 +61,7 @@ public class ParametersSweep_ implements PlugIn {
 
     private float fixedSigma;
 
-    private final String eSRRFSweepVersion = "v1.0.2";
+    private final String eSRRFSweepVersion = "v1.0.3";
     private float[] shiftX, shiftY;
 
     private String imageTitle,
@@ -119,6 +119,9 @@ public class ParametersSweep_ implements PlugIn {
         chosenDeviceName = prefs.get("chosenDeviceName", "Default device");
         blockSize = (int) prefs.get("blockSize", 20000);
         singleFrameLoad = prefs.get("singleFrameLoad", true);
+
+        // If any of these things is ticked then do the analysis
+        doErrorMapping = (showErrorMaps || showRSC || calculateRSE || calculateRSP);
 
         eSRRF.checkDevices();
         CLDevice[] allDevices = eSRRF.allCLdevices;
