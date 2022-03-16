@@ -54,6 +54,6 @@ Many people are involved in developping and testing this method, here are some o
 * Christophe Leterrier ([@christlet](https://twitter.com/christlet))
 * Siân Culley ([@SuperResoluSian](https://twitter.com/SuperResoluSian))
 * Bassam Hajj ([@Bassam_A_HAJJ](https://twitter.com/Bassam_A_HAJJ))
-* Hannah S. Heil ([@Hannah_SuperRes](https://twitter.com/hannah_superres)
+* Hannah S. Heil ([@Hannah_SuperRes](https://twitter.com/hannah_superres))
 * Simao Coelho (@XXX)
 * ...
