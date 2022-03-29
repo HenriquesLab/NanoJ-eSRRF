@@ -854,9 +854,9 @@ public class ParametersSweep_ implements PlugIn {
         gd.addToSameRow();
         gd.addCheckbox("Show rescaled reconstructions (default: off)", prefs.get("showRSC", false));
 
-        gd.addCheckbox("Calculate RSE (default: off)", prefs.get("calculateRSE", false));
+        gd.addCheckbox("Calculate RSE (default: on)", prefs.get("calculateRSE", true));
         gd.addToSameRow();
-        gd.addCheckbox("Calculate RSP (default: off)", prefs.get("calculateRSP", false));
+        gd.addCheckbox("Calculate RSP (default: on)", prefs.get("calculateRSP", true));
 
         gd.addCheckbox("Fix sigma (default: on)", prefs.get("fixSigma", true));
         gd.addToSameRow();

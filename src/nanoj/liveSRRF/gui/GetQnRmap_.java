@@ -12,7 +12,7 @@ import ij.process.FloatProcessor;
 
 import static nanoj.core.java.tools.NJ_LUT.applyLUT_SQUIRREL_Errors;
 
-public class GetF1map_ implements PlugIn {
+public class GetQnRmap_ implements PlugIn {
 
     private final boolean DEBUG = false;
 
@@ -21,10 +21,10 @@ public class GetF1map_ implements PlugIn {
 
         IJ.log("------------------------");
         IJ.log("------------------------");
-        IJ.log("Getting F1 map...");
+        IJ.log("Getting QnR map...");
         String[] imageTitles = WindowManager.getImageTitles();
 
-        NonBlockingGenericDialog gd = new NonBlockingGenericDialog("eSRRF - Get F1 map ");
+        NonBlockingGenericDialog gd = new NonBlockingGenericDialog("eSRRF - Get QnR map ");
         gd.addChoice("RSP map: ", imageTitles, getIndexWithSubstring(imageTitles,"RSP"));
         gd.addChoice("FRC map: ", imageTitles, getIndexWithSubstring(imageTitles,"FRC"));
 
@@ -99,11 +99,11 @@ public class GetF1map_ implements PlugIn {
             IJ.run("Maximize", "");
         }
 
-        ImageStack imsF1map = calculateF1map(imsFRCmapConverted, imsRSPmap);
-        ImagePlus impF1map = new ImagePlus("F1 map", imsF1map);
-        applyLUT_SQUIRREL_Errors(impF1map);
-        impF1map.copyScale(impFRCmap);
-        impF1map.show();
+        ImageStack imsQnRmap = calculateQnRmap(imsFRCmapConverted, imsRSPmap);
+        ImagePlus impQnRmap = new ImagePlus("QnR map", imsQnRmap);
+        applyLUT_SQUIRREL_Errors(impQnRmap);
+        impQnRmap.copyScale(impFRCmap);
+        impQnRmap.show();
         IJ.run("Maximize", "");
 
         if (DEBUG) {
@@ -116,19 +116,19 @@ public class GetF1map_ implements PlugIn {
         if (showLogisticConversionCurve) displayLogisticCurve(Res_min, Res_max);
 
         IJ.log("-------------------");
-        float[][] resultsMax = findMaximum(imsF1map, cal);
-        for (int s = 0; s < imsF1map.getSize(); s++) {
-            if (imsF1map.getSize() > 1) IJ.log("Results when using " + resultsMax[5][s] + " frames:");
-            IJ.log("Max F1 value: " + resultsMax[0][s] + " at (" + (int) resultsMax[1][s] + "," + (int) resultsMax[2][s] + ")");
+        float[][] resultsMax = findMaximum(imsQnRmap, cal);
+        for (int s = 0; s < imsQnRmap.getSize(); s++) {
+            if (imsQnRmap.getSize() > 1) IJ.log("Results when using " + resultsMax[5][s] + " frames:");
+            IJ.log("Max QnR value: " + resultsMax[0][s] + " at (" + (int) resultsMax[1][s] + "," + (int) resultsMax[2][s] + ")");
             IJ.log("Best Radius: " + resultsMax[3][s]);
             IJ.log("Best Sensitivity: " + resultsMax[4][s]);
             IJ.log("-------------------");
         }
 
-        if (imsF1map.getSize() > 1) {
-            Plot plotF1vsFrameNumber = new Plot("F1 score vs. # frames", "# of frames", "F1 score");
-            plotF1vsFrameNumber.addPoints(resultsMax[5], resultsMax[0], Plot.LINE);
-            plotF1vsFrameNumber.show();
+        if (imsQnRmap.getSize() > 1) {
+            Plot plotQnRvsFrameNumber = new Plot("QnR score vs. # frames", "# of frames", "QnR score");
+            plotQnRvsFrameNumber.addPoints(resultsMax[5], resultsMax[0], Plot.LINE);
+            plotQnRvsFrameNumber.show();
 
             Plot plotBestRadiusVsFrameNumber = new Plot("Best radius score vs. # frames", "# of frames", "Best radius");
             plotBestRadiusVsFrameNumber.addPoints(resultsMax[5], resultsMax[3], Plot.LINE);
@@ -208,9 +208,9 @@ public class GetF1map_ implements PlugIn {
 
     }
 
-    public ImageStack calculateF1map(ImageStack ims1, ImageStack ims2){
+    public ImageStack calculateQnRmap(ImageStack ims1, ImageStack ims2){
 
-        // This calculates the F1 metric based on 2 maps, assuming that the images are the same dimensions.
+        // This calculates the QnR metric based on 2 maps, assuming that the images are the same dimensions.
         assert (ims1.getWidth() == ims2.getWidth() && ims1.getHeight() == ims2.getHeight() && ims1.getSize() == ims2.getSize());
         ImageStack imsOut = new ImageStack();
         FloatProcessor fp1, fp2;
