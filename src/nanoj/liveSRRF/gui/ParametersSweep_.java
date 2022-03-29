@@ -854,7 +854,7 @@ public class ParametersSweep_ implements PlugIn {
         gd.addToSameRow();
         gd.addCheckbox("Show rescaled reconstructions (default: off)", prefs.get("showRSC", false));
 
-        gd.addCheckbox("Calculate RSE (default: on)", prefs.get("calculateRSE", true));
+        gd.addCheckbox("Calculate RSE (default: off)", prefs.get("calculateRSE", false));
         gd.addToSameRow();
         gd.addCheckbox("Calculate RSP (default: on)", prefs.get("calculateRSP", true));
 
@@ -871,7 +871,7 @@ public class ParametersSweep_ implements PlugIn {
                 " artefacts may occur.");
 
         gd.addMessage("-=-= FRC resolution =-=-\n", headerFont);
-        gd.addCheckbox("Calculate FRC (default: off)", prefs.get("calculateFRC", false));
+        gd.addCheckbox("Calculate FRC (default: on)", prefs.get("calculateFRC", true));
         gd.addMessage("Calculating FRC will split all dataset in two halves and therefore the maximum number\n" +
                 "of frames will be half of the total frames available in the dataset.");
 
