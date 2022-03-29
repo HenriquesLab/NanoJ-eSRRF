@@ -177,7 +177,7 @@ public class ParametersSweep_ implements PlugIn {
         MyDialogListenerMainGUI dl = new MyDialogListenerMainGUI(); // this serves to estimate a few indicators such as RAM usage
         gd.addDialogListener(dl);
 
-        gd.addHelp("https://www.youtube.com/watch?v=Vs6awg-BJHo"); // If you don't know how to sweep
+        gd.addHelp("https://github.com/HenriquesLab/NanoJ-eSRRF/wiki/Parameter-sweep"); 
         gd.showDialog();
 
         // If the GUI was cancelled

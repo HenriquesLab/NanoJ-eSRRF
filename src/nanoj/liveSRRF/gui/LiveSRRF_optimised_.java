@@ -579,7 +579,7 @@ public class LiveSRRF_optimised_ implements PlugIn {
         gd.addMessage("-=-= Advanced settings =-=-\n", headerFont);
         gd.addCheckbox("Show advanced settings", false);
 
-        gd.addHelp("https://www.youtube.com/watch?v=PJQVlVHsFF8"); // If you're hooked on a feeling
+        gd.addHelp("https://github.com/HenriquesLab/NanoJ-eSRRF/wiki/eSRRF---Main-reconstruction-parameters");
 
         MyDialogListenerMainGUI dl = new MyDialogListenerMainGUI(); // this serves to estimate a few indicators such as RAM usage
         gd.addDialogListener(dl);
