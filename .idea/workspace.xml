@@ -3,9 +3,7 @@
   <component name="ChangeListManager">
     <list default="true" id="18912476-2ccf-40fc-a5c9-7e47bb6f7ab2" name="Default Changelist" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/out/production/LiveSRRF/plugins.config" beforeDir="false" afterPath="$PROJECT_DIR$/out/production/LiveSRRF/plugins.config" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/nanoj/liveSRRF/gui/ParametersSweep_.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/nanoj/liveSRRF/gui/ParametersSweep_.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/plugins.config" beforeDir="false" afterPath="$PROJECT_DIR$/src/plugins.config" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />

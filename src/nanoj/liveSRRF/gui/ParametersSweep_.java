@@ -737,7 +737,7 @@ public class ParametersSweep_ implements PlugIn {
             IJ.log("n_nfToUse = "+n_nfToUse);
         }
         if (n_nfToUse <= 0){
-//            IJ.log("Not enough frames to compute this sweep.");
+            IJ.showStatus("WARNING: Not enough frames to process Parameter Sweep!");
             goodToGo = false;
         }
         else {
