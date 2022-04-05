@@ -72,7 +72,7 @@ public class LiveSRRF_optimised_ implements PlugIn {
     private final boolean DEBUG = false;
 
     private final boolean enable3DSRRF = true;
-    private final String eSRRFVersion = "v1.0.3";
+    private final String eSRRFVersion = "v1.1.0";
 
     private String pathToDisk = "",
             fileName,

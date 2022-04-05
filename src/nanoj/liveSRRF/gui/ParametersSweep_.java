@@ -61,7 +61,7 @@ public class ParametersSweep_ implements PlugIn {
 
     private float fixedSigma;
 
-    private final String eSRRFSweepVersion = "v1.0.3";
+    private final String eSRRFSweepVersion = "v1.1.0";
     private float[] shiftX, shiftY;
 
     private String imageTitle,
