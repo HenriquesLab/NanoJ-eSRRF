@@ -2,7 +2,7 @@
 
 ## Adaptive image reconstruction for high-fidelity, fast and easy-to-use 3D live-cell super-resolution microscopy
 
-eSRRF (enhanced Super-Resolution Radial Fluctuation) is an extension of the SRRF method developped by the Henriques lab (**[SRRF paper](http://www.nature.com/articles/ncomms12471)**). To get more information about the details check out our (**[preprint](https://doi.org/10.1101/2022.04.07.487490)**)preprint on bioRXiv. 
+eSRRF (enhanced Super-Resolution Radial Fluctuation) is an extension of the SRRF method developped by the Henriques lab (**[SRRF paper](http://www.nature.com/articles/ncomms12471)**). To get more information about the details check out our (**[preprint](https://doi.org/10.1101/2022.04.07.487490)**) on bioRXiv. 
 
 eSRRF aims at improving the fidelity of SRRF images with respect to the underlying true structure. Below is shown a representative dataset obtained from high-density emitters for which the underlying structure was obtained via DNA-PAINT (SMLM). 
 
