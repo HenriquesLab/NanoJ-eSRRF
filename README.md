@@ -7,7 +7,7 @@ eSRRF (enhanced Super-Resolution Radial Fluctuations) is an extension of the SRR
 eSRRF aims at improving the fidelity of SRRF images with respect to the underlying true structure. Below is shown a representative dataset obtained from high-density emitters for which the underlying structure was obtained via DNA-PAINT (SMLM). 
 
 
-<img src="https://github.com/HenriquesLab/NanoJ-eSRRF/blob/master/wiki_files/eSRRF_showcase.png" width="500"/>
+<img src="https://github.com/HenriquesLab/NanoJ-eSRRF/blob/master/wiki_files/SRRFeSRRF.png" width="500"/>
 
 The (e)SRRF approach is based on
 * **A spatial analysis** of the high-density emitter data using Radial symmetry transform;
