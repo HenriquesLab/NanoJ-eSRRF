@@ -34,6 +34,8 @@ The latest stable version of eSRRF can be directly obtained from our Fiji update
 
 Information about update sites can be found [here](https://imagej.net/update-sites/).
 
+## Test datasets
+We have published test datasets including eSRRF parameter suggestions on [Zenodo](https://doi.org/10.5281/zenodo.6466472). Download and get started right away!
 
 ## Tools included in the eSRRF plugin
 
