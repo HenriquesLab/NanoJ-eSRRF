@@ -34,8 +34,12 @@ The latest stable version of eSRRF can be directly obtained from our Fiji update
 
 Information about update sites can be found [here](https://imagej.net/update-sites/).
 
-Installation guide: 
-[<img alt="alt_text" width="40px" src="[images/image.PNG](https://github.com/HenriquesLab/NanoJ-eSRRF/blob/master/wiki_files/eSRRF_method.png)" />](https://www.youtube.com/watch?v=3Oa2ADEa-qY&t=4s)]
+Video guide: Installation
+
+[<img alt="alt_text" width="40px" src="https://github.com/HenriquesLab/NanoJ-eSRRF/blob/master/wiki_files/eSRRF_method.png" />](https://www.youtube.com/watch?v=3Oa2ADEa-qY&t=4s)]
+
+[<img alt="alt_text" width="40px" src="images/image.PNG" />](https://www.google.com/)
+
 
 ## Test datasets
 We have published test datasets including eSRRF parameter suggestions on [Zenodo](https://doi.org/10.5281/zenodo.6466472). Download and get started right away!
