@@ -36,11 +36,16 @@ Information about update sites can be found [here](https://imagej.net/update-sit
 
 Video guide: Installation
 
-[<img alt="Video guide: Installation" width="400px" src="https://github.com/HenriquesLab/NanoJ-eSRRF/blob/master/wiki_files/eSRRF-Guide%20installation_screeshotP.png" />](https://www.youtube.com/watch?v=3Oa2ADEa-qY&t=4s)
+[<img alt="Video guide: Installation" width="400px" src="https://github.com/HenriquesLab/NanoJ-eSRRF/blob/master/wiki_files/eSRRF-Guide%20installation_screeshotP.png" />](https://www.youtube.com/watch?v=3Oa2ADEa-qY)
 
 
 ## Test datasets
 We have published test datasets including eSRRF parameter suggestions on [Zenodo](https://doi.org/10.5281/zenodo.6466472). Download and get started right away!
+
+Video guide: Getting started
+
+[<img alt="Video guide: Getting started" width="400px" src="https://github.com/HenriquesLab/NanoJ-eSRRF/blob/master/wiki_files/eSRRF-Guide getting started_screeshotP.png" />](https://www.youtube.com/watch?v=VScGXvdKoNg))
+
 
 ## Tools included in the eSRRF plugin
 
