@@ -36,7 +36,7 @@ Information about update sites can be found [here](https://imagej.net/update-sit
 
 Video guide: Installation
 
-[<img alt="Video guide: Installation" width="200px" src="https://github.com/HenriquesLab/NanoJ-eSRRF/blob/master/wiki_files/eSRRF-Guide%20installation_screeshot.png" />](https://www.youtube.com/watch?v=3Oa2ADEa-qY&t=4s)
+[<img alt="Video guide: Installation" width="400px" src="https://github.com/HenriquesLab/NanoJ-eSRRF/blob/master/wiki_files/eSRRF-Guide%20installation_screeshot.png" />](https://www.youtube.com/watch?v=3Oa2ADEa-qY&t=4s)
 
 
 ## Test datasets
