@@ -71,3 +71,6 @@ Many people are involved in developing and testing this method, here are some of
 * Tommaso Galgani
 * Aki Stubb ([@akistub](https://twitter.com/akistub))
 * Gautier Follain ([@Follain_Ga](https://twitter.com/Follain_Ga))
+* Samantha Webster
+* Jesse Goyette
+
