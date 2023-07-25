@@ -38,6 +38,7 @@ Video guide: Installation
 
 [<img alt="Video guide: Installation" width="400px" src="https://github.com/HenriquesLab/NanoJ-eSRRF/blob/master/wiki_files/eSRRF-Guide%20installation_screeshotP.png" />](https://www.youtube.com/watch?v=3Oa2ADEa-qY)
 
+There have been some issues reported to run NanoJ-Squirrel and NanoJ-eSRRF on Windows10/11. You can find an instruction with the temporal fix here: 
 
 ## Test datasets
 We have published test datasets including eSRRF parameter suggestions on [Zenodo](https://doi.org/10.5281/zenodo.6466472). Download and get started right away!
