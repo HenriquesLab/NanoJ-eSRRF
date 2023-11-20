@@ -40,7 +40,11 @@ Video guide: Installation
 
 There have been some issues reported with OpenCl and running NanoJ-Squirrel and NanoJ-eSRRF on Windows10/11. You can find an instruction with the temporal fix in the [wiki](https://github.com/HenriquesLab/NanoJ-eSRRF/wiki#nanoj-esrrf-opencl-issues).
 
-:sparkles: Update November 2023: eSRRF is now also available in Python! You'll find the code and notebooks here: :point_right: [https://github.com/HenriquesLab/NanoPyx](https://github.com/HenriquesLab/NanoPyx)
+:sparkles: :sparkles: Update November 2023 :sparkles: :sparkles:: 
+
+eSRRF is now also available in **Python** :snake:! You'll find the code and notebooks here: :point_right: [https://github.com/HenriquesLab/NanoPyx](https://github.com/HenriquesLab/NanoPyx)
+
+:sparkles: :sparkles: :sparkles: :sparkles: :sparkles: :sparkles: :sparkles: :sparkles: :sparkles: :sparkles: :sparkles: :sparkles:
 
 ## Test datasets
 We have published test datasets including eSRRF parameter suggestions on [Zenodo](https://doi.org/10.5281/zenodo.6466472). Download and get started right away!
