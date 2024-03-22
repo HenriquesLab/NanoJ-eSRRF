@@ -81,3 +81,9 @@ Many people are involved in developing and testing this method, here are some of
 * Samantha Webster
 * Jesse Goyette
 
+## eSRRFing in Python
+
+Exciting news! enhanced Super-Resolution Radial Fluctuations (eSRRF) is now accessible in Python through the [NanoPyx](https://github.com/HenriquesLab/NanoPyx) package. This integration brings the power and versatility of eSRRF to Python users, opening up new possibilities for analysis and integration within Python-based workflows.
+
+NanoPyx seamlessly integrates SRRF capabilities into Python environments. With NanoPyx, users can now leverage SRRF's high-performance analytical approach within their Python scripts, pipelines, and interactive sessions. Through NanoPyx, SRRF is also available as "codeless" Jupyter Notebooks and a [napari plugin](https://github.com/HenriquesLab/napari-NanoPyx).
+
