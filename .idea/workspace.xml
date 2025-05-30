@@ -1,12 +1,16 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
+  <component name="ArtifactsWorkspaceSettings">
+    <artifacts-to-build>
+      <artifact name="NanoJ_LiveSRRF" />
+    </artifacts-to-build>
+  </component>
   <component name="AutoImportSettings">
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
     <list default="true" id="18912476-2ccf-40fc-a5c9-7e47bb6f7ab2" name="Default Changelist" comment="">
-      <change beforePath="$PROJECT_DIR$/src/nanoj/liveSRRF/gui/LiveSRRF_optimised_.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/nanoj/liveSRRF/gui/LiveSRRF_optimised_.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/nanoj/liveSRRF/gui/ParametersSweep_.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/nanoj/liveSRRF/gui/ParametersSweep_.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -32,9 +36,9 @@
     </hideBySeverity>
     <option name="selectedTabId" value="CurrentFile" />
   </component>
-  <component name="ProjectColorInfo"><![CDATA[{
-  "associatedIndex": 6
-}]]></component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 6
+}</component>
   <component name="ProjectId" id="1v1LMhwwjYbHxpvEn0KExFzrG7b" />
   <component name="ProjectViewState">
     <option name="hideEmptyMiddlePackages" value="true" />
@@ -54,7 +58,7 @@
     "project.structure.last.edited": "Artifacts",
     "project.structure.proportion": "0.15",
     "project.structure.side.proportion": "0.2",
-    "settings.editor.selected.configurable": "advanced.settings",
+    "settings.editor.selected.configurable": "preferences.pluginManager",
     "vue.rearranger.settings.migration": "true"
   }
 }]]></component>
@@ -80,7 +84,8 @@
       <workItem from="1631800907541" duration="113000" />
       <workItem from="1648564505008" duration="4008000" />
       <workItem from="1649172854803" duration="282000" />
-      <workItem from="1748589539883" duration="4529000" />
+      <workItem from="1748589539883" duration="4885000" />
+      <workItem from="1748596364522" duration="2141000" />
     </task>
     <servers />
   </component>
