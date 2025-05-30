@@ -1,6 +1,6 @@
 package nanoj.liveSRRF;
 
-import com.sun.jna.platform.win32.WinBase;
+//import com.sun.jna.platform.win32.WinBase;
 import ij.ImageStack;
 import ij.gui.Plot;
 import ij.process.FloatProcessor;
