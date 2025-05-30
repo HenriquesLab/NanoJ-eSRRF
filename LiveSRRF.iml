@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<module type="JAVA_MODULE" version="4">
+<module type="JAVA_MODULE" version="8">
   <component name="NewModuleRootManager" inherit-compiler-output="true">
     <exclude-output />
     <content url="file://$MODULE_DIR$">
@@ -10,5 +10,6 @@
     <orderEntry type="sourceFolder" forTests="false" />
     <orderEntry type="library" name="plugins" level="project" />
     <orderEntry type="library" name="jars" level="project" />
+    <orderEntry type="library" name="jars" level="application" />
   </component>
 </module>
